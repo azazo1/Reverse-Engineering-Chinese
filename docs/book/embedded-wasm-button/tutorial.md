@@ -559,7 +559,7 @@ const WASM_BINARY: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/button.cwas
 pub static IMAGE_DEF: hal::block::ImageDef = hal::block::ImageDef::secure_exe();
 ```
 
-RP2350 的 启动 ROM 会在一个特殊的 `.start_block` 段里找元数据, 以决定怎么启动. `secure_exe()` 告诉 启动 ROM 这是一个安全的 ARM 可执行文件. `#[used]` 属性阻止链接器丢弃这个符号, 即使代码里没有任何地方引用它. `#[unsafe(link_section)]` 是 Rust 2024 里把数据放进指定链接器段的语法.
+RP2350 的启动 ROM 会在一个特殊的 `.start_block` 段里找元数据, 以决定怎么启动. `secure_exe()` 告诉启动 ROM 这是一个安全的 ARM 可执行文件. `#[used]` 属性阻止链接器丢弃这个符号, 即使代码里没有任何地方引用它. `#[unsafe(link_section)]` 是 Rust 2024 里把数据放进指定链接器段的语法.
 
 ### 宿主状态与 WIT 实现
 
