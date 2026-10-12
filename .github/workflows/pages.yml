@@ -12,6 +12,7 @@ on:
     paths:
       - "docs/**"
       - "scripts/build_site.py"
+      - "scripts/book_layout.py"
       - ".github/workflows/pages.yml"
   workflow_dispatch:
 

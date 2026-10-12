@@ -18,26 +18,13 @@ import tempfile
 import time
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent.parent
-DOCS = ROOT / "docs"
-BOOK = DOCS / "book"
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from book_layout import (  # noqa: E402
+    BOOK, DOCS, ROOT, SUBTITLE, TITLE,
+    chapter_sort_key, clean, iter_courses,
+)
+
 DIST = ROOT / "dist"
-
-TITLE = "逆向工程中文教程"
-SUBTITLE = "mytechnotalent/Reverse-Engineering 中文版"
-
-# 书稿编排顺序: (目录名, 卷标题)
-COURSES = [
-    ("rp2350-rust", "RP2350 Rust 课程"),
-    ("rp2350-arm-asm", "RP2350 ARM 汇编课程"),
-    ("rp2350-riscv-asm", "RP2350 RISC-V 汇编课程"),
-    ("avr-assembler", "AVR 汇编课程"),
-    ("wasm", "Wasm 课程"),
-    ("embedded-wasm-uart", "嵌入式 Wasm UART 回显课程"),
-    ("embedded-wasm-blinky", "嵌入式 Wasm 闪烁课程"),
-    ("embedded-wasm-button", "嵌入式 Wasm 按键课程"),
-    ("embedded-wasm-servo", "嵌入式 Wasm 舵机课程"),
-]
 
 # 中文字体候选, 按平台常见情况排列
 CJK_FONTS = [
@@ -94,23 +81,6 @@ def pick_cjk_font() -> str | None:
     return None
 
 
-def strip_anchor_links(text: str) -> str:
-    """把 `[文字](#锚点)` 还原成纯文字.
-
-    各篇自带的目录在合订本里没有意义 (书本身已有总目录), 而锚点在合并后会
-    重名或失配, typst 遇到不存在的 label 会直接报错中止.
-    """
-    out, fenced = [], False
-    pat = re.compile(r"\[([^\]]+)\]\(#[^)]*\)")
-    for line in text.split("\n"):
-        if line.lstrip().startswith("```"):
-            fenced = not fenced
-            out.append(line)
-            continue
-        out.append(line if fenced else pat.sub(r"\1", line))
-    return "\n".join(out)
-
-
 def shift_headings(text: str, levels: int = 1) -> str:
     """把标题层级整体下沉, 让各章标题挂在卷标题之下. 跳过围栏代码块."""
     out, fenced = [], False
@@ -125,12 +95,6 @@ def shift_headings(text: str, levels: int = 1) -> str:
     return "\n".join(out)
 
 
-def chapter_sort_key(path: Path):
-    """按文件名里的数字排序, 没有数字时退回文件名."""
-    m = re.search(r"(\d+)", path.stem)
-    return (int(m.group(1)) if m else 10**6, path.stem)
-
-
 def assemble() -> Path:
     """把书稿拼成一个 markdown 文件, 返回其路径."""
     parts: list[str] = []
@@ -139,37 +103,26 @@ def assemble() -> Path:
     parts.append(f"---\ntitle: {TITLE}\nsubtitle: {SUBTITLE}\nlang: zh-CN\n---\n")
     intro = BOOK / "README.md"
     if intro.exists():
-        parts.append(shift_headings(strip_anchor_links(intro.read_text(encoding="utf-8").strip())))
+        parts.append(shift_headings(clean(intro.read_text(encoding="utf-8").strip())))
 
     chapters = 0
-    for dirname, volume in COURSES:
-        d = BOOK / dirname
-        if not d.is_dir():
-            log(f"  跳过缺失的目录: {dirname}")
-            continue
-        files = sorted(
-            (p for p in d.glob("*.md") if not p.name.startswith("re.")),
-            key=chapter_sort_key,
-        )
-        if not files:
-            continue
+    for dirname, volume, main, extra in iter_courses():
         parts.append(f"\n# {volume}\n")
-        for f in files:
+        for f in main:
             chapters += 1
-            parts.append(shift_headings(strip_anchor_links(f.read_text(encoding="utf-8").strip())))
+            parts.append(shift_headings(clean(f.read_text(encoding="utf-8").strip())))
         # RE 分析篇另起一节, 不参与正文编号
-        res = sorted((p for p in d.glob("*.md") if p.name.startswith("re.")))
-        if res:
+        if extra:
             parts.append(f"\n## {volume} - 逆向分析\n")
-            for f in res:
+            for f in extra:
                 chapters += 1
-                parts.append(shift_headings(strip_anchor_links(f.read_text(encoding="utf-8").strip())))
+                parts.append(shift_headings(clean(f.read_text(encoding="utf-8").strip())))
 
     # 课程总索引放最后当附录, 它主要是外链
     courses = DOCS / "courses.md"
     if courses.exists():
         parts.append("\n# 附录: 课程总索引\n")
-        parts.append(shift_headings(strip_anchor_links(courses.read_text(encoding="utf-8").strip())))
+        parts.append(shift_headings(clean(courses.read_text(encoding="utf-8").strip())))
 
     body = "\n\n".join(p for p in parts if p.strip()) + "\n"
     tmp = ROOT / ".tmp"

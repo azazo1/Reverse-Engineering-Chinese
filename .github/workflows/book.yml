@@ -12,6 +12,7 @@ on:
     paths:
       - "docs/**"
       - "scripts/build_book.py"
+      - "scripts/book_layout.py"
       - ".github/workflows/book.yml"
   workflow_dispatch:
     inputs:
