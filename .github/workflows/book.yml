@@ -107,10 +107,9 @@ jobs:
       - name: 安装 Calibre
         run: |
           set -euo pipefail
-          curl -fsSL -o /tmp/calibre-installer.sh https://download.calibre-ebook.com/linux-installer.sh
-          sudo sh /tmp/calibre-installer.sh
-          echo "/opt/calibre" >> "$GITHUB_PATH"
-          /opt/calibre/ebook-convert --version
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq calibre
+          ebook-convert --version
 
       - name: 取回 EPUB
         uses: actions/download-artifact@v5
@@ -143,19 +142,30 @@ jobs:
       - name: 检出代码
         uses: actions/checkout@v5
 
-      - name: 取回全部产物
+      - name: 取回 PDF 与 EPUB
         uses: actions/download-artifact@v5
         with:
-          path: artifacts
+          name: book-pdf-epub
+          path: artifacts/pdf-epub
+
+      - name: 取回 MOBI (可能没有)
+        uses: actions/download-artifact@v5
+        continue-on-error: true
+        with:
+          name: book-mobi
+          path: artifacts/mobi
 
       - name: 整理资产
         run: |
           set -euo pipefail
           mkdir -p out
           shopt -s nullglob
-          for f in artifacts/book-pdf-epub/*.pdf; do cp "$f" out/reverse-engineering-chinese.pdf; done
-          for f in artifacts/book-pdf-epub/*.epub; do cp "$f" out/reverse-engineering-chinese.epub; done
-          for f in artifacts/book-mobi/*.mobi; do cp "$f" out/reverse-engineering-chinese.mobi; done
+          for f in artifacts/pdf-epub/*.pdf; do cp "$f" out/reverse-engineering-chinese.pdf; done
+          for f in artifacts/pdf-epub/*.epub; do cp "$f" out/reverse-engineering-chinese.epub; done
+          for f in artifacts/mobi/*.mobi; do cp "$f" out/reverse-engineering-chinese.mobi; done
+          echo "取回的文件:"
+          find artifacts -type f -printf '  %p (%s 字节)\n' 2>/dev/null || find artifacts -type f
+          echo "整理后的资产:"
           ls -la out
           test -s out/reverse-engineering-chinese.pdf
           test -s out/reverse-engineering-chinese.epub
@@ -176,7 +186,9 @@ jobs:
             echo "| --- | --- |"
             echo "| \`reverse-engineering-chinese.pdf\` | 适合打印与屏幕阅读 |"
             echo "| \`reverse-engineering-chinese.epub\` | 适合绝大多数阅读器 |"
-            echo "| \`reverse-engineering-chinese.mobi\` | 适合旧款 Kindle |"
+            if [ -s out/reverse-engineering-chinese.mobi ]; then
+              echo "| \`reverse-engineering-chinese.mobi\` | 适合旧款 Kindle |"
+            fi
           } > notes.md
           cat notes.md
 
