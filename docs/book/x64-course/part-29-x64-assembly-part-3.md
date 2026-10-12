@@ -4,7 +4,7 @@
 
 今天我们用一个简单的减法例子继续我们的教程. 让我们来看看源代码:
 
-<div class="slate-resizable-image-embed slate-image-embed__resize-full-width"><img src="/imgs/1551437589689.jpg"/></div>
+<div class="slate-resizable-image-embed slate-image-embed__resize-full-width"><img src="/imgs/1551437589689.png"/></div>
 
 让我们编译并运行调试器:
 

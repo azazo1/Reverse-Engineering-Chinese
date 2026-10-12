@@ -14,7 +14,7 @@ Git Clone 并构建 Radare2 软件
 VIM 或 Nano 文本编辑器软件
 </pre>
 
-<div class="slate-resizable-image-embed slate-image-embed__resize-full-width"><img src="/imgs/1606060809296.jpg"/></div>
+<div class="slate-resizable-image-embed slate-image-embed__resize-full-width"><img src="/imgs/1606060809296.png"/></div>
 
 <iframe allowfullscreen="true" class="center lazy-load" data-delayed-url="https://www.linkedin.com/embeds/publishingEmbed.html?articleId=7727169611615228100" frameborder="0" height="294" src="about:blank" title="Raspberry Pi 4 Model B - 2 GB RAM" width="744"></iframe>
 

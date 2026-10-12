@@ -4,7 +4,7 @@
 
 ROR 命令表示循环右移 (rotate right).
 
-<div class="slate-resizable-image-embed slate-image-embed__resize-full-width"><img src="/imgs/1544181149655.jpg"/></div>
+<div class="slate-resizable-image-embed slate-image-embed__resize-full-width"><img src="/imgs/1544181149655.png"/></div>
 
 在上面这个运行于 Ubuntu Linux 机器的简单 x64 示例中, 我们看到我们把 mov 1 放入 al, 然后循环右移 1 位.
 

@@ -16,7 +16,7 @@ int main(void) {
 }
 </pre>
 
-<div class="slate-resizable-image-embed slate-image-embed__resize-full-width"><img src="/imgs/1527849027049.jpg"/></div>
+<div class="slate-resizable-image-embed slate-image-embed__resize-full-width"><img src="/imgs/1527849027049.png"/></div>
 
 编译它只需要输入:
 
@@ -24,7 +24,7 @@ g++ example10.cpp -o example10
 
 ./example10
 
-<div class="slate-resizable-image-embed slate-image-embed__resize-full-width"><img src="/imgs/1527849063244.jpg"/></div>
+<div class="slate-resizable-image-embed slate-image-embed__resize-full-width"><img src="/imgs/1527849063244.png"/></div>
 
 我们看到屏幕上打印出了 16 和 17.
 

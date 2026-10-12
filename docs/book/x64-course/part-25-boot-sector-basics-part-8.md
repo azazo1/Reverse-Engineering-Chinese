@@ -6,7 +6,7 @@
 
 让我们来看看我们的代码:
 
-<div class="slate-resizable-image-embed slate-image-embed__resize-full-width"><img src="/imgs/1549024795636.jpg"/></div>
+<div class="slate-resizable-image-embed slate-image-embed__resize-full-width"><img src="/imgs/1549024795636.png"/></div>
 
 我们要做的第一件事是移动到地址 0x7c00 处引导扇区代码的可编程区域. 然后我们设置栈基址, 确定栈所在的区域, 并把基址指针设置到栈指针里.
 
@@ -18,7 +18,7 @@
 
 然后我们就能看到 qemu 控制台:
 
-<div class="slate-resizable-image-embed slate-image-embed__resize-full-width"><img src="/imgs/1549025085922.jpg"/></div>
+<div class="slate-resizable-image-embed slate-image-embed__resize-full-width"><img src="/imgs/1549025085922.png"/></div>
 
 如你所见, 在我们的 OS 里我只能输入数字字符. 你自己也试试. 把代码写出来, 在 qemu 编辑器里编译并运行. 如果你还没装 qemu, 我在前面两节教程里详细讲了怎么安装它.
 

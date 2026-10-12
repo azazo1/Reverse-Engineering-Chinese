@@ -8,17 +8,17 @@
 
 我们来看一下源代码. 用 Vim 或 Nano 跟着做.
 
-<div class="slate-resizable-image-embed slate-image-embed__resize-full-width"><img src="/imgs/1545990601552.jpg"/></div>
+<div class="slate-resizable-image-embed slate-image-embed__resize-full-width"><img src="/imgs/1545990601552.png"/></div>
 
 上周我们学习了第 1 行和第 2 行的操作码, 这些就不必复习了. 今天我们在代码里加入一个字节的数据. 注意这是一个十六进制数, 检查二进制文件时它会与之对应. 在以后的课程中我们会看看用十进制和其他进制时是什么样子.
 
 我们来编译. 如果你还没有安装 NASM, 请确保输入 __sudo apt-get install nasm__.
 
-<div class="slate-resizable-image-embed slate-image-embed__resize-middle"><img src="/imgs/1545990746117.jpg"/></div>
+<div class="slate-resizable-image-embed slate-image-embed__resize-middle"><img src="/imgs/1545990746117.png"/></div>
 
 我们在十六进制编辑器里看看这个二进制文件. 我用的是 GHex, 因为我坚持 GNU 传统, 就像以后的课程中我们会使用名为 GDB 的 GNU 调试器一样. 这些都在你的 Linux 系统上, 因为这些教程我用的都是 Ubuntu.
 
-<div class="slate-resizable-image-embed slate-image-embed__resize-full-width"><img src="/imgs/1545990876404.jpg"/></div>
+<div class="slate-resizable-image-embed slate-image-embed__resize-full-width"><img src="/imgs/1545990876404.png"/></div>
 
 上周我们看到 __EB__ 和 __FE__ 对应我们的 __INC__ 和 __JMP__ 指令. 如果还不清楚, 请重读上周的课程. 我们看到第 3 个字节是 __10__. 记住这是十六进制, 所以它的十进制值是 __16__.
 

@@ -21,14 +21,14 @@ int main(void) {
 
 让我们来调试.
 
-<div class="slate-resizable-image-embed slate-image-embed__resize-full-width"><img src="/imgs/1532085310684.jpg"/></div>
+<div class="slate-resizable-image-embed slate-image-embed__resize-full-width"><img src="/imgs/1532085310684.png"/></div>
 
 很明显, 后置自减运算符的值是在 __main+68 __处被加载进 __r1__ 的, 所以我们把断点下在 __main+72__ 处.
 
-<div class="slate-resizable-image-embed slate-image-embed__resize-full-width"><img src="/imgs/1532085326445.jpg"/></div>
+<div class="slate-resizable-image-embed slate-image-embed__resize-full-width"><img src="/imgs/1532085326445.png"/></div>
 
 我们可以清楚地看到, __r1 __中确实存放着 __15__, 它是从我们的原值自减而来的.
 
-<div class="slate-resizable-image-embed slate-image-embed__resize-full-width"><img src="/imgs/1532085443370.jpg"/></div>
+<div class="slate-resizable-image-embed slate-image-embed__resize-full-width"><img src="/imgs/1532085443370.png"/></div>
 
 下周我们将深入探讨修改后置自减运算符.

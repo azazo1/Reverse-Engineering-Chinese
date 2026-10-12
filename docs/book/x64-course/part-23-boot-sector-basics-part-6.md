@@ -12,7 +12,7 @@
 
 用我们的二进制文件运行这个模拟器.
 
-<div class="slate-resizable-image-embed slate-image-embed__resize-full-width"><img src="/imgs/1547804407713.jpg"/></div>
+<div class="slate-resizable-image-embed slate-image-embed__resize-full-width"><img src="/imgs/1547804407713.png"/></div>
 
 你会看到下面的内容. 记住它除了一个无限循环跳转之外什么也不做, 这一点我们在前面的课程里详细讨论过. 不过这是你能创建出来的最基础的 x86 OS.
 

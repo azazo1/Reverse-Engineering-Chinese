@@ -6,25 +6,25 @@
 
 让我们从下面的 __AND 门 __开始.
 
-<div class="slate-resizable-image-embed slate-image-embed__resize-full-width"><img src="/imgs/1535712345568.jpg"/></div>
+<div class="slate-resizable-image-embed slate-image-embed__resize-full-width"><img src="/imgs/1535712345568.png"/></div>
 
 在 AND 门里有两个二进制值, 只有这两个二进制值都是 1 时它才输出 1.&nbsp;
 
 下面表示的是 __NOT 门__.
 
-<div class="slate-resizable-image-embed slate-image-embed__resize-full-width"><img src="/imgs/1535712373734.jpg"/></div>
+<div class="slate-resizable-image-embed slate-image-embed__resize-full-width"><img src="/imgs/1535712373734.png"/></div>
 
 在 NOT 门里, 它只是取一个二进制值并把它取反.
 
 下面表示的是 __OR 门__.
 
-<div class="slate-resizable-image-embed slate-image-embed__resize-full-width"><img src="/imgs/1535712396805.jpg"/></div>
+<div class="slate-resizable-image-embed slate-image-embed__resize-full-width"><img src="/imgs/1535712396805.png"/></div>
 
 在 OR 门里, 只要其中一个输入是 1 就会输出 1.
 
 下面表示的是 __XOR 门&nbsp;__.
 
-<div class="slate-resizable-image-embed slate-image-embed__resize-full-width"><img src="/imgs/1535712436598.jpg"/></div>
+<div class="slate-resizable-image-embed slate-image-embed__resize-full-width"><img src="/imgs/1535712436598.png"/></div>
 
 在 XOR 门里, 如果两个输入要么都是 0 要么都是 1, 输出就是 0.
 

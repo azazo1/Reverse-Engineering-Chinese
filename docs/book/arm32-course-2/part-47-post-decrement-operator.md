@@ -16,13 +16,13 @@
 </pre>
 
 <div class="slate-resizable-image-embed slate-image-embed__resize-full-width">
-<img src="/imgs/1531481191370.jpg"/>
+<img src="/imgs/1531481191370.png"/>
 </div>
 
  编译后我们看到分别打印出 __16__ 和 __15__.
 
 <div class="slate-resizable-image-embed slate-image-embed__resize-full-width">
-<img src="/imgs/1531481259797.jpg"/>
+<img src="/imgs/1531481259797.png"/>
 </div>
 
 我们看到, 在这种情况下 __myNewNumber__ 确实被自减了, 因为 __myNumber-- __取值为 16 并把它减到 15.

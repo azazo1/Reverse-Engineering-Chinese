@@ -21,19 +21,19 @@ int main(void) {
 
 让我们来调试.
 
-<div class="slate-resizable-image-embed slate-image-embed__resize-full-width"><img src="/imgs/1530270075261.jpg"/></div>
+<div class="slate-resizable-image-embed slate-image-embed__resize-full-width"><img src="/imgs/1530270075261.png"/></div>
 
 让我们下断点.
 
-<div class="slate-resizable-image-embed slate-image-embed__resize-full-width"><img src="/imgs/1530270088297.jpg"/></div>
+<div class="slate-resizable-image-embed slate-image-embed__resize-full-width"><img src="/imgs/1530270088297.png"/></div>
 
 可以看到, __r3 __中存放着 15. 请记住, 你要修改的这个位置可能并不是它最终被存储的位置. 下周请记住这一点, 并重新检查上面的调试过程, 看看你能不能想明白.
 
-<div class="slate-resizable-image-embed slate-image-embed__resize-full-width"><img src="/imgs/1530270183626.jpg"/></div>
+<div class="slate-resizable-image-embed slate-image-embed__resize-full-width"><img src="/imgs/1530270183626.png"/></div>
 
 可以看到, __r1__ 中也存放着 15. 请记住上面那句话.
 
-<div class="slate-resizable-image-embed slate-image-embed__resize-full-width"><img src="/imgs/1530270209438.jpg"/></div>
+<div class="slate-resizable-image-embed slate-image-embed__resize-full-width"><img src="/imgs/1530270209438.png"/></div>
 
 继续执行, 我们看到 __cout __函数按预期在两处都回显出 15.
 

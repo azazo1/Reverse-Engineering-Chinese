@@ -16,7 +16,7 @@ x64 处理器使用我们所说的 \_\_fastcall.&nbsp;
 
 下面用一个简单的分解来说明:
 
-<div class="slate-resizable-image-embed slate-image-embed__resize-full-width"><img src="/imgs/1539336219028.jpg"/></div>
+<div class="slate-resizable-image-embed slate-image-embed__resize-full-width"><img src="/imgs/1539336219028.png"/></div>
 
 如果你在一个函数中传递两个参数, 例如 int __x__ 和 int __y__, 而且它是 QWORD, 那么 __x__ 会进入 __rcx__, __y__ 会进入__ rdx__.&nbsp;
 

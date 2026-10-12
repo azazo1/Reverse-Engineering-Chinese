@@ -12,6 +12,7 @@
 *.exe  binary
 *.pdf  binary
 *.png  binary
+*.jpg  binary
 *.fzz  binary
 
 # 文档统一使用 LF

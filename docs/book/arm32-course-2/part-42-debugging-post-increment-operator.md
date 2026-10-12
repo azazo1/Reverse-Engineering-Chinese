@@ -22,18 +22,18 @@ int main(void) {
 
 让我们来调试.
 
-<div class="slate-resizable-image-embed slate-image-embed__resize-full-width"><img src="/imgs/1528458112325.jpg"/></div>
+<div class="slate-resizable-image-embed slate-image-embed__resize-full-width"><img src="/imgs/1528458112325.png"/></div>
 
 让我们在 __\*main+28 __处下断点, 然后继续.
 
-<div class="slate-resizable-image-embed slate-image-embed__resize-full-width"><img src="/imgs/1528458131421.jpg"/></div>
+<div class="slate-resizable-image-embed slate-image-embed__resize-full-width"><img src="/imgs/1528458131421.png"/></div>
 
 可以看到, 其中 __r3 __的值是 16, 其中 __r2 __的值是 17. 我们可以看到, 它们在 __\*main+12__ 处由 __mov__ 指令直接从内存加载进寄存器, 而在 __\*main+24__ 处, 我们把 1 加到 __r3__ 上, 再把这个值放进 __r2__.
 
-<div class="slate-resizable-image-embed slate-image-embed__resize-full-width"><img src="/imgs/1528458142344.jpg"/></div>
+<div class="slate-resizable-image-embed slate-image-embed__resize-full-width"><img src="/imgs/1528458142344.png"/></div>
 
 继续执行, 我们可以看到 __cout __这个 c++ 函数被调用, 它按预期把值回显到终端 (标准输出).
 
-<div class="slate-resizable-image-embed slate-image-embed__resize-full-width"><img src="/imgs/1528458154804.jpg"/></div>
+<div class="slate-resizable-image-embed slate-image-embed__resize-full-width"><img src="/imgs/1528458154804.png"/></div>
 
 下周我们将深入探讨修改后置自增运算符.

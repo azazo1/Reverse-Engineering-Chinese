@@ -4,7 +4,7 @@
 
 让我们再一次回顾我们的源代码.
 
-<div class="slate-resizable-image-embed slate-image-embed__resize-full-width"><img src="/imgs/1553853169947.jpg"/></div>
+<div class="slate-resizable-image-embed slate-image-embed__resize-full-width"><img src="/imgs/1553853169947.png"/></div>
 
 让我们编译...
 

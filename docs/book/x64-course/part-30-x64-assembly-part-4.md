@@ -4,7 +4,7 @@
 
 今天我们要用 x64 汇编语言编写我们那个简单的 "hello world" 程序.
 
-<div class="slate-resizable-image-embed slate-image-embed__resize-full-width"><img src="/imgs/1552041593157.jpg"/></div>
+<div class="slate-resizable-image-embed slate-image-embed__resize-full-width"><img src="/imgs/1552041593157.png"/></div>
 
 我们只是在 __.data __段里创建了一个字符串, 并在这个语句的末尾加上一个回车字符. 然后我们执行一个简单的 write 调用, 它利用 OS 的中断向量表把我们的字符串输出到标准输出也就是终端里.
 

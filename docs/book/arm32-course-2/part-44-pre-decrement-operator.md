@@ -19,11 +19,11 @@ int main(void) {
 }
 </pre>
 
-<div class="slate-resizable-image-embed slate-image-embed__resize-full-width"><img src="/imgs/1529666614196.jpg"/></div>
+<div class="slate-resizable-image-embed slate-image-embed__resize-full-width"><img src="/imgs/1529666614196.png"/></div>
 
 编译并运行后, 我们看到终端上回显出 15.
 
-<div class="slate-resizable-image-embed slate-image-embed__resize-full-width"><img src="/imgs/1529666685691.jpg"/></div>
+<div class="slate-resizable-image-embed slate-image-embed__resize-full-width"><img src="/imgs/1529666685691.png"/></div>
 
 __myNumber __的值原来是 __16 __, 用前置自减运算符赋值之后, 我们看到新值是 __15__, 因为它被赋进了 __myNewNumber__.
 

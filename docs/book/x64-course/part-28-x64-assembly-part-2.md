@@ -4,7 +4,7 @@
 
 我们继续看另一个例子:
 
-<div class="slate-resizable-image-embed slate-image-embed__resize-full-width"><img src="/imgs/1550829629337.jpg"/></div>
+<div class="slate-resizable-image-embed slate-image-embed__resize-full-width"><img src="/imgs/1550829629337.png"/></div>
 
 如我们所见, 我们把 __0x10__ 移动到 __RAX__ 里, 然后把 __0x05__ 加到 __RAX__ 里.
 

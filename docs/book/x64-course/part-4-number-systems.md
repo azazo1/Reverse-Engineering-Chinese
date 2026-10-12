@@ -10,21 +10,21 @@
 
 在深入二进制之前, 先来看看我们熟悉的十进制. 拿 2017 这个数来说, 我们会把它理解为两千零一十七.
 
-<div class="slate-resizable-image-embed slate-image-embed__resize-full-width"><img src="/imgs/1536316029655.jpg"/></div>
+<div class="slate-resizable-image-embed slate-image-embed__resize-full-width"><img src="/imgs/1536316029655.png"/></div>
 
 我们来看一看二进制系统, 以及它运作的基本原理.
 
-<div class="slate-resizable-image-embed slate-image-embed__resize-full-width"><img src="/imgs/1536316062694.jpg"/></div>
+<div class="slate-resizable-image-embed slate-image-embed__resize-full-width"><img src="/imgs/1536316062694.png"/></div>
 
 如果要把一个二进制数转成十进制, 做法非常简单, 就像下面这样. 以二进制数 0101 1101 为例, 可以看到它对应十进制的 93.
 
-<div class="slate-resizable-image-embed slate-image-embed__resize-full-width"><img src="/imgs/1536316087192.jpg"/></div>
+<div class="slate-resizable-image-embed slate-image-embed__resize-full-width"><img src="/imgs/1536316087192.png"/></div>
 
 把数值列里的数相加, 得到 0 + 64 + 0 + 16 + 8 + 4 + 0 + 1, 等于十进制的 93.
 
 如果要把十进制数转成二进制, 我们会对照最高位判断能不能做一次减法, 如果能, 就在对应的二进制列写 1, 余数则带到下一行. 以十进制数 120 为例, 它对应的二进制是 0111 1000.
 
-<div class="slate-resizable-image-embed slate-image-embed__resize-full-width"><img src="/imgs/1536316117407.jpg"/></div>
+<div class="slate-resizable-image-embed slate-image-embed__resize-full-width"><img src="/imgs/1536316117407.png"/></div>
 
 1) 128 能装进 120 里吗: 不能, 因此为 0.
 
@@ -44,29 +44,29 @@
 
 要把二进制转成十六进制, 只需对照下面这张表.
 
-<div class="slate-resizable-image-embed slate-image-embed__resize-full-width"><img src="/imgs/1536316179552.jpg"/></div>
+<div class="slate-resizable-image-embed slate-image-embed__resize-full-width"><img src="/imgs/1536316179552.png"/></div>
 
 我们把 0101 1111 这样的二进制数转成十六进制. 做法就是查表, 逐个比较每个半字节 (nibble), 一个半字节由 4 位组成. 记住, 8 位等于一个字节, 2 个半字节也等于一个字节.
 
-<div class="slate-resizable-image-embed slate-image-embed__resize-full-width"><img src="/imgs/1536316203991.jpg"/></div>
+<div class="slate-resizable-image-embed slate-image-embed__resize-full-width"><img src="/imgs/1536316203991.png"/></div>
 
 因此二进制 0101 1111 = 十六进制的 0x5f. 0x 这种写法表示十六进制.
 
 从十六进制回到二进制也很简单, 只要反过来做一遍就行, 例如:
 
-<div class="slate-resizable-image-embed slate-image-embed__resize-full-width"><img src="/imgs/1536316238835.jpg"/></div>
+<div class="slate-resizable-image-embed slate-image-embed__resize-full-width"><img src="/imgs/1536316238835.png"/></div>
 
 要明白一点: 每个十六进制数字的长度是一个半字节, 因此两个十六进制数字的长度是一个字节.
 
 从十六进制转成十进制, 做法如下:
 
-<div class="slate-resizable-image-embed slate-image-embed__resize-full-width"><img src="/imgs/1536316267782.jpg"/></div>
+<div class="slate-resizable-image-embed slate-image-embed__resize-full-width"><img src="/imgs/1536316267782.png"/></div>
 
 可见 80 + 15 = 95, 也就是十六进制的 0x5f.
 
 最后是从十进制转成十六进制. 以十进制数 850 为例, 它等于十六进制的 352.
 
-<div class="slate-resizable-image-embed slate-image-embed__resize-full-width"><img src="/imgs/1536316294127.jpg"/></div>
+<div class="slate-resizable-image-embed slate-image-embed__resize-full-width"><img src="/imgs/1536316294127.png"/></div>
 
 "计算机都替我把这些算好了, 我干嘛还要浪费时间学这些鬼东西!"
 

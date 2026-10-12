@@ -8,7 +8,7 @@
 
 我们从一个 C++ 1 的代码示例开始:
 
-<div class="slate-resizable-image-embed slate-image-embed__resize-full-width"><img src="/imgs/1561023464535.jpg"/></div>
+<div class="slate-resizable-image-embed slate-image-embed__resize-full-width"><img src="/imgs/1561023464535.png"/></div>
 
 这里我们只是创建了一个 main 函数, 用 C++ 的输出流库把 "Hello World" 这段文本输出到终端, 并在末尾带一个换行. 我们来编译并链接:
 

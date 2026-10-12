@@ -12,7 +12,7 @@ x64 把 x86 的 8 个通用寄存器 (general-purpose register) 扩展到 64 位
 
 下面的表格逐一列出了各个字节的区分.
 
-<div class="slate-resizable-image-embed slate-image-embed__resize-full-width"><img src="/imgs/1538735142722.jpg"/></div>
+<div class="slate-resizable-image-embed slate-image-embed__resize-full-width"><img src="/imgs/1538735142722.png"/></div>
 
 输出到 32 位子寄存器的运算会自动零扩展 (zero-extended) 到整个 64 位寄存器. 输出到 8 位或 16 位子寄存器的运算则_不_做零扩展 (这是与 x86 兼容的行为).
 

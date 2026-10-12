@@ -10,7 +10,7 @@ SHR 命令表示右移 (shift right).
 
    00010100
 
-<div class="slate-resizable-image-embed slate-image-embed__resize-full-width"><img src="/imgs/1542995744073.jpg"/></div>
+<div class="slate-resizable-image-embed slate-image-embed__resize-full-width"><img src="/imgs/1542995744073.png"/></div>
 
 <div class="slate-resizable-image-embed slate-image-embed__resize-full-width"><img src="/imgs/1542995747116.jpg"/></div>
 

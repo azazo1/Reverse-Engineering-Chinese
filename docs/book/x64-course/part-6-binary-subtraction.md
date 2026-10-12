@@ -6,7 +6,7 @@
 
 我们用二进制里的一个符号位 (sign bit) 表示正负, 第 7 位表示数的符号, 其中 0 表示正, 1 表示负.
 
-<div class="slate-resizable-image-embed slate-image-embed__resize-full-width"><img src="/imgs/1537526862141.jpg"/></div>
+<div class="slate-resizable-image-embed slate-image-embed__resize-full-width"><img src="/imgs/1537526862141.png"/></div>
 
 上面这个表示的是 -2.
 
@@ -14,19 +14,19 @@
 
 来看看二进制形式的 2.
 
-<div class="slate-resizable-image-embed slate-image-embed__resize-full-width"><img src="/imgs/1537526884698.jpg"/></div>
+<div class="slate-resizable-image-embed slate-image-embed__resize-full-width"><img src="/imgs/1537526884698.png"/></div>
 
 把各位取反.
 
-<div class="slate-resizable-image-embed slate-image-embed__resize-full-width"><img src="/imgs/1537526902723.jpg"/></div>
+<div class="slate-resizable-image-embed slate-image-embed__resize-full-width"><img src="/imgs/1537526902723.png"/></div>
 
 加 1.
 
-<div class="slate-resizable-image-embed slate-image-embed__resize-full-width"><img src="/imgs/1537526921447.jpg"/></div>
+<div class="slate-resizable-image-embed slate-image-embed__resize-full-width"><img src="/imgs/1537526921447.png"/></div>
 
 来看一次减法运算:
 
-<div class="slate-resizable-image-embed slate-image-embed__resize-full-width"><img src="/imgs/1537526940998.jpg"/></div>
+<div class="slate-resizable-image-embed slate-image-embed__resize-full-width"><img src="/imgs/1537526940998.png"/></div>
 
 那么你可能会问 (1) 是什么, 那就是溢出位 (overflow bit). 在后面的教程里我们会看看所谓的溢出标志和进位标志.
 

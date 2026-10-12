@@ -4,7 +4,7 @@
 
 ROL 命令表示循环左移 (rotate left).
 
-<div class="slate-resizable-image-embed slate-image-embed__resize-full-width"><img src="/imgs/1543575772711.jpg"/></div>
+<div class="slate-resizable-image-embed slate-image-embed__resize-full-width"><img src="/imgs/1543575772711.png"/></div>
 
 在上面这个运行于 Ubuntu Linux 机器的简单 x64 示例中, 我们看到我们把 __mov 1__ 移入 __al __, 然后循环左移 1 位.
 

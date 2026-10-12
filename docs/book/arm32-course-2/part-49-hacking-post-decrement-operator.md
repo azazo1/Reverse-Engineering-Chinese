@@ -19,11 +19,11 @@ int main(void) {
 
 让我们回顾一下上周的调试.
 
-<div class="slate-resizable-image-embed slate-image-embed__resize-full-width"><img src="/imgs/1532690049930.jpg"/></div>
+<div class="slate-resizable-image-embed slate-image-embed__resize-full-width"><img src="/imgs/1532690049930.png"/></div>
 
 可以看到, 在 __main+68__ 处 __r1__ 中的值是 __15__. 让我们来修改!
 
-<div class="slate-resizable-image-embed slate-image-embed__resize-full-width"><img src="/imgs/1532690140517.jpg"/></div>
+<div class="slate-resizable-image-embed slate-image-embed__resize-full-width"><img src="/imgs/1532690140517.png"/></div>
 
 我们又一次按自己的意愿操纵并改变了程序的执行. 通过这些篇幅短小的课, 你会对处理器以及它如何与二进制文件交互有越来越好的把握.
 

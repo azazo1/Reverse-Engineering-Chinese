@@ -22,21 +22,21 @@ int main(void) {
 
 让我们来调试.
 
-<div class="slate-resizable-image-embed slate-image-embed__resize-full-width"><img src="/imgs/1529062708632.jpg"/></div>
+<div class="slate-resizable-image-embed slate-image-embed__resize-full-width"><img src="/imgs/1529062708632.png"/></div>
 
 让我们在&nbsp;__\*main+28__&nbsp;处下断点并继续.
 
-<div class="slate-resizable-image-embed slate-image-embed__resize-full-width"><img src="/imgs/1529062741325.jpg"/></div>
+<div class="slate-resizable-image-embed slate-image-embed__resize-full-width"><img src="/imgs/1529062741325.png"/></div>
 
 可以看到, 其中&nbsp;__r3__&nbsp;的值是 __16__, 其中&nbsp;__r2__&nbsp;的值是 __17__. 我们可以看到, 它们在&nbsp;__\*main+12__&nbsp;处由&nbsp;__mov__&nbsp;指令直接从内存加载进寄存器, 而在&nbsp;__\*main+24__&nbsp;处, 我们把 __1__ 加到&nbsp;__r3__&nbsp;上, 再把这个值放进&nbsp;__r2__.
 
 让我们来修改它吧!
 
-<div class="slate-resizable-image-embed slate-image-embed__resize-full-width"><img src="/imgs/1529062819877.jpg"/></div>
+<div class="slate-resizable-image-embed slate-image-embed__resize-full-width"><img src="/imgs/1529062819877.png"/></div>
 
 我们知道, 现在可以随心所欲地设置 __r3__ 的值了!
 
-<div class="slate-resizable-image-embed slate-image-embed__resize-full-width"><img src="/imgs/1529062853544.jpg"/></div>
+<div class="slate-resizable-image-embed slate-image-embed__resize-full-width"><img src="/imgs/1529062853544.png"/></div>
 
 继续执行, 我们看到 c++ 的 __cout__ 函数把我们修改后的新值回显到屏幕上!
 

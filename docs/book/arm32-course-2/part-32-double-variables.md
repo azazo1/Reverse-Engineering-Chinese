@@ -27,7 +27,7 @@ int main(void) {
 }
 </pre>
 
-<div class="slate-resizable-image-embed slate-image-embed__resize-full-width"><img src="/imgs/1522403579256.jpg"/></div>
+<div class="slate-resizable-image-embed slate-image-embed__resize-full-width"><img src="/imgs/1522403579256.png"/></div>
 
 编译它只需要输入:
 
@@ -35,7 +35,7 @@ g++ example7.cpp -o example7
 
 ./example7
 
-<div class="slate-resizable-image-embed slate-image-embed__resize-full-width"><img src="/imgs/1522403604790.jpg"/></div>
+<div class="slate-resizable-image-embed slate-image-embed__resize-full-width"><img src="/imgs/1522403604790.png"/></div>
 
 成功!&nbsp;我们看到 1337.77 被打印到标准输出或者终端!
 

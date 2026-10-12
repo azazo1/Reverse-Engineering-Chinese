@@ -4,7 +4,7 @@
 
 今天我们开始真正的 x64 代码基础. 在接下来的几周里我会写一些非常简单的例子, 让我们对 x64 架构有所把握. 我们先从一个基础代码块开始:
 
-<div class="slate-resizable-image-embed slate-image-embed__resize-full-width"><img src="/imgs/1550227269983.jpg"/></div>
+<div class="slate-resizable-image-embed slate-image-embed__resize-full-width"><img src="/imgs/1550227269983.png"/></div>
 
 我们首先声明 __.data__ 段, 我们所有的全局数据都存放在这里. 如果我们有字符串或者其他形式的硬编码数据, 它就会放进这个块里. 在我们的例子里, 我们让它保持为空.
 

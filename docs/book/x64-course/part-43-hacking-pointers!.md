@@ -58,7 +58,7 @@
 
 然后我们反汇编:
 
-<div class="slate-resizable-image-embed slate-image-embed__resize-full-width"><img src="/imgs/1567290800965.jpg"/></div>
+<div class="slate-resizable-image-embed slate-image-embed__resize-full-width"><img src="/imgs/1567290800965.png"/></div>
 
 我们来修改!
 
@@ -66,7 +66,7 @@
 
 我们重新检查这个二进制文件:
 
-<div class="slate-resizable-image-embed slate-image-embed__resize-full-width"><img src="/imgs/1567292311387.jpg"/></div>
+<div class="slate-resizable-image-embed slate-image-embed__resize-full-width"><img src="/imgs/1567292311387.png"/></div>
 
 可以看到我们把 3 这个值改成了 6.
 

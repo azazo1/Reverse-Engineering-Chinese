@@ -18,7 +18,7 @@
 
 我们在 main 处反汇编:
 
-<div class="slate-resizable-image-embed slate-image-embed__resize-full-width"><img src="/imgs/1566059725847.jpg"/></div>
+<div class="slate-resizable-image-embed slate-image-embed__resize-full-width"><img src="/imgs/1566059725847.png"/></div>
 
 好, 很简单, 我们在顶部看到 3 个反向排列的变量声明, 分别是 __local\_1h __, 也就是我们的 __char a,__ __local\_8h__, 也就是我们的 __int b__, 以及 __local\_10h__, 也就是我们的 __double c__. 你还能看到 __rbp__ 基址指针在为这些变量分配空间. 这是调试器显示在上方的一段不错的伪代码.
 
@@ -30,7 +30,7 @@
 
 现在我们重新看一下我们的二进制文件:
 
-<div class="slate-resizable-image-embed slate-image-embed__resize-full-width"><img src="/imgs/1566060755864.jpg"/></div>
+<div class="slate-resizable-image-embed slate-image-embed__resize-full-width"><img src="/imgs/1566060755864.png"/></div>
 
 可以清楚地看到, 在内存地址 __0x0000113d __处, 我们看到的确实是 '__b__'. 这一部分我们成功改掉了.
 
