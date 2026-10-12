@@ -1,0 +1,196 @@
+name: 构建电子书
+
+# 每次推送到 main 都重新构建 PDF / EPUB / MOBI, 并更新滚动预发布.
+# 手动触发可指定只构建某些格式.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "docs/**"
+      - "scripts/build_book.py"
+      - ".github/workflows/book.yml"
+  workflow_dispatch:
+    inputs:
+      formats:
+        description: "要构建的格式, 逗号分隔 (pdf,epub,mobi)"
+        required: false
+        default: "pdf,epub,mobi"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: book-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  RELEASE_TAG: book-latest
+
+jobs:
+  # 构建 PDF 与 EPUB. 这两个只要 pandoc + typst, 一分钟左右能出结果.
+  pdf-epub:
+    name: 构建 PDF 与 EPUB
+    runs-on: ubuntu-24.04
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 准备 uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: false
+
+      - name: 安装中文字体
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq fonts-noto-cjk
+
+      - name: 安装 pandoc
+        env:
+          PANDOC_VERSION: "3.12.1"
+        run: |
+          set -euo pipefail
+          url="https://github.com/jgm/pandoc/releases/download/${PANDOC_VERSION}/pandoc-${PANDOC_VERSION}-1-amd64.deb"
+          curl -fsSL -o /tmp/pandoc.deb "$url"
+          sudo dpkg -i /tmp/pandoc.deb
+          pandoc --version | head -1
+
+      - name: 安装 typst
+        env:
+          TYPST_VERSION: "0.15.1"
+        run: |
+          set -euo pipefail
+          url="https://github.com/typst/typst/releases/download/v${TYPST_VERSION}/typst-x86_64-unknown-linux-musl.tar.xz"
+          curl -fsSL -o /tmp/typst.tar.xz "$url"
+          tar -xJf /tmp/typst.tar.xz -C /tmp
+          sudo install -m 0755 /tmp/typst-x86_64-unknown-linux-musl/typst /usr/local/bin/typst
+          typst --version
+
+      - name: 组装并构建
+        env:
+          PROJECT_BUILD_VERSION: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          fmt="${{ github.event.inputs.formats || 'pdf,epub,mobi' }}"
+          args=""
+          case "$fmt" in *epub*) ;; *) args="$args --no-epub" ;; esac
+          case "$fmt" in *pdf*)  ;; *) args="$args --no-pdf"  ;; esac
+          uv run --no-project python scripts/build_book.py --no-mobi $args
+
+      - name: 上传产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: book-pdf-epub
+          path: dist/*.pdf dist/*.epub
+          if-no-files-found: error
+          retention-days: 7
+
+  # MOBI 要装 Calibre, 单独一个 job, 不拖慢上面那条链路.
+  mobi:
+    name: 构建 MOBI
+    runs-on: ubuntu-24.04
+    needs: pdf-epub
+    if: ${{ !github.event.inputs.formats || contains(github.event.inputs.formats, 'mobi') }}
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 准备 uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: false
+
+      - name: 安装 Calibre
+        run: |
+          set -euo pipefail
+          curl -fsSL -o /tmp/calibre-installer.sh https://download.calibre-ebook.com/linux-installer.sh
+          sudo sh /tmp/calibre-installer.sh
+          echo "/opt/calibre" >> "$GITHUB_PATH"
+          /opt/calibre/ebook-convert --version
+
+      - name: 取回 EPUB
+        uses: actions/download-artifact@v4
+        with:
+          name: book-pdf-epub
+          path: dist
+
+      - name: 生成 MOBI
+        env:
+          PROJECT_BUILD_VERSION: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          uv run --no-project python scripts/build_book.py --no-pdf --no-epub
+
+      - name: 上传产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: book-mobi
+          path: dist/*.mobi
+          if-no-files-found: error
+          retention-days: 7
+
+  # 汇总产物, 更新滚动预发布. 资产名固定, 每次覆盖, 不累积历史文件.
+  release:
+    name: 更新预发布
+    runs-on: ubuntu-24.04
+    needs: [pdf-epub, mobi]
+    if: ${{ always() && needs.pdf-epub.result == 'success' }}
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 取回全部产物
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: 整理资产
+        run: |
+          set -euo pipefail
+          mkdir -p out
+          shopt -s nullglob
+          for f in artifacts/book-pdf-epub/*.pdf; do cp "$f" out/reverse-engineering-chinese.pdf; done
+          for f in artifacts/book-pdf-epub/*.epub; do cp "$f" out/reverse-engineering-chinese.epub; done
+          for f in artifacts/book-mobi/*.mobi; do cp "$f" out/reverse-engineering-chinese.mobi; done
+          ls -la out
+          test -s out/reverse-engineering-chinese.pdf
+          test -s out/reverse-engineering-chinese.epub
+
+      - name: 生成说明
+        env:
+          SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          short="${SHA:0:7}"
+          {
+            echo "本预发布由每次推送到 main 自动重建, 资产名固定, 内容随提交滚动更新."
+            echo
+            echo "- 构建提交: \`${short}\`"
+            echo "- 构建时间: $(date -u '+%Y-%m-%d %H:%M UTC')"
+            echo
+            echo "| 文件 | 说明 |"
+            echo "| --- | --- |"
+            echo "| \`reverse-engineering-chinese.pdf\` | 适合打印与屏幕阅读 |"
+            echo "| \`reverse-engineering-chinese.epub\` | 适合绝大多数阅读器 |"
+            echo "| \`reverse-engineering-chinese.mobi\` | 适合旧款 Kindle |"
+          } > notes.md
+          cat notes.md
+
+      - name: 创建或更新预发布
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            gh release edit "$RELEASE_TAG" --notes-file notes.md
+          else
+            gh release create "$RELEASE_TAG" \
+              --prerelease \
+              --title "中文电子书 (滚动构建)" \
+              --notes-file notes.md \
+              --target "$SHA"
+          fi
+          shopt -s nullglob
+          gh release upload "$RELEASE_TAG" out/* --clobber
