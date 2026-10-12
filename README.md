@@ -58,17 +58,53 @@
 | Reverse Engineering Data Course | 30 |
 | **合计** | **491** |
 
+## 在线阅读与电子书
+
+在线阅读站点: <https://azazo1.github.io/Reverse-Engineering-Chinese/>
+
+左侧目录, 全文搜索, 章节间翻页, 深色主题都由 mdBook 提供. 推到 main 后
+由 [.github/workflows/pages.yml](.github/workflows/pages.yml) 自动重建并部署.
+
+电子书在预发布页滚动更新, 资产名固定:
+
+<https://github.com/azazo1/Reverse-Engineering-Chinese/releases/tag/book-latest>
+
+| 格式 | 适用 |
+| --- | --- |
+| PDF | 打印与屏幕阅读, 约 600 页 |
+| EPUB | 绝大多数阅读器 |
+| MOBI | 旧款 Kindle |
+
+推送到 main 后由 [.github/workflows/book.yml](.github/workflows/book.yml) 重建.
+
+本地构建:
+
+```shell
+just site          # 构建阅读站点到 site/
+just site-serve    # 起本地服务预览, 改文档自动重建
+just book          # 构建 PDF 与 EPUB 到 dist/
+just book-all      # 连 MOBI 一起构建, 需装 Calibre
+```
+
+PDF 与 EPUB 需要 `pandoc` 与 `typst`; MOBI 需要 Calibre 的 `ebook-convert`;
+阅读站点需要 `mdbook`. CI 里会自动装好, 本机则需自行准备.
+
 ## 目录结构
 
 ```
 .
 ├── README.md                    本文件
 ├── LICENSE                      Apache License 2.0, 继承自上游
+├── justfile                     常用任务
 ├── docs/
 │   ├── courses.md               中文课程目录, 26 个系列 491 节 Lesson
 │   ├── book/                    部分课程教材正文的中文版
 │   ├── translation-guide.md     翻译规范与术语表
 │   └── inventory.md             素材清单与保留策略
+├── scripts/
+│   ├── build_book.py            组装并生成 PDF / EPUB / MOBI
+│   └── build_site.py            组装并生成 mdBook 阅读站点
+├── .github/workflows/           电子书构建与站点部署
 ├── 0xNNNN-<名字>/               各示例工程的源码与 Visual Studio 工程文件
 ├── 0xNNNN-<名字>-x64 Debug/     IDA 分析工作目录 (x64)
 ├── 0xNNNN-<名字>-x86 Debug/     IDA 分析工作目录 (x86)
