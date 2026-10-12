@@ -182,12 +182,27 @@ def chapter_sort_key(path: Path):
     return (int(m.group(1)) if m else 10**6, path.stem)
 
 
+_HEADING = re.compile(r"^(#{1,6})\s+(.+?)\s*$")
+
+
 def first_heading(path: Path) -> str:
-    """取文件第一个一级标题, 用作目录项文字."""
+    """取文件第一个标题, 用作目录项文字.
+
+    标题层级在两种课程里不一样: 经典教程系列的开篇是二级 (`## Part 6: 十六进制
+    数制`), 其余课程是一级 (`# Lesson 001 - 串口通信`). 只认一级标题的话, 经典
+    教程那 168 篇会全部退回文件名, 目录里看到的是一串 `part-6-hexadecimal-...`.
+    """
+    fallback = None
     for line in path.read_text(encoding="utf-8").split("\n"):
-        if line.startswith("# "):
-            return line[2:].strip()
-    return path.stem
+        m = _HEADING.match(line)
+        if not m:
+            continue
+        title = m.group(2)
+        if len(m.group(1)) == 1:
+            return title
+        if fallback is None:
+            fallback = title
+    return fallback or path.stem
 
 
 def iter_courses():
