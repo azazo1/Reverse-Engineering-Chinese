@@ -1,0 +1,18 @@
+# 语言统计: 汇编按可检测语言计入, C 不计入 (沿用上游设置)
+*.asm linguist-detectable=true
+*.c linguist-detectable=false
+
+# 二进制素材, 禁止行尾转换与 diff
+*.i64  binary
+*.id0  binary
+*.id1  binary
+*.id2  binary
+*.til  binary
+*.nam  binary
+*.exe  binary
+*.pdf  binary
+*.png  binary
+*.fzz  binary
+
+# 文档统一使用 LF
+*.md text eol=lf

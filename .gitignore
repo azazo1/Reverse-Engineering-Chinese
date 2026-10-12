@@ -1,0 +1,40 @@
+# 操作系统
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Visual Studio 缓存与构建目录
+#
+# 这些目录规则已经覆盖了本仓库全部编译产物的落点:
+#   <工程>/Debug/  <工程>/x64/Debug/  <工程>/Release/  <工程>/x64/Release/
+# 因此不再按扩展名全局忽略二进制, 以免误伤下面要保留的 IDA 工作目录.
+.vs/
+[Bb]in/
+[Oo]bj/
+[Dd]ebug/
+[Rr]elease/
+x64/
+x86/
+[Aa][Rr][Mm]/
+[Aa][Rr][Mm]64/
+
+# Visual Studio 构建中间文件
+*.pdb
+*.ilk
+*.idb
+*.obj
+*.exp
+*.lib
+*.tlog
+*.recipe
+*.lastbuildstate
+*.FileListAbsolute.txt
+*.log
+
+# 需要随仓库保留, 不要忽略:
+#
+#   IDA 工作目录  <名字>-x64 Debug/  <名字>-x86 Debug/
+#       *.i64  *.id0  *.id1  *.id2  *.nam  *.til  以及同目录下的 *.exe
+#
+#   IDA 数据库无法由源码自动重新生成, 且其中的 exe 与数据库是配对的
+#   (源码改动后重新编译出的 exe 与之并不一致), 因此两者必须一起保留.
