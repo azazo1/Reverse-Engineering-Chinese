@@ -1,7 +1,10 @@
 name: 构建电子书
 
-# 每次推送到 main 都重新构建 PDF / EPUB / MOBI, 并更新滚动预发布.
-# 手动触发可指定只构建某些格式.
+# 每次推送到 main 都重建 PDF / EPUB / MOBI, 并更新滚动预发布.
+#
+# 单 job 直发: 构建完就地用 gh 上传到 release, 不经过 upload-artifact.
+# 中间那层 artifact 中转只会带来额外失败点 (路径 glob 规则, 子目录结构),
+# 而产物最终就是要去 release, 没有别的消费方.
 
 on:
   push:
@@ -28,9 +31,8 @@ env:
   RELEASE_TAG: book-latest
 
 jobs:
-  # 构建 PDF 与 EPUB. 这两个只要 pandoc + typst, 一分钟左右能出结果.
-  pdf-epub:
-    name: 构建 PDF 与 EPUB
+  build:
+    name: 构建并发布
     runs-on: ubuntu-24.04
     steps:
       - name: 检出代码
@@ -43,6 +45,7 @@ jobs:
 
       - name: 安装中文字体
         run: |
+          set -euo pipefail
           sudo apt-get update -qq
           sudo apt-get install -y -qq fonts-noto-cjk
 
@@ -67,7 +70,7 @@ jobs:
           sudo install -m 0755 /tmp/typst-x86_64-unknown-linux-musl/typst /usr/local/bin/typst
           typst --version
 
-      - name: 组装并构建
+      - name: 构建 PDF 与 EPUB
         env:
           PROJECT_BUILD_VERSION: ${{ github.sha }}
         run: |
@@ -78,93 +81,36 @@ jobs:
           case "$fmt" in *pdf*)  ;; *) args="$args --no-pdf"  ;; esac
           uv run --no-project python scripts/build_book.py --no-mobi $args
 
-      - name: 上传产物
-        uses: actions/upload-artifact@v5
-        with:
-          name: book-pdf-epub
-          # path 只认换行分隔, 写成一行空格分隔会被当成单个 glob
-          path: |
-            dist/*.pdf
-            dist/*.epub
-          if-no-files-found: error
-          retention-days: 7
-
-  # MOBI 要装 Calibre, 单独一个 job, 不拖慢上面那条链路.
-  mobi:
-    name: 构建 MOBI
-    runs-on: ubuntu-24.04
-    needs: pdf-epub
-    if: ${{ !github.event.inputs.formats || contains(github.event.inputs.formats, 'mobi') }}
-    steps:
-      - name: 检出代码
-        uses: actions/checkout@v5
-
-      - name: 准备 uv
-        uses: astral-sh/setup-uv@v10.3.0
-        with:
-          enable-cache: false
-
+      # Calibre 只用来出 MOBI. 装不上或转失败都不该拖垮 PDF 与 EPUB,
+      # 因此这步允许失败, 后面按实际存在的文件发布.
       - name: 安装 Calibre
+        id: calibre
+        continue-on-error: true
         run: |
           set -euo pipefail
-          sudo apt-get update -qq
           sudo apt-get install -y -qq calibre
           ebook-convert --version
 
-      - name: 取回 EPUB
-        uses: actions/download-artifact@v5
-        with:
-          name: book-pdf-epub
-          path: dist
-
-      - name: 生成 MOBI
+      - name: 构建 MOBI
+        continue-on-error: true
         env:
           PROJECT_BUILD_VERSION: ${{ github.sha }}
         run: |
           set -euo pipefail
+          fmt="${{ github.event.inputs.formats || 'pdf,epub,mobi' }}"
+          case "$fmt" in *mobi*) ;; *) echo "本次不需要 MOBI"; exit 0 ;; esac
           uv run --no-project python scripts/build_book.py --no-pdf --no-epub
-
-      - name: 上传产物
-        uses: actions/upload-artifact@v5
-        with:
-          name: book-mobi
-          path: dist/*.mobi
-          if-no-files-found: error
-          retention-days: 7
-
-  # 汇总产物, 更新滚动预发布. 资产名固定, 每次覆盖, 不累积历史文件.
-  release:
-    name: 更新预发布
-    runs-on: ubuntu-24.04
-    needs: [pdf-epub, mobi]
-    if: ${{ always() && needs.pdf-epub.result == 'success' }}
-    steps:
-      - name: 检出代码
-        uses: actions/checkout@v5
-
-      - name: 取回 PDF 与 EPUB
-        uses: actions/download-artifact@v5
-        with:
-          name: book-pdf-epub
-          path: artifacts/pdf-epub
-
-      - name: 取回 MOBI (可能没有)
-        uses: actions/download-artifact@v5
-        continue-on-error: true
-        with:
-          name: book-mobi
-          path: artifacts/mobi
 
       - name: 整理资产
         run: |
           set -euo pipefail
           mkdir -p out
           shopt -s nullglob
-          for f in artifacts/pdf-epub/*.pdf; do cp "$f" out/reverse-engineering-chinese.pdf; done
-          for f in artifacts/pdf-epub/*.epub; do cp "$f" out/reverse-engineering-chinese.epub; done
-          for f in artifacts/mobi/*.mobi; do cp "$f" out/reverse-engineering-chinese.mobi; done
-          echo "取回的文件:"
-          find artifacts -type f -printf '  %p (%s 字节)\n' 2>/dev/null || find artifacts -type f
+          for f in dist/*.pdf;  do cp "$f" out/reverse-engineering-chinese.pdf;  done
+          for f in dist/*.epub; do cp "$f" out/reverse-engineering-chinese.epub; done
+          for f in dist/*.mobi; do cp "$f" out/reverse-engineering-chinese.mobi; done
+          echo "dist 里的构建结果:"
+          ls -la dist || true
           echo "整理后的资产:"
           ls -la out
           test -s out/reverse-engineering-chinese.pdf
@@ -188,11 +134,14 @@ jobs:
             echo "| \`reverse-engineering-chinese.epub\` | 适合绝大多数阅读器 |"
             if [ -s out/reverse-engineering-chinese.mobi ]; then
               echo "| \`reverse-engineering-chinese.mobi\` | 适合旧款 Kindle |"
+            else
+              echo
+              echo "本次未生成 MOBI, 其余格式不受影响."
             fi
           } > notes.md
           cat notes.md
 
-      - name: 创建或更新预发布
+      - name: 发布
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           SHA: ${{ github.sha }}
@@ -209,3 +158,6 @@ jobs:
           fi
           shopt -s nullglob
           gh release upload "$RELEASE_TAG" out/* --clobber
+          echo "当前资产:"
+          gh release view "$RELEASE_TAG" --json assets \
+            --jq '.assets[] | "  \(.name)  \(.size) 字节"'
