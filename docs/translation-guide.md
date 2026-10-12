@@ -1,32 +1,21 @@
 # 翻译规范
 
-本文件面向执行翻译工作的 agent 与协作者. 上游英文原文见 [upstream/README.md](upstream/README.md).
+本文件记录本仓库的中译约定, 供后续增补或校订课程内容时参照.
 
 ## 工作范围
 
 上游内容结构:
 
-- 26 个课程系列, 491 节 Lesson, 全部集中在 `docs/upstream/README.md` 这一个文件里.
+- 26 个课程系列, 491 节 Lesson, 全部集中在 `docs/courses.md` 这一个文件里.
 - 每节 Lesson 的形式固定, 通常只有两行: 标题行加一句简介, 再附一个指向外部 ebook 的链接.
 
 大多数 Lesson 的正文并不在本仓库内, 而是链接到外部站点. 因此翻译工作的主体是把这些标题与简介转成中文, 并保持原有链接不变.
 
 ## 文件组织
 
-推荐把翻译结果按课程系列拆分, 每个系列一个文件:
+中文课程目录集中在 `docs/courses.md` 一个文件里, 与上游保持同构, 便于逐行对照.
 
-```
-docs/zh/
-├── 00-index.md              中文总目录
-├── 01-x86.md                x86 Course
-├── 02-arm32-1.md            ARM-32 Course 1
-├── ...
-└── 26-data.md               Reverse Engineering Data Course
-```
-
-拆分的好处是单文件体积可控, 便于并行翻译与 review. 上游那个 2717 行的单文件不适合直接对应翻译.
-
-`docs/upstream/README.md` 是只读对照基准, 任何情况下都不要改动它.
+翻译时曾按课程系列切成 23 个片段并行处理, 各片段行数与原文章节严格对应, 拼接后与上游逐行对齐. 上游那个 2717 行的单文件不适合直接整篇交给单个翻译者.
 
 ## 标点与格式
 
@@ -36,6 +25,7 @@ docs/zh/
 - 代码, 命令, 路径, 文件名一律不翻译, 原样保留.
 - 链接地址不翻译, 链接文字翻译.
 - 行尾使用 LF, 不带多余尾部空格.
+- 标题里的分隔符统一用半角 `-`, 不沿用上游的 en dash 与 em dash.
 
 ## 术语对照
 
@@ -72,11 +62,32 @@ docs/zh/
 | Peripheral | 外设 | |
 | Interrupt | 中断 | |
 | GPIO | GPIO | 保留原文 |
+| Memory | 内存 | 泛指时用内存; `Flash Program Memory` 这类硬件专名保留"程序存储器" |
+| Endianness | 字节序 | |
+| Hacking | 修改 | 指改二进制, 改代码 |
+| Debugging | 调试 | |
+| Dataset | 数据集 | |
+| Primitive Datatype | 基本数据类型 | 类型名本身 (char, int, float) 保留原文 |
+
+## 链接行固定译法
+
+这几类链接行在上游重复出现几百次, 译法固定, 不要逐次发挥.
+
+| 英文原文 | 中文 |
+| --- | --- |
+| `-> Click [HERE](URL) to read the FREE ebook.` | `-> 点[这里](URL) 阅读免费电子书.` |
+| `-> Click [HERE](URL) to read the FREE pdf book.` | `-> 点[这里](URL) 阅读免费 PDF 书.` |
+| `-> Click [HERE](URL) to read the lesson and see the code.` | `-> 点[这里](URL) 阅读本课并查看代码.` |
+| `-> Click [HERE](URL) to read the project on GitHub.` | `-> 点[这里](URL) 在 GitHub 上阅读该项目.` |
+| `-> Click [HERE](URL) to read the FREE tutorial on GitHub.` | `-> 点[这里](URL) 在 GitHub 上阅读免费教程.` |
+| `## 名字 [HERE](#anchor)` | `## 名字 [这里](#anchor)` |
 
 ## 注意事项
 
 - 课程标题里的系列名保留英文, 例如 `Lesson 1: x86 Course (Part 1: Goals)` 译作 `Lesson 1: x86 Course (Part 1: 目标)`.
 - 上游把 `Chapter` 与 `Part` 混用指代同一层级, 翻译时保持与原文一致, 不要统一.
 - 上游存在编号重复与跳号, 翻译时照抄, 不要修正.
+- 上游本身存在标题与正文口径不一致的地方, 照抄, 不要修正.
 - 涉及人名, 项目名, 工具名的部分保持原文, 例如 `Ghidra`, `IDA`, `Pico 2`, `RP2350`.
+- 简介句在同一系列内要轮换句式, 避免通篇同一个开头.
 - 翻译存疑时, 保留英文原文并就近标注, 好过臆测.

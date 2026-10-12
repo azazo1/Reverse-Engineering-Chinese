@@ -3,6 +3,9 @@
 Thumbs.db
 desktop.ini
 
+# 临时工作目录
+.tmp/
+
 # Visual Studio 缓存与构建目录
 #
 # 这些目录规则已经覆盖了本仓库全部编译产物的落点:

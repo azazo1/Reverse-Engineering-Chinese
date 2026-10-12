@@ -7,7 +7,7 @@ extrn PostQuitMessage: proc
 
 .code
 	main proc
-		sub	rsp, 20h				;shadow stack
+		sub	rsp, 20h				;影子栈空间
 
 		mov	r9, rax					;UINT uType
 		lea	r8, msg_caption			;LPCSTR	lpCaption
@@ -15,7 +15,7 @@ extrn PostQuitMessage: proc
 		xor	rcx, rcx				;HWND hWnd
 		call MessageBoxA			;https://docs.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-messageboxa
 		
-		add rsp, 20h				;restore shadow stack
+		add rsp, 20h				;恢复影子栈空间
 
 		xor	rcx, rcx				;int nExitCode
 		call PostQuitMessage		;https://docs.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-postquitmessage

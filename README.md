@@ -6,7 +6,7 @@
 
 上游仓库是一份免费的逆向工程综合教程, 覆盖 x86, x64, 32/64 位 ARM, 8 位 AVR 以及 32 位 RISC-V 架构. 全部内容按课程系列组织, 共 26 个系列, 491 节 Lesson.
 
-本仓库的目标有两个:
+本仓库做了两件事:
 
 1. 把这些课程内容翻译成中文.
 2. 剔除上游仓库中体积庞大且可以从源码重新生成的编译产物, 让仓库回到"只装源材料"的状态.
@@ -21,7 +21,7 @@
 | 本仓库取材的上游提交 | `72e0e700547cb6927208ae41e4757054499b4c21` |
 | 取材日期 | 2026-10-12 |
 
-上游英文原文完整保留在 [docs/upstream/README.md](docs/upstream/README.md), 作为翻译时的对照基准, 请勿改动该文件.
+上游 491 节 Lesson 的中文版完整收录在 [docs/courses.md](docs/courses.md).
 
 ## 课程系列
 
@@ -62,7 +62,7 @@
 ├── README.md                    本文件
 ├── LICENSE                      Apache License 2.0, 继承自上游
 ├── docs/
-│   ├── upstream/README.md       上游英文原文, 只读对照基准
+│   ├── courses.md               中文课程目录, 26 个系列 491 节 Lesson
 │   ├── translation-guide.md     翻译规范与术语表
 │   └── inventory.md             素材清单与保留策略
 ├── 0xNNNN-<名字>/               各示例工程的源码与 Visual Studio 工程文件
@@ -119,9 +119,11 @@
 
 上游仓库中这些被移除的内容合计约 379 MiB, 其中仅 `.ipch` 预编译头与 `Browse.VC.db` 浏览数据库两项就占了 350 MiB.
 
-## 参与翻译
+## 翻译约定
 
-翻译规范, 术语对照与文件命名约定见 [docs/translation-guide.md](docs/translation-guide.md). 素材清单见 [docs/inventory.md](docs/inventory.md).
+课程内容的中译规范与术语对照见 [docs/translation-guide.md](docs/translation-guide.md). 素材清单与保留策略见 [docs/inventory.md](docs/inventory.md).
+
+源码中的注释已译成中文, 代码本身, 字符串字面量, 标识符与工程文件保持原样. 仓库里的 IDA 数据库与配对的 `.exe` 是与特定二进制绑定的, 改动源码字符串会让两者对不上, 因此这部分不做翻译.
 
 ## 许可证
 
