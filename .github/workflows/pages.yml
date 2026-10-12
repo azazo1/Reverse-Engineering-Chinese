@@ -1,0 +1,75 @@
+name: 构建阅读站点
+
+# 每次推送到 main 都把 docs/ 重新渲染成 mdBook 站点并部署到 GitHub Pages.
+#
+# 这里用 upload-pages-artifact 不是自找中转: deploy-pages 只认这个 action
+# 产出的 tar 包, 它是 GitHub Pages 部署接口的一部分, 没有别的写法.
+# 站点体积比电子书小, 也不会像电子书那样往 release 里塞资产.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "docs/**"
+      - "scripts/build_site.py"
+      - ".github/workflows/pages.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# 同一时刻只允许一次 Pages 部署, 排队而不是取消, 避免发布半截站点.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: 渲染站点
+    runs-on: ubuntu-24.04
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v5
+
+      - name: 准备 uv
+        uses: astral-sh/setup-uv@v10.3.0
+        with:
+          enable-cache: false
+
+      - name: 安装 mdbook
+        env:
+          MDBOOK_VERSION: "0.5.4"
+        run: |
+          set -euo pipefail
+          url="https://github.com/rust-lang/mdBook/releases/download/v${MDBOOK_VERSION}/mdbook-v${MDBOOK_VERSION}-x86_64-unknown-linux-gnu.tar.gz"
+          curl -fsSL -o /tmp/mdbook.tar.gz "$url"
+          tar xzf /tmp/mdbook.tar.gz -C /tmp
+          sudo install -m 0755 /tmp/mdbook /usr/local/bin/mdbook
+          mdbook --version
+
+      - name: 构建站点
+        run: |
+          set -euo pipefail
+          uv run --no-project python scripts/build_site.py
+
+      - name: 准备 Pages
+        uses: actions/configure-pages@v6
+
+      - name: 上传站点
+        uses: actions/upload-pages-artifact@v5
+        with:
+          path: site
+
+  deploy:
+    name: 部署到 Pages
+    needs: build
+    runs-on: ubuntu-24.04
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: 部署
+        id: deployment
+        uses: actions/deploy-pages@v5
