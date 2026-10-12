@@ -21,7 +21,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from book_layout import (  # noqa: E402
     BOOK, DOCS, REPO_URL, ROOT, TITLE,
-    clean, first_heading, iter_courses,
+    clean_for_render, first_heading, iter_courses,
 )
 
 STAGE = ROOT / ".tmp" / "site"
@@ -69,14 +69,21 @@ def assemble() -> list[str]:
     src = STAGE / "src"
     src.mkdir(parents=True)
 
+    # 配图统一放在 src/imgs/, 各卷文件在下一层, 因此引用前缀是 ../imgs/,
+    # 而根目录的 README 与 courses 用 imgs/.
+    imgs = BOOK / "imgs"
+    n_img = 0
+    if imgs.is_dir():
+        shutil.copytree(imgs, src / "imgs")
+        n_img = sum(1 for _ in (src / "imgs").iterdir())
+
     summary: list[str] = ["# 目录", ""]
 
     # 首页
     intro = BOOK / "README.md"
     if intro.exists():
-        (src / "README.md").write_text(
-            clean(intro.read_text(encoding="utf-8")), encoding="utf-8"
-        )
+        text = clean_for_render(intro.read_text(encoding="utf-8"), "imgs/")
+        (src / "README.md").write_text(text, encoding="utf-8")
     else:
         (src / "README.md").write_text(f"# {TITLE}\n", encoding="utf-8")
     summary += ["# 总览", "", "- [书稿目录](README.md)", ""]
@@ -90,22 +97,20 @@ def assemble() -> list[str]:
         for f in main + extra:
             rel = f"{dirname}/{f.name}"
             (src / dirname).mkdir(exist_ok=True)
-            (src / rel).write_text(
-                clean(f.read_text(encoding="utf-8")), encoding="utf-8"
-            )
+            text = clean_for_render(f.read_text(encoding="utf-8"), "../imgs/")
+            (src / rel).write_text(text, encoding="utf-8")
             summary.append(f"- [{first_heading(f)}]({rel})")
             chapters += 1
         summary.append("")
 
     courses = DOCS / "courses.md"
     if courses.exists():
-        (src / "courses.md").write_text(
-            clean(courses.read_text(encoding="utf-8")), encoding="utf-8"
-        )
+        text = clean_for_render(courses.read_text(encoding="utf-8"), "imgs/")
+        (src / "courses.md").write_text(text, encoding="utf-8")
         summary += ["# 附录", "", "- [课程总索引](courses.md)", ""]
 
     (src / "SUMMARY.md").write_text("\n".join(summary) + "\n", encoding="utf-8")
-    log(f"  铺开 {chapters} 篇 -> {src.relative_to(ROOT)}")
+    log(f"  铺开 {chapters} 篇, 配图 {n_img} 张 -> {src.relative_to(ROOT)}")
     return summary
 
 

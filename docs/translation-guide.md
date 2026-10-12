@@ -107,3 +107,28 @@
 - 涉及人名, 项目名, 工具名的部分保持原文, 例如 `Ghidra`, `IDA`, `Pico 2`, `RP2350`.
 - 简介句在同一系列内要轮换句式, 避免通篇同一个开头.
 - 翻译存疑时, 保留英文原文并就近标注, 好过臆测.
+
+## 经典教程系列的额外约定
+
+`docs/book/` 下 x86 / ARM-32 / x64 / ARM-64 这 5 个卷取自上游那个 GitBook 项目
+[0xInfection/reversing](https://github.com/0xInfection/reversing) 的 `pages/` 目录.
+那批文件是从站点抓下来的, 形态与其它课程不同, 补充约定如下.
+
+- 正文里有大量原生 HTML: 代码在 `<pre>` 里 (内含 highlight.js 的 `<span>`),
+  配图是 `<img>`, 还有 `src="about:blank"` 的失效 `<iframe>` 嵌入. 原样保留,
+  由构建脚本在渲染前归一成 markdown. pandoc 遇到原生 HTML 会整段丢弃,
+  不归一的话电子书会直接少掉代码与插图.
+- 代码示例大多是**截图**, 不是文本, 因此那部分没有可翻译的内容, 只能原样取回.
+- 上游文件末尾普遍没有换行符. 译文也不要加, 否则 `wc -l` 会多 1, 逐行校验会失败.
+- 绝大多数文件第 3 行是同一句样板话. 它的译法固定, 不要逐次发挥:
+
+  | 英文原文 | 中文 |
+  | --- | --- |
+  | `For a complete table of contents of all the lessons please click below as it will give you a brief of each lesson in addition to the topics it will cover.&nbsp;<URL>` | `关于所有 Lesson 的完整目录, 请点击下方链接, 它会给出每节 Lesson 的简介, 以及将涵盖的主题.&nbsp;<URL>` |
+
+  原文里这句有 153 处用 `&nbsp;` 连接 URL, 12 处用普通空格. 中文按各自的原样保留,
+  只统一句子措辞.
+- 标题形如 `## Part 14 - ADD`, 译作 `## Part 14 - <中文>`; 标题只有指令助记符时
+  (如 ADD / ADDS / ADC / SUB) 保留英文不译.
+- `arm32-course-2` 的前 13 篇与 `arm32-course-1` 是同一批文件, 只译一次再复制,
+  避免同一篇出两种译文.

@@ -5,6 +5,22 @@
 
 ## 课程一览
 
+### 经典教程系列
+
+上游 GitBook 电子书 (见 <https://0xinfection.xyz/reversing/>) 的正文, 也是这套教程中最早的系列.
+
+| 目录 | 课程 | 篇目 | 内容 |
+| --- | --- | --- | --- |
+| [x86-course/](x86-course/) | x86 Course | 40 篇 | 恶意软件逆向入门, 从数制讲到汇编的数据搬运与 CMOV |
+| [arm32-course-1/](arm32-course-1/) | ARM-32 Course 1 | 25 篇 | 32 位 ARM 基础, 以及 ADD / ADDS / ADC / SUB 系列 |
+| [arm32-course-2/](arm32-course-2/) | ARM-32 Course 2 | 49 篇 | 承接 Course 1, 复习基础后讲各类变量与运算符 |
+| [x64-course/](x64-course/) | x64 Course | 43 篇 | 64 位 x86, 含引导扇区基础与 x64 汇编 |
+| [arm64-course/](arm64-course/) | ARM-64 Course | 11 篇 | 64 位 ARM 开发环境, 基本 I/O 与字符类型 |
+
+### 嵌入式系列
+
+这些课的正文在 GitHub 上以 markdown 形式存在, 取自上游各自独立的仓库.
+
 | 目录 | 课程 | 篇目 | 内容 |
 | --- | --- | --- | --- |
 | [rp2350-rust/](rp2350-rust/) | RP2350 Rust Course | 30 章 | 用 Embassy 异步框架在 RP2350 上写裸机 Rust 固件 |
@@ -23,6 +39,12 @@
 - `chapter-NN.md` 对应上游的 `CHAPTER-NN.md`, `lesson-NNN.md` 对应 `lessons/NNN/lesson.md`.
 - 每个 Wasm 系列里, `tutorial.md` 是逐行讲解的教程, `re.md` 是对编译产物的逆向分析.
   `embedded-wasm-servo` 没有 `re.md`, 上游仓库就没有这一篇.
+- 经典教程系列沿用上游的 `part-NN-<英文标题>.md` 命名, 便于与原文逐行对照.
+- [imgs/](imgs/) 是经典教程系列的配图. 上游把那些课的代码与调试结果做成了截图直接放进正文,
+  没有可翻译的文本形态, 只能原样取回.
+- `arm32-course-2` 的前 13 篇复用 `arm32-course-1` 的同一批文件, 这是上游的编排方式:
+  Course 2 先用同一批课文复习基础, 再从 Part 14 起讲新内容. 两处内容完全相同,
+  改其中一处要同步另一处.
 
 ## 翻译约定
 
@@ -41,6 +63,7 @@
 
 | 目录 | 上游仓库 |
 | --- | --- |
+| x86-course, arm32-course-1, arm32-course-2, x64-course, arm64-course | <https://github.com/0xInfection/reversing> |
 | rp2350-rust | <https://github.com/mytechnotalent/RP2350-Rust-Tutorial> |
 | rp2350-arm-asm | <https://github.com/mytechnotalent/RP2350-ARM-ASM-Tutorial> |
 | rp2350-riscv-asm | <https://github.com/mytechnotalent/RP2350-RISCV-ASM-Tutorial> |

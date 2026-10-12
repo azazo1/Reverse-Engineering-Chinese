@@ -21,10 +21,19 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from book_layout import (  # noqa: E402
     BOOK, DOCS, ROOT, SUBTITLE, TITLE,
-    chapter_sort_key, clean, iter_courses,
+    clean_for_render, iter_courses,
 )
 
 DIST = ROOT / "dist"
+
+# 合订本写在 .tmp/ 下, 图片在 docs/book/imgs/, 路径相对合订本文件本身
+IMG_PREFIX = "../docs/book/imgs/"
+
+
+def render_clean(path: Path) -> str:
+    """渲染前的清洗: 归一原生 HTML, 剥锚点, 转义占位符, 再下沉标题."""
+    text = path.read_text(encoding="utf-8").strip()
+    return shift_headings(clean_for_render(text, IMG_PREFIX))
 
 # 中文字体候选, 按平台常见情况排列
 CJK_FONTS = [
@@ -103,26 +112,26 @@ def assemble() -> Path:
     parts.append(f"---\ntitle: {TITLE}\nsubtitle: {SUBTITLE}\nlang: zh-CN\n---\n")
     intro = BOOK / "README.md"
     if intro.exists():
-        parts.append(shift_headings(clean(intro.read_text(encoding="utf-8").strip())))
+        parts.append(render_clean(intro))
 
     chapters = 0
     for dirname, volume, main, extra in iter_courses():
         parts.append(f"\n# {volume}\n")
         for f in main:
             chapters += 1
-            parts.append(shift_headings(clean(f.read_text(encoding="utf-8").strip())))
+            parts.append(render_clean(f))
         # RE 分析篇另起一节, 不参与正文编号
         if extra:
             parts.append(f"\n## {volume} - 逆向分析\n")
             for f in extra:
                 chapters += 1
-                parts.append(shift_headings(clean(f.read_text(encoding="utf-8").strip())))
+                parts.append(render_clean(f))
 
     # 课程总索引放最后当附录, 它主要是外链
     courses = DOCS / "courses.md"
     if courses.exists():
         parts.append("\n# 附录: 课程总索引\n")
-        parts.append(shift_headings(clean(courses.read_text(encoding="utf-8").strip())))
+        parts.append(render_clean(courses))
 
     body = "\n\n".join(p for p in parts if p.strip()) + "\n"
     tmp = ROOT / ".tmp"
