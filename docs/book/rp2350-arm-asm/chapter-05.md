@@ -1,123 +1,123 @@
-# Chapter 5: Load-Store Architecture — How ARM Accesses Memory
+# Chapter 5: 加载-存储架构 - ARM 如何访问内存
 
-## Introduction
+## 引言
 
-ARM Cortex-M33 is a **load-store architecture**: the only instructions that touch memory are loads (read from memory into a register) and stores (write from a register into memory).  All arithmetic and logic happens exclusively between registers.  This chapter explains why this design exists, the key load and store instructions, and how our blink driver uses them to control hardware.
+ARM Cortex-M33 是**加载-存储架构**: 唯一会碰内存的指令是加载 (从内存读进寄存器) 和存储 (从寄存器写进内存). 所有算术和逻辑运算都只在寄存器之间进行. 本章讲清这种设计的由来, 关键的加载与存储指令, 以及我们的闪烁驱动如何用它们控制硬件.
 
-## Why Load-Store?
+## 为什么要用加载-存储架构?
 
-In a load-store architecture, there is a clear separation:
+在加载-存储架构里, 分工非常清晰:
 
-1. **Load** data from memory into registers.
-2. **Process** data using arithmetic/logic instructions (registers only).
-3. **Store** results from registers back to memory.
+1. 用**加载**把数据从内存搬进寄存器.
+2. 用算术/逻辑指令在**寄存器之间**处理数据.
+3. 用**存储**把结果从寄存器写回内存.
 
-This simplifies the processor pipeline because only two instruction types access memory.  Every other instruction operates at register speed — one cycle.
+这样能简化处理器流水线, 因为只有两类指令会访问内存. 其余指令全都以寄存器速度运行 - 一个周期一条.
 
-## The Load Instruction: ldr
+## 加载指令: ldr
 
-The `ldr` (Load Register) instruction reads a 32-bit word from memory into a register:
+`ldr` (Load Register) 指令从内存读一个 32 位的字进寄存器:
 
 ```asm
   ldr   r1, [r0]                                 // r1 = Memory[r0]
 ```
 
-This reads four bytes starting at the address in r0 and places the value in r1.
+它从 r0 里的地址开始读四个字节, 把值放进 r1.
 
-With an immediate offset:
+加上立即数偏移:
 
 ```asm
   ldr   r1, [r0, #4]                             // r1 = Memory[r0 + 4]
 ```
 
-The pseudo-instruction form loads a constant or address:
+伪指令形式则用来加载一个常量或地址:
 
 ```asm
-  ldr   r0, =XOSC_CTRL                           // r0 = address of XOSC_CTRL
+  ldr   r0, =XOSC_CTRL                           // r0 = XOSC_CTRL 的地址
 ```
 
-The assembler generates a PC-relative load from a literal pool to place the 32-bit constant into r0.
+汇编器会生成一条相对于 PC 的字面量池加载, 把这个 32 位常量放进 r0.
 
-## The Store Instruction: str
+## 存储指令: str
 
-The `str` (Store Register) instruction writes a 32-bit word from a register to memory:
+`str` (Store Register) 指令把一个 32 位的字从寄存器写进内存:
 
 ```asm
   str   r1, [r0]                                 // Memory[r0] = r1
 ```
 
-When the target address is a peripheral register, this write triggers hardware behavior:
+当目标地址是外设寄存器时, 这次写入会触发硬件行为:
 
 ```asm
-  ldr   r0, =XOSC_CTRL                           // load XOSC_CTRL address
-  ldr   r1, =0x00FABAA0                          // oscillator config value
-  str   r1, [r0]                                 // write to hardware — oscillator starts
+  ldr   r0, =XOSC_CTRL                           // 加载 XOSC_CTRL 地址
+  ldr   r1, =0x00FABAA0                          // 晶振配置值
+  str   r1, [r0]                                 // 写入硬件 - 晶振启动
 ```
 
-## The Load-Modify-Store Pattern
+## 读-改-写模式
 
-Most hardware configuration follows a three-step pattern:
+大多数硬件配置都遵循三步模式:
 
-1. **Load** the current register value.
-2. **Modify** specific bits using bitwise operations.
-3. **Store** the modified value back.
+1. **读**出寄存器当前的值.
+2. 用位运算**改**掉特定的位.
+3. 把改好的值**写**回去.
 
-From our GPIO pad configuration:
+以我们的 GPIO pad 配置为例:
 
 ```asm
-  ldr   r5, [r4]                                 // load current PAD register value
-  bic   r5, r5, #(1<<7)                          // clear OD (output disable) bit
-  orr   r5, r5, #(1<<6)                          // set IE (input enable) bit
-  bic   r5, r5, #(1<<8)                          // clear ISO (isolation) bit
-  str   r5, [r4]                                 // store modified value back
+  ldr   r5, [r4]                                 // 读出 PAD 寄存器当前的值
+  bic   r5, r5, #(1<<7)                          // 清除 OD (输出禁用) 位
+  orr   r5, r5, #(1<<6)                          // 置位 IE (输入使能) 位
+  bic   r5, r5, #(1<<8)                          // 清除 ISO (隔离) 位
+  str   r5, [r4]                                 // 把改好的值写回去
 ```
 
-This is the most important pattern in hardware programming.  It changes only the bits we need while preserving all others.
+这是硬件编程里最重要的模式. 它只改动我们需要的位, 其余位原封不动.
 
-## Byte and Halfword Access
+## 字节和半字访问
 
-ARM provides size-specific load/store variants:
+ARM 提供了按大小区分的加载/存储变体:
 
-| Instruction | Size | Description |
+| 指令 | 大小 | 说明 |
 |-------------|------|-------------|
-| `ldr` / `str` | 32-bit (word) | Default |
-| `ldrh` / `strh` | 16-bit (halfword) | |
-| `ldrb` / `strb` | 8-bit (byte) | |
-| `ldrsb` | 8-bit signed | Sign-extends to 32 bits |
-| `ldrsh` | 16-bit signed | Sign-extends to 32 bits |
+| `ldr` / `str` | 32 位 (字) | 默认 |
+| `ldrh` / `strh` | 16 位 (半字) | |
+| `ldrb` / `strb` | 8 位 (字节) | |
+| `ldrsb` | 8 位有符号 | 符号扩展到 32 位 |
+| `ldrsh` | 16 位有符号 | 符号扩展到 32 位 |
 
-Our firmware uses only `ldr`/`str` because all RP2350 peripheral registers are 32 bits wide.
+我们的固件只用 `ldr`/`str`, 因为 RP2350 的所有外设寄存器都是 32 位宽.
 
-## Push and Pop
+## push 和 pop
 
-The `push` and `pop` instructions are specialized store and load operations that use the stack pointer:
+`push` 和 `pop` 是使用栈指针的专用存储和加载操作:
 
 ```asm
-  push  {r4-r12, lr}                             // store registers to stack, SP decreases
-  pop   {r4-r12, lr}                             // load registers from stack, SP increases
+  push  {r4-r12, lr}                             // 把寄存器存到栈上, SP 减小
+  pop   {r4-r12, lr}                             // 从栈上恢复寄存器, SP 增大
 ```
 
-`push` is equivalent to multiple `str` instructions with pre-decrement addressing.  `pop` is equivalent to multiple `ldr` instructions with post-increment addressing.
+`push` 等价于多条采用预减寻址的 `str`. `pop` 等价于多条采用后增寻址的 `ldr`.
 
-These are critical for the calling convention — every non-leaf function in our firmware begins with `push` and ends with `pop`.
+它们对调用约定至关重要 - 固件里每一个非叶子函数都以 `push` 开头, 以 `pop` 结尾.
 
-## Memory Access in Our Firmware
+## 我们固件里的内存访问
 
-Every hardware interaction in our blink driver follows the load-store pattern:
+闪烁驱动里每一次硬件交互都遵循加载-存储模式:
 
-| Operation | Instructions | Purpose |
+| 操作 | 指令 | 用途 |
 |-----------|-------------|---------|
-| Read register | `ldr r1, [r0]` | Read current hardware state |
-| Write register | `str r1, [r0]` | Configure hardware |
-| Read-modify-write | `ldr` → `bic`/`orr` → `str` | Change specific bits |
-| Load constant | `ldr r0, =VALUE` | Get address or immediate |
-| Save/restore | `push`/`pop` | Preserve registers across calls |
+| 读寄存器 | `ldr r1, [r0]` | 读取硬件当前状态 |
+| 写寄存器 | `str r1, [r0]` | 配置硬件 |
+| 读-改-写 | `ldr` → `bic`/`orr` → `str` | 改变特定的位 |
+| 加载常量 | `ldr r0, =VALUE` | 取得地址或立即数 |
+| 保存/恢复 | `push`/`pop` | 在调用之间保住寄存器 |
 
-## Summary
+## 小结
 
-- ARM is a load-store architecture: only `ldr`/`str` access memory.
-- All computation happens in registers.
-- `ldr` reads from memory; `str` writes to memory.
-- The load-modify-store pattern is the fundamental hardware programming technique.
-- `push` and `pop` save and restore registers using the stack.
-- Our firmware uses word-sized (32-bit) access exclusively for peripheral registers.
+- ARM 是加载-存储架构: 只有 `ldr`/`str` 会访问内存.
+- 所有计算都在寄存器里完成.
+- `ldr` 从内存读; `str` 往内存写.
+- 读-改-写模式是硬件编程的基本手法.
+- `push` 和 `pop` 借助栈来保存和恢复寄存器.
+- 我们的固件对外设寄存器一律使用字 (32 位) 访问.

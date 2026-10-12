@@ -1,77 +1,77 @@
-# Lesson 017 - Serial Control
+# Lesson 017 - 串口控制
 
-## What Are We Building Today?
+## 今天我们要做什么?
 
-Our hardware array is cool, but what if we want to remotely control our microcontroller from our desktop computer? Today we are going to implement a full **two-way Serial Communications (USART)** interface. 
+我们的硬件阵列挺酷, 但要是想从台式机上远程控制单片机呢? 今天我们要实现一套完整的**双向串口通信 (USART)** 接口.
 
-You will open the Serial Monitor (at 9600 Baud) on your computer and type in commands. Your computer will send characters to the ATmega328P, the microcontroller will parse them, flip the correct LED on the Shift Register, and reply back to your computer with an "OK" message!
+你会在电脑上打开串口监视器 (波特率 9600), 然后敲命令. 你的电脑把字符发给 ATmega328P, 单片机把它们解析出来, 点亮移位寄存器上对应的 LED, 再回你一句 "OK"!
 
 [CODE](https://github.com/mytechnotalent/Assembler/blob/main/lessons/017/lesson.s)
 
 ---
 
-## The Hardware: USART (Universal Synchronous/Asynchronous Receiver-Transmitter)
+## 硬件: USART (通用同步/异步收发器)
 
-The ATmega328P has dedicated hardware built in for handling serial communication. This hardware is wired directly to the USB cable of your Arduino Uno! All we have to do is configure the correct registers, and the hardware handles the electrical timing for us.
+ATmega328P 内部自带专门处理串口通信的硬件. 这块硬件直接连到 Arduino Uno 的 USB 线上! 我们只要把正确的寄存器配置好, 电气时序的事硬件全替我们办了.
 
-### 1. Initializing the USART (9600 Baud)
-To communicate at `9600 bits per second` on a `16 MHz` processor, the AVR datasheet tells us we need to set the USART Baud Rate Register (`UBRR0`) to `103`.
+### 1. 初始化 USART (9600 波特率)
+要在 `16 MHz` 的处理器上以 `9600 bits per second` 通信, AVR 的数据手册告诉我们, 需要把 USART 波特率寄存器 (`UBRR0`) 设成 `103`.
 
 ```assembly
-  ; Init USART to 9600 baud (UBRR = 103 for 16MHz)
-  LDI    R16, hi8(103)                 ; Get the High byte of 103 (which is 0)
-  STS    UBRR0H, R16                   ; Store it
-  LDI    R16, lo8(103)                 ; Get the Low byte of 103 (which is 103)
-  STS    UBRR0L, R16                   ; Store it
+  ; 把 USART 初始化为 9600 波特率 (16MHz 下 UBRR = 103)
+  LDI    R16, hi8(103)                 ; 取出 103 的高字节 (也就是 0)
+  STS    UBRR0H, R16                   ; 存进去
+  LDI    R16, lo8(103)                 ; 取出 103 的低字节 (也就是 103)
+  STS    UBRR0L, R16                   ; 存进去
 ```
-Next, we enable the Transmitter (`TXEN0`) and Receiver (`RXEN0`), and set the character size to 8 bits (`UCSZ01` and `UCSZ00`).
+接下来, 我们使能发送器 (`TXEN0`) 和接收器 (`RXEN0`), 并把字符长度设成 8 位 (`UCSZ01` 和 `UCSZ00`).
 
-### 2. Receiving a Character
-When a character arrives from your computer, a flag called `RXC0` (Receive Complete) is set HIGH inside the `UCSR0A` status register.
+### 2. 接收一个字符
+当电脑那边有一个字符到达时, `UCSR0A` 状态寄存器里一个叫 `RXC0` (接收完成) 的标志会被置成高电平.
 
 ```assembly
 uart_rx:
-  LDS    R17, UCSR0A                   ; Load status register
-  SBRS   R17, RXC0                     ; Skip next if Receive Complete flag is Set
-  RJMP   uart_rx                       ; Loop forever until a character arrives!
-  LDS    R16, UDR0                     ; Read the newly arrived character!
+  LDS    R17, UCSR0A                   ; 读状态寄存器
+  SBRS   R17, RXC0                     ; 若接收完成标志置位则跳过下一条
+  RJMP   uart_rx                       ; 一直循环, 直到有字符到达!
+  LDS    R16, UDR0                     ; 读出刚到达的字符!
   RET
 ```
-This is called a "Blocking Loop". The microcontroller spins endlessly, waiting patiently. When a key is finally pressed, it escapes the loop and reads the `UDR0` (USART Data Register).
+这种做法叫"阻塞循环". 单片机在这里无止境地打转, 耐心地等. 等终于有人按了键, 它才跳出循环, 读取 `UDR0` (USART 数据寄存器).
 
-### 3. Transmitting a Character
-Transmitting works exactly the same way in reverse. We wait for the `UDRE0` (USART Data Register Empty) flag to assert that the hardware has finished sending the *previous* character, then we write the new character to `UDR0`!
+### 3. 发送一个字符
+发送的做法完全一样, 只是反了过来. 我们等 `UDRE0` (USART 数据寄存器为空) 标志确认硬件已经把*上一个*字符发完了, 然后我们把新字符写进 `UDR0`!
 
 ```assembly
 uart_tx:
-  LDS    R17, UCSR0A                   ; Load status register
-  SBRS   R17, UDRE0                    ; Skip next if Data Register Empty flag is Set
-  RJMP   uart_tx                       ; Loop forever until ready
-  STS    UDR0, R16                     ; Write the new character to send!
+  LDS    R17, UCSR0A                   ; 读状态寄存器
+  SBRS   R17, UDRE0                    ; 若数据寄存器为空标志置位则跳过下一条
+  RJMP   uart_tx                       ; 一直循环, 直到可以发送
+  STS    UDR0, R16                     ; 把要发的新字符写进去!
   RET
 ```
 
-## The Command Interpreter
-Once we receive a character in `R16`, we need to figure out what it means!
+## 命令解释器
+一旦 `R16` 里收到一个字符, 我们得弄清它是什么意思!
 
 ```assembly
-  CPI    R16, 'x'                      ; Did the user type 'x'?
-  BREQ   .clear_leds                   ; If so, Branch if Equal to the clear routine!
+  CPI    R16, 'x'                      ; 用户敲的是 'x' 吗?
+  BREQ   .clear_leds                   ; 如果是, 相等就分支到清除程序!
   
-  CPI    R16, '0'                      ; Is it less than '0'?
-  BRLO   .invalid                      ; If so, Branch if Lower to the error routine!
-  CPI    R16, '8'                      ; Is it greater than or equal to '8'?
-  BRSH   .invalid                      ; If so, Branch if Same or Higher to the error routine!
+  CPI    R16, '0'                      ; 它比 '0' 小吗?
+  BRLO   .invalid                      ; 如果是, 更小就分支到错误程序!
+  CPI    R16, '8'                      ; 它大于等于 '8' 吗?
+  BRSH   .invalid                      ; 如果是, 大于等于就分支到错误程序!
 ```
 
-If it passes all of these checks, we know the user typed a valid number between `0` and `7`! We convert the ASCII text character into an actual integer simply by subtracting the value of `'0'`:
+如果它通过这些检查, 我们就知道用户敲的是 `0` 到 `7` 之间的一个有效数字! 我们只要减掉 `'0'` 的值, 就能把这个 ASCII 文本字符变成一个真正的整数:
 
 ```assembly
-  SUBI   R16, '0'                      ; Convert ASCII '0'-'7' to integer 0-7
+  SUBI   R16, '0'                      ; 把 ASCII '0'-'7' 转成整数 0-7
 ```
 
-We then use a bit-shifting loop to create the correct binary mask, send it to our Shift Register, and reply to the user!
+接着我们用一个位移循环造出正确的二进制掩码, 把它发给移位寄存器, 再回复用户!
 
 ---
 
-Congratulations! You have successfully implemented a full two-way interactive Serial Communication protocol and a basic Command-Line Interpreter (CLI) in bare metal assembly!
+恭喜! 你已经在裸机汇编里实现了一套完整的双向交互式串口通信协议和一个基本的命令行解释器 (CLI)!

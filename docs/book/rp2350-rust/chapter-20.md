@@ -1,21 +1,21 @@
-# Chapter 20: led.rs — The LED State Machine
+# Chapter 20: led.rs - LED 状态机
 
-## Introduction
+## 引言
 
-`led.rs` is the brain of the blink driver: a two-state machine plus a controller
-that toggles it. The file is pure logic — no Embassy, no registers, no `unsafe`.
-That is deliberate: it is the file you can run on a desktop and prove correct.
-This chapter walks through the complete source and then dissects each piece.
+`led.rs` 是闪灯驱动的大脑: 一个两状态的状态机, 外加一个翻转它的
+控制器. 这个文件是纯逻辑 - 没有 Embassy, 没有寄存器, 没有 `unsafe`.
+这是刻意的: 它就是那个你可以放到桌面上跑, 并证明其正确的文件.
+本章先完整走一遍源码, 再逐块拆解.
 
-## Complete Source Code
+## 完整源代码
 
-Here is `src/led.rs` in full:
+下面是 `src/led.rs` 的完整内容:
 
 ```rust
 /*
  * @file led.rs
  * @brief LED state management
- * @author Kevin Thomas
+ * @brief LED 状态管理
  * @date 2025
  *
  * MIT License
@@ -44,10 +44,10 @@ Here is `src/led.rs` in full:
 //! FILE: led.rs
 //!
 //! DESCRIPTION:
-//! LED State Management for RP2350.
+//! RP2350 的 LED 状态管理.
 //!
 //! BRIEF:
-//! Provides LED state enumeration and blink controller.
+//! 提供 LED 状态枚举和闪灯控制器.
 //!
 //! AUTHOR: Kevin Thomas
 //! CREATION DATE: December 5, 2025
@@ -55,15 +55,15 @@ Here is `src/led.rs` in full:
 
 use crate::config::BLINK_DELAY_MS;
 
-/// LED state enumeration.
+/// LED 状态枚举.
 ///
 /// # Details
-/// Represents the current state of the LED.
-/// Used for state tracking and transitions.
+/// 表示 LED 当前的状态.
+/// 用于状态跟踪与状态切换.
 ///
 /// # Variants
-/// * `On` - LED is currently on (high)
-/// * `Off` - LED is currently off (low)
+/// * `On` - LED 当前是亮的 (高电平)
+/// * `Off` - LED 当前是灭的 (低电平)
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[allow(dead_code)]
 pub enum LedState {
@@ -71,15 +71,15 @@ pub enum LedState {
     Off,
 }
 
-/// LED controller with state tracking.
+/// 带状态跟踪的 LED 控制器.
 ///
 /// # Details
-/// Maintains LED state and blink timing configuration.
-/// Provides methods for state transitions and queries.
+/// 维护 LED 状态和闪灯时序配置.
+/// 提供状态切换和查询的方法.
 ///
 /// # Fields
-/// * `state` - Current LED state
-/// * `delay_ms` - Blink delay in milliseconds
+/// * `state` - 当前 LED 状态
+/// * `delay_ms` - 闪烁延时, 单位毫秒
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[allow(dead_code)]
 pub struct LedController {
@@ -88,13 +88,13 @@ pub struct LedController {
 }
 
 impl Default for LedController {
-    /// Returns default LedController instance.
+    /// 返回默认的 LedController 实例.
     ///
     /// # Details
-    /// Delegates to new() for initialization.
+    /// 委托给 new() 完成初始化.
     ///
     /// # Returns
-    /// * `Self` - New LedController with default values
+    /// * `Self` - 带默认值的新 LedController
     #[allow(dead_code)]
     fn default() -> Self {
         Self::new()
@@ -102,13 +102,13 @@ impl Default for LedController {
 }
 
 impl LedController {
-    /// Creates new LED controller with default settings.
+    /// 用默认设置创建新的 LED 控制器.
     ///
     /// # Details
-    /// Initializes controller with LED off.
+    /// 把控制器初始化成 LED 熄灭状态.
     ///
     /// # Returns
-    /// * `Self` - New LedController instance
+    /// * `Self` - 新的 LedController 实例
     #[allow(dead_code)]
     pub fn new() -> Self {
         Self {
@@ -117,13 +117,13 @@ impl LedController {
         }
     }
 
-    /// Toggles LED state and returns new state.
+    /// 翻转 LED 状态并返回新状态.
     ///
     /// # Details
-    /// Transitions LED from On to Off or Off to On.
+    /// 把 LED 从亮切到灭, 或者从灭切到亮.
     ///
     /// # Returns
-    /// * `LedState` - New LED state after toggle
+    /// * `LedState` - 翻转之后的新 LED 状态
     #[allow(dead_code)]
     pub fn toggle(&mut self) -> LedState {
         self.state = match self.state {
@@ -133,29 +133,29 @@ impl LedController {
         self.state
     }
 
-    /// Returns current blink delay.
+    /// 返回当前的闪烁延时.
     ///
     /// # Details
-    /// Delay used for blink timing in milliseconds.
+    /// 闪灯时序所用的延时, 单位毫秒.
     ///
     /// # Returns
-    /// * `u64` - Delay in milliseconds
+    /// * `u64` - 延时, 单位毫秒
     #[allow(dead_code)]
     pub fn delay_ms(&self) -> u64 {
         self.delay_ms
     }
 }
 
-/// Converts LedState to boolean for GPIO control.
+/// 把 LedState 转换成布尔值, 供 GPIO 控制使用.
 ///
 /// # Details
-/// Maps On state to true (high), Off state to false (low).
+/// 把 On 状态映射为 true (高电平), Off 状态映射为 false (低电平).
 ///
 /// # Arguments
-/// * `state` - LED state to convert
+/// * `state` - 要转换的 LED 状态
 ///
 /// # Returns
-/// * `bool` - true for On, false for Off
+/// * `bool` - On 为 true, Off 为 false
 #[allow(dead_code)]
 pub fn led_state_to_level(state: LedState) -> bool {
     matches!(state, LedState::On)
@@ -165,7 +165,7 @@ pub fn led_state_to_level(state: LedState) -> bool {
 mod tests {
     use super::*;
 
-    // ==================== LedState Enum Tests ====================
+    // ==================== LedState 枚举测试 ====================
 
     #[test]
     fn test_led_state_equality() {
@@ -191,7 +191,7 @@ mod tests {
         assert!(!led_state_to_level(LedState::Off));
     }
 
-    // ==================== LedController Tests ====================
+    // ==================== LedController 测试 ====================
 
     #[test]
     fn test_new_controller() {
@@ -238,7 +238,7 @@ mod tests {
         assert_eq!(ctrl, expected);
     }
 
-    // ==================== Trait Implementation Tests ====================
+    // ==================== trait 实现测试 ====================
 
     #[test]
     fn test_led_state_debug() {
@@ -270,13 +270,13 @@ mod tests {
 }
 ```
 
-This is the complete driver brain: one enum, one struct, one helper, and a test
-suite that proves the transitions. Everything else in the blink driver is
-plumbing.
+这就是驱动完整的大脑: 一个枚举, 一个结构体, 一个辅助函数, 以及一套
+证明状态切换正确的测试. 闪灯驱动里其余的东西都只是
+管道.
 
-## The LedState Enum
+## LedState 枚举
 
-The two shades of blink, defined exhaustively:
+闪灯的两种状态, 穷尽地定义出来:
 
 ```rust
 pub enum LedState {
@@ -285,15 +285,15 @@ pub enum LedState {
 }
 ```
 
-Because the enum derives `PartialEq` and `Debug`, the test suite can write
-`assert_eq!(ctrl.toggle(), LedState::On)` and get a readable failure if wrong.
-Because it derives `Copy`, passing it by value (`led_state_to_level(state)`)
-does not consume it. The `# Variants` docstring bills each variant — On is high,
-Off is low — so the mapping to GPIO never surprises anyone.
+因为这个枚举派生了 `PartialEq` 和 `Debug`, 测试套件才能写出
+`assert_eq!(ctrl.toggle(), LedState::On)`, 并且出错时得到一份可读的失败信息.
+因为它派生了 `Copy`, 按值传它 (`led_state_to_level(state)`)
+不会消耗它. `# Variants` 文档字符串为每个变体开票 - On 是高电平,
+Off 是低电平 - 所以到 GPIO 的映射永远不会让人意外.
 
-## The LedController Struct
+## LedController 结构体
 
-The controller bundles the current state with the timing policy:
+控制器把当前状态和时序策略捆在一起:
 
 ```rust
 pub struct LedController {
@@ -302,15 +302,15 @@ pub struct LedController {
 }
 ```
 
-Both fields are **private** and the struct constructor `new()` is the only way
-in. Invariants therefore cannot be broken from outside: a `LedController` always
-starts Off at the configured delay, and only `toggle` can change its state.
+两个字段都是 **私有** 的, 而结构体构造函数 `new()` 是唯一的
+入口. 因此外部无法破坏它的不变式: 一个 `LedController` 总是
+以配置好的延时从 Off 开始, 而且只有 `toggle` 能改它的状态.
 
-Deriving `Clone, Copy, Debug, PartialEq, Eq` on a struct with two `Copy` fields
-is free, and the derives equalize real work: `test_led_controller_clone`
-assigns `ctrl2 = ctrl1` and both remain usable.
+在一个只有两个 `Copy` 字段的结构体上派生 `Clone, Copy, Debug, PartialEq, Eq`
+是免费的, 而这些派生也确实在干活: `test_led_controller_clone`
+执行 `ctrl2 = ctrl1`, 之后两者都还能用.
 
-## The Default Trait
+## Default trait
 
 ```rust
 impl Default for LedController {
@@ -320,15 +320,15 @@ impl Default for LedController {
 }
 ```
 
-`Default` is the trait behind `LedController::default()`. It simply delegates to
-`new()`, keeping one canonical initializer. Why implement it at all? Because
-once a type implements `Default`, it composes with the ecosystem — collections,
-optionals, and generic code that demand `T: Default`. It is a one-line bridge
-between our controller and the broader trait world of Chapter 6.
+`Default` 就是 `LedController::default()` 背后那个 trait. 它只是委托给
+`new()`, 从而只保留一个规范的初始化入口. 那为什么还要实现它? 因为
+一个类型一旦实现了 `Default`, 它就能和整个生态组合起来 - 集合,
+可选值, 以及那些要求 `T: Default` 的泛型代码. 它是我们的控制器
+与第 6 章那个更广阔的 trait 世界之间的一座一行桥.
 
-## toggle and delay_ms
+## toggle 与 delay_ms
 
-`toggle` is the whole state machine dressed as a table:
+`toggle` 就是整台状态机, 只不过穿上了表格的外衣:
 
 ```rust
 pub fn toggle(&mut self) -> LedState {
@@ -340,23 +340,23 @@ pub fn toggle(&mut self) -> LedState {
 }
 ```
 
-Required pieces:
+必需的几块:
 
-- `&mut self` — Because the method reassigns `self.state`; the borrow checker
-  admitted us because we asked for exclusive access.
-- `match self.state` — Exhaustive: both variants handled, both map to a
-  variant. The comment banner under the `}` documents nothing because the code
-  is self-evident; the docstring above declares the contract: transitions On↔Off.
-- Returns the *new* state — `main` uses the return value to drive the pin in
-  the same expression sequence.
+- `&mut self` - 因为这个方法会重新赋值 `self.state`; 借用检查器
+  放我们进来, 是因为我们申请的是独占访问.
+- `match self.state` - 穷尽: 两个变体都处理了, 各自映射到一个
+  变体. `}` 下面那条注释横幅什么都没记录, 因为代码
+  本身已经不言自明; 上面的文档字符串宣告了契约: 在 On 和 Off 之间切换.
+- 返回 *新* 状态 - `main` 用这个返回值在
+  同一串表达式里驱动引脚.
 
-`delay_ms` is the read side of the policy: `&self`, a plain getter, returning
-`self.delay_ms`. `main` calls it in the `Timer` expression every loop, so the
-configured period is the single source of truth.
+`delay_ms` 是这套策略的读侧: `&self`, 一个普通 getter, 返回
+`self.delay_ms`. `main` 每一轮都在 `Timer` 表达式里调用它, 所以
+配置好的周期就是唯一的事实来源.
 
 ## led_state_to_level
 
-The tiny bridge from `LedState` to electronics:
+从 `LedState` 到电子学之间那座小小的桥:
 
 ```rust
 pub fn led_state_to_level(state: LedState) -> bool {
@@ -364,36 +364,36 @@ pub fn led_state_to_level(state: LedState) -> bool {
 }
 ```
 
-`LedState` is a "what we want" concept; GPIO's `Level` is a "what the wire sees"
-concept. The helper makes `main` read like English: `if led_state_to_level(state)
-{ led.set_high() }`. The pattern action for the button driver is
-`led_state_to_level` from this same module reused unchanged — both drivers share
-it.
+`LedState` 是 "我们想要什么" 的概念; GPIO 的 `Level` 是 "线上看到什么"
+的概念. 这个辅助函数让 `main` 读起来像英语: `if led_state_to_level(state)
+{ led.set_high() }`. 按键驱动照搬的正是同一个模块里的
+`led_state_to_level`, 一个字都不用改 - 两个驱动共用
+它.
 
-## The Tests
+## 测试
 
-Twenty tests in three banners. The banners group by concern:
+三个横幅下面一共二十个测试. 横幅按关注点分组:
 
-- **`LedState Enum Tests`** — Equality, copy, and the conversion helper.
-- **`LedController Tests`** — Construction, defaults, and every state
-  transition.
-- **`Trait Implementation Tests`** — The derived traits behave.
+- **`LedState Enum Tests`** - 相等性, 复制, 以及转换辅助函数.
+- **`LedController Tests`** - 构造, 默认值, 以及每一种状态
+  切换.
+- **`Trait Implementation Tests`** - 派生的 trait 行为正常.
 
-The transition tests are the valuable ones. `test_initial_state_off` builds the
-expected struct by hand and compares — proving `new()` sets exactly `state:
-Off, delay_ms: BLINK_DELAY_MS`. `test_multiple_toggles` proves alternation:
-On, Off, On, Off, forever. These tests pin the blink rhythm as data, and the
-whole suite runs on a laptop in under a second.
+最有价值的是那些状态切换测试. `test_initial_state_off` 手工构造出
+期望的结构体并比较 - 以此证明 `new()` 恰好设置了 `state:
+Off, delay_ms: BLINK_DELAY_MS`. `test_multiple_toggles` 证明它是交替的:
+On, Off, On, Off, 永远如此. 这些测试把闪灯节奏钉成数据, 而这套
+测试在笔记本上不到一秒就跑完.
 
-## Summary
+## 小结
 
-- `LedState` is an exhaustive On/Off enum; `LedController` wraps it with
-  private state and timing fields.
-- `Default` delegates to `new()`; `toggle` is a state-transition table;
-  `delay_ms` is a pure getter.
-- `led_state_to_level` converts state to a boolean for GPIO, shared by both the
-  blink and button drivers.
-- The test suite — grouped by banner — proves construction, transition, and
-  trait behavior on the host.
+- `LedState` 是一个穷尽的 On/Off 枚举; `LedController` 用私有的状态
+  字段和时序字段把它包起来.
+- `Default` 委托给 `new()`; `toggle` 是一张状态切换表;
+  `delay_ms` 是一个纯 getter.
+- `led_state_to_level` 把状态转成给 GPIO 用的布尔值, 闪灯和
+  按键两个驱动共用它.
+- 测试套件 - 按横幅分组 - 在宿主机上证明构造, 切换以及
+  trait 行为.
 
-Next, the last piece of the blink driver: `main.rs`, the async shell.
+接下来是闪灯驱动的最后一块: `main.rs`, 那个 async 外壳.

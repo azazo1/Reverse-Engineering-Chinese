@@ -1,27 +1,27 @@
-# Chapter 1: What Is Embedded Rust?
+# Chapter 1: 什么是嵌入式 Rust?
 
-## Introduction
+## 引言
 
-Rust is a systems programming language designed for safety and speed. It gives
-you the low-level control of C — direct memory access, no garbage collector, no
-hidden runtime — while eliminating entire classes of bugs at compile time.
-Embedded Rust is simply Rust running on a microcontroller: a small computer on a
-chip with its own CPU, memory, and I/O peripherals, with no operating system.
+Rust 是一门为安全与速度而设计的系统编程语言. 它给了你
+C 那样的底层控制力 - 直接访问内存, 没有垃圾回收器,
+没有隐藏的运行时 - 同时在编译期消灭掉整整几类 bug. 嵌入式
+Rust 说到底是跑在微控制器上的 Rust: 一颗芯片上的小计算机,
+有自己的 CPU, 内存和 I/O 外设, 却没有操作系统.
 
-In this course we write firmware for the **Raspberry Pi RP2350** using the
-**Embassy** async framework. Embassy is the Rust async runtime for embedded
-systems. It lets us write firmware the way we would write a modern application:
-concurrent tasks, timers, and hardware drivers, all expressed with `async` and
-`await`.
+在本课程里, 我们用 **Embassy** 异步框架为
+**Raspberry Pi RP2350** 编写固件. Embassy
+是面向嵌入式系统的 Rust 异步运行时.
+它让我们能像写现代应用那样写固件: 并发任务,
+定时器和硬件驱动, 全都用 `async` 和 `await` 表达.
 
-## Why Rust for Embedded?
+## 为什么嵌入式要用 Rust?
 
-Microcontroller firmware runs close to the metal. There is no operating system
-to protect you from your own mistakes. A stray pointer can silently corrupt a
-register. A buffer overrun can reboot the chip. In C this is accepted risk. In
-Rust, the compiler refuses to accept it.
+微控制器固件贴着硬件运行. 没有操作系统来保护你,
+让你免于自己犯的错. 一个跑偏的指针可能悄悄改坏寄存器.
+一次缓冲区越界可能让芯片重启. 在 C 里,
+这些风险是被默认接受的. 在 Rust 里, 编译器拒绝接受它们.
 
-Three properties make Rust ideal for embedded work:
+有三个特性让 Rust 特别适合嵌入式开发:
 
 ```
 +---------------------------+
@@ -33,22 +33,22 @@ Three properties make Rust ideal for embedded work:
 +---------------------------+
 ```
 
-- **Memory safety** — The borrow checker guarantees you cannot use freed
-  memory, read past a buffer, or race two writes to the same value. These are
-  caught at compile time, not when the board misbehaves.
-- **No runtime overhead** — There is no garbage collector, no virtual machine.
-  Nothing runs unless you write it. This matters on a microcontroller with a few
-  hundred kilobytes of RAM and a 150 MHz clock.
-- **Zero-cost abstractions** — Traits, generics, closures, and `async` compile
-  down to the same machine code you would write by hand. Elegant source code
-  does not cost extra memory or cycles.
+- **内存安全** - 借用检查器保证你不会使用已释放的内存,
+  不会读出缓冲区边界, 也不会让两次写入争抢同一个值.
+  这些问题在编译期就被抓住, 而不是等到板子出怪事的时候.
+- **没有运行时开销** - 没有垃圾回收器, 没有虚拟机.
+  你没写的代码就不会运行. 在只有几百 KB 内存和
+  150 MHz 时钟的微控制器上, 这一点很关键.
+- **零成本抽象** - trait, 泛型, 闭包和
+  `async` 编译出来的机器码, 和你手写的完全一样.
+  优雅的源码不会额外花费内存或时钟周期.
 
-## Memory Safety Without an OS
+## 没有操作系统时的内存安全
 
-A desktop application relies on a kernel to isolate processes. Embedded firmware
-has no kernel. Rust replaces that protection with *compile-time* protection: the
-borrow checker, type system, and lifetime rules. When your code compiles, the
-compiler has already proven that:
+桌面应用依靠内核来隔离进程. 嵌入式固件没有内核.
+Rust 用*编译期*保护替代了那种保护:
+借用检查器, 类型系统和生命周期规则.
+当你的代码通过编译时, 编译器已经证明了三件事:
 
 ```
 +-----------------------------+
@@ -61,24 +61,24 @@ compiler has already proven that:
 +-----------------------------+
 ```
 
-The cost of these guarantees is a steeper learning curve. That is exactly what
-this course is for: we build the mental model step by step before we touch a
-real peripheral.
+这些保证的代价是学习曲线更陡.
+这正是本课程存在的意义:
+我们先一步一步搭起思维模型, 然后才去碰真正的外设.
 
-## The RP2350
+## RP2350
 
-The RP2350 is the microcontroller at the heart of the Raspberry Pi Pico 2. Key
-facts:
+RP2350 是 Raspberry Pi Pico 2
+核心处的那颗微控制器. 几个关键事实:
 
-- **Dual-core CPU** — The chip ships with two cores. A board can run them as
-  either two ARM Cortex-M33 cores or two RISC-V Hazard3 cores.
-- **150 MHz** — A small but capable clock for a microcontroller.
-- **520 KB SRAM** — Fast volatile memory for code and data.
-- **4 MB on-chip flash** — Where firmware is stored and executed in place (XIP).
-- **Rich peripheral set** — GPIO, UART, SPI, I2C, PWM, ADC, DMA, timers, and
-  more.
+- **双核 CPU** - 芯片自带两个核. 一块板子既可以让它们当两个
+  ARM Cortex-M33 核用, 也可以当两个 RISC-V Hazard3 核用.
+- **150 MHz** - 对微控制器来说, 这个频率不高但够用.
+- **520 KB SRAM** - 存放代码和数据的快速易失性内存.
+- **4 MB 片上 flash** - 固件存放的地方, 并且可以就地执行 (XIP).
+- **丰富的外设** - GPIO, UART, SPI,
+  I2C, PWM, ADC, DMA, 定时器等等.
 
-The memory is mapped at fixed addresses:
+内存映射在固定的地址上:
 
 ```
 0x10000000 +---------------------------+
@@ -93,18 +93,18 @@ The memory is mapped at fixed addresses:
            +---------------------------+
 ```
 
-We examine this map in detail in Chapter 2.
+我们在第 2 章详细研究这张地址映射图.
 
-## What Is Embassy?
+## 什么是 Embassy?
 
-Embassy is a set of crates for embedded async:
+Embassy 是一组用于嵌入式 async 的 crate:
 
-- **`embassy-executor`** — A cooperative async executor for microcontrollers.
-- **`embassy-time`** — Timers and delays without busy-waiting.
-- **`embassy-rp`** — A hardware abstraction layer (HAL) for the RP2040/RP2350.
-- **`embassy-rs`** — The umbrella community and repository that maintains them.
+- **`embassy-executor`** - 面向微控制器的协作式 async 执行器.
+- **`embassy-time`** - 不用忙等的定时器和延时.
+- **`embassy-rp`** - 面向 RP2040/RP2350 的硬件抽象层 (HAL).
+- **`embassy-rs`** - 维护这些 crate 的社区与仓库总集.
 
-With Embassy, a blink driver reads like a high-level loop:
+用了 Embassy 之后, 一个闪灯驱动读起来就像一个高层循环:
 
 ```
 +------------+     +-------------+     +-------------+
@@ -115,13 +115,13 @@ With Embassy, a blink driver reads like a high-level loop:
      +---------------(loop)-----------------+
 ```
 
-The loop runs forever, yielding to the executor between iterations so other
-tasks can run. This is the model used by all three drivers you will build.
+这个循环永远运行下去, 每轮之间把控制权让给执行器,
+好让其它任务有机会跑. 你要写的三个驱动用的都是这个模型.
 
-## What We Will Build
+## 我们要做什么
 
-This course ends with three complete, host-tested drivers. They share one
-architecture and one strict docstring standard:
+本课程最后会得到三个完整并且能在主机上测试的驱动.
+它们共用同一套架构和同一份严格的文档注释规范:
 
 ```
 +----------------+      +----------------+      +----------------+
@@ -131,27 +131,27 @@ architecture and one strict docstring standard:
 +----------------+      +----------------+      +----------------+
 ```
 
-1. **The Blink Driver** — Toggles an LED on GPIO 16 every 500 ms using
-   `embassy-time`.
-2. **The Button Driver** — Reads a button on GPIO 15 (active-low, debounced) and
-   lights an LED on GPIO 16 while pressed.
-3. **The UART Driver** — Echoes characters received on UART0 (GPIO 0 TX, GPIO 1
-   RX) with terminal backspace support.
+1. **闪灯驱动** - 借助 `embassy-time`,
+   每 500 ms 翻转一次 GPIO 16 上的 LED.
+2. **按键驱动** - 读取 GPIO 15 上的按键
+   (低电平有效, 带消抖), 按下时点亮 GPIO 16 上的 LED.
+3. **UART 驱动** - 把 UART0 (GPIO 0 为 TX, GPIO 1
+   为 RX) 上收到的字符回显出去, 并支持终端里的退格.
 
-Along the way you will master the four ideas at the heart of every embedded Rust
-program: the language, the bare-metal build system, memory-mapped I/O, and the
-Embassy runtime.
+一路走下来, 你会掌握每个嵌入式 Rust
+程序最核心的四个想法: 语言本身, 裸机构建系统,
+内存映射 I/O, 以及 Embassy 运行时.
 
-## Summary
+## 小结
 
-- Rust gives embedded programmers memory safety and zero-cost abstractions with
-  no runtime.
-- The RP2350 is a dual-core microcontroller with 4 MB flash, 512 KB SRAM, and a
-  rich peripheral set.
-- Embassy brings `async`/`await` to embedded, replacing busy-wait loops with
-  cooperative concurrent tasks.
-- This course builds three drivers — blink, button, and UART echo — each fully
-  tested on the host.
+- Rust 给嵌入式程序员带来内存安全和零成本抽象,
+  而且不需要运行时.
+- RP2350 是一颗双核微控制器, 有 4 MB
+  flash, 512 KB SRAM 和丰富的外设.
+- Embassy 把 `async`/`await` 带进嵌入式,
+  用协作式并发任务取代忙等循环.
+- 本课程会做出三个驱动 - 闪灯, 按键和
+  UART 回显 - 每一个都在主机上完整测试过.
 
-Next up, we learn to think in the numbers and addresses that underpin every
-register we will touch.
+接下来, 我们学习用数字和地址思考问题,
+它们支撑着我们将来要碰的每一个寄存器.

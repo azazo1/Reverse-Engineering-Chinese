@@ -1,17 +1,17 @@
-# Chapter 22: Button Hardware and Debouncing
+# Chapter 22: 按钮硬件与消抖
 
-## Introduction
+## 引言
 
-A mechanical button is not the clean digital switch textbooks suggest. Inside
-the switch, two metal contacts close and bounce for a few milliseconds, flapping
-between closed and open dozens of times before settling. A firmware that samples
-naively can read a single press as five presses. This chapter teaches the
-hardware reality of the button driver — the wiring, the active-low convention,
-the pull-up, and the debounce strategy that makes presses trustworthy.
+机械按钮并不像教科书里描述的那样, 是一个干净的数字开关. 在开关内部,
+两个金属触点闭合时会弹跳几毫秒, 在稳定下来之前, 会在闭合与断开
+之间来回抖动几十次. 固件如果只是天真地采样, 就可能把一次按下
+读成五次按下. 本章讲的是按钮驱动背后的硬件现实 - 接线,
+低电平有效的约定, 上拉电阻, 以及让按下变得可信的消抖
+策略.
 
-## The Wiring
+## 接线
 
-The button driver connects exactly two things beside power:
+除了电源之外, 按钮驱动只接两样东西:
 
 ```
 Button:   one terminal  -> GPIO15
@@ -21,7 +21,7 @@ LED:      anode (long leg) -> GPIO16 through a 330Ω resistor
           cathode (short)  -> GND
 ```
 
-And in the shape we have used all course:
+再用我们整个课程一直在用的画法画一遍:
 
 ```
 +-------------------------------+
@@ -35,35 +35,35 @@ And in the shape we have used all course:
 +-------------------------------+
 ```
 
-The button shorts the line to ground when pressed. The LED lights through 330 Ω
-from GPIO16 when the pin is high.
+按下时, 按钮把这条线短接到地. 当引脚为高电平时, LED 通过 330 Ω
+的电阻从 GPIO16 取电点亮.
 
-## Active-Low Logic
+## 低电平有效逻辑
 
-Look again at the button's wiring: pressing it *grounds* the input. There is no
-+V to *release* — the switch is tied to GND, so:
+再看一遍按钮的接线: 按下它会把输入*拉到地*. 这里没有
++V 可以用来*释放* - 开关是接到 GND 上的, 所以:
 
 ```
 Button open    -> GPIO15 reads HIGH   (released)
 Button pressed -> GPIO15 reads LOW    (pressed)
 ```
 
-This is **active-low** logic: LOW says "action happening". The button driver
-bakes that inversion into `update(gpio_high)`, where LOW input means "pressed":
+这就是**低电平有效**逻辑: LOW 表示 "动作正在发生". 按钮驱动把
+这个反相固化进了 `update(gpio_high)`, 其中 LOW 输入表示 "已按下":
 
 ```rust
-let new_raw = !gpio_high;      // active-low: LOW input => pressed
+let new_raw = !gpio_high;      // 低电平有效: LOW 输入 => 已按下
 ```
 
-Every docstring in the driver repeats the convention — "Button is active-low
-(tied to GND when pressed)" — because a future reader must never have to deduce
-it from the schematic.
+驱动里的每一处文档注释都会重复这个约定 - "按钮低电平有效
+(按下时接到 GND)" - 因为将来的读者绝不应该被迫
+从原理图里去推断这件事.
 
-## Pull-Up Resistors
+## 上拉电阻
 
-When the button is open, nothing drives GPIO15, and a floating input reads
-whatever noise is in the air. The fix is a **pull-up**: a weak resistance that
-holds the line HIGH until the switch pulls it LOW.
+按钮断开时, 没有东西在驱动 GPIO15, 悬空的输入会读到空气里的
+任何噪声. 解决办法是**上拉**: 一个较弱的电阻, 它把这条线
+拉在高电平, 直到开关把它拉到低电平为止.
 
 ```
 +3.3 V -----[pull-up]----o----- GPIO15
@@ -73,21 +73,21 @@ holds the line HIGH until the switch pulls it LOW.
                          GND
 ```
 
-The RP2350 has internal pull-ups inside its pads. Embassy exposes them as
+RP2350 的焊盘内部自带上拉电阻. Embassy 把它们暴露为
 `Pull::Up`:
 
 ```rust
 let button = Input::new(p.PIN_15, Pull::Up);
 ```
 
-That is Chapter 17's `Pull` becoming real: the line is defined at rest (HIGH), so
-the only way it goes LOW is a deliberate ground — the button. Ambiguous
-floating is eliminated before a single sample is read.
+这就是第 17 章的 `Pull` 落到实处的样子: 这条线在静止时有确定状态 (HIGH), 所以
+它变低的唯一途径就是被刻意接地 - 也就是按钮. 在读到第一个采样
+之前, 含糊的悬空状态就已经被消除了.
 
-## Contact Bounce
+## 触点弹跳
 
-When the button is pressed, the metal contacts converge and rebound. The
-voltage doesn't snap cleanly from high to low; it oscillates:
+按钮被按下时, 金属触点会靠拢又弹开. 电压并不会干净利落地
+从高跳到低, 而是来回振荡:
 
 ```
 PRESSURE   PRESS        SETTLE
@@ -97,22 +97,22 @@ LOW   |       |   | |   |‾‾‾‾‾‾‾|
         bounce ~5-20 ms
 ```
 
-For 5–20 ms the line reports an erratic sequence of highs and lows. A firmware
-that samples every microsecond could count ten "presses" from one physical
-press — a light turning on and off faster than the eye can follow.
+在 5-20 ms 之内, 这条线会报告一串杂乱无章的高低电平. 如果固件
+每个微秒都采样, 一次物理按下就可能被数成十次 "按下" -
+灯闪烁的速度会快到眼睛根本跟不上.
 
-## Debouncing Strategies
+## 消抖策略
 
-Debounce = refuse to trust a state change until it has *held* for a while.
-Two classic approaches:
+消抖 = 在一个状态变化*持续保持*一段时间之前, 不承认它.
+有两种经典做法:
 
-**Time-based debounce** — after detecting a change, ignore the pin for a fixed
-dead time. Simple, but it misses fast subsequent presses during the ignore
-window.
+**基于时间的消抖** - 检测到变化之后, 在固定的死区时间内忽略
+这个引脚. 做法简单, 但它会在忽略窗口里漏掉紧随其后的快速
+按下.
 
-**Sample-count debounce** — sample on a fixed cadence and require N consecutive
-identical samples before changing the reported state. This is what the button
-driver uses: `DEBOUNCE_COUNT` samples at `DEBOUNCE_DELAY_MS` spacing.
+**基于采样计数的消抖** - 按固定节奏采样, 要求连续 N 个采样
+完全相同, 才改变对外报告的状态. 按钮驱动用的就是这个办法:
+`DEBOUNCE_COUNT` 个采样, 间隔 `DEBOUNCE_DELAY_MS`.
 
 ```
 Sample:   H H H H H L L L L L  L L L ...
@@ -120,21 +120,21 @@ Count:    0       -> raw changes to LOW, count resets
           L(1) L(2) L(3) L(4) L(5) -> threshold hit, report PRESSED
 ```
 
-The two knob-like constants live in `config.rs`:
+这两个像旋钮一样的常量放在 `config.rs` 里:
 
 ```rust
-DEBOUNCE_DELAY_MS: u64 = 5;     // sample every 5 ms
-DEBOUNCE_COUNT:    u32 = 5;     // require 5 consecutive stable samples
+DEBOUNCE_DELAY_MS: u64 = 5;     // 每 5 ms 采样一次
+DEBOUNCE_COUNT:    u32 = 5;     // 要求连续 5 个稳定采样
 ```
 
-5 samples × 5 ms = 25 ms to confirm a press — comfortably beyond the worst
-bounce, and still instant to a human. Noise immunity and responsiveness are
-tuned by these two numbers, which is why both are documented, tested, and
-centralized in configuration.
+5 个采样 × 5 ms = 25 ms 才能确认一次按下 - 这已经稳稳超过了最严重的
+弹跳时间, 而人感觉起来仍然是瞬间的. 抗噪能力和响应速度都由这两个
+数字来调节, 所以它们两个都有文档, 都有测试, 并且都集中放在
+配置里.
 
-## Sample-Based Debouncing
+## 基于采样的消抖
 
-The driver's filter keeps three pieces of memory:
+驱动的滤波器保留三份记忆:
 
 ```
 pressed         the public, debounced "is it pressed?" answer
@@ -142,7 +142,7 @@ raw_pressed     the latest unfiltered reading
 debounce_count  consecutive identical samples so far
 ```
 
-Each call to `update(sample)`:
+每次调用 `update(sample)`:
 
 ```
 +----------------+       +-----------------+       +-----------------+
@@ -161,18 +161,18 @@ Each call to `update(sample)`:
                        +------------------+
 ```
 
-A bounce produces samples that keep changing (`H L H L H`), so `raw_pressed`
-keeps flipping and the count keeps resetting to zero. Only a stable run of five
-identical samples lets the count reach the threshold and commits the state.
+弹跳产生的采样会不断变化 (`H L H L H`), 于是 `raw_pressed`
+不停翻转, 计数也不停被清零. 只有连续五个完全相同的采样,
+才能让计数达到阈值, 从而把状态确定下来.
 
-## Summary
+## 小结
 
-- The button is wired active-low: press ground GPIO15, releasing reads HIGH.
-- Internal pull-ups (`Pull::Up`) keep the line defined at rest — no floating.
-- Contacts bounce for 5–20 ms, so raw readings are not trustworthy directly.
-- The driver samples every `DEBOUNCE_DELAY_MS` and requires
-  `DEBOUNCE_COUNT` stable samples before reporting a change.
-- Both knobs are documented constants in `config.rs`, tunable per design.
+- 按钮采用低电平有效接线: 按下把 GPIO15 拉到地, 松开则读到 HIGH.
+- 内部上拉 (`Pull::Up`) 让这条线在静止时有确定状态 - 不会悬空.
+- 触点会弹跳 5-20 ms, 所以原始读数不能直接信任.
+- 驱动每隔 `DEBOUNCE_DELAY_MS` 采样一次, 并且要求连续
+  `DEBOUNCE_COUNT` 个稳定采样, 才报告状态变化.
+- 这两个旋钮都是 `config.rs` 里有文档的常量, 可以按设计需要调整.
 
-Next we write the filter itself — `button.rs`, the file that turns raw
-samples into a debounced truth.
+接下来我们写滤波器本身 - `button.rs`, 这个文件把原始采样
+变成经过消抖的真相.

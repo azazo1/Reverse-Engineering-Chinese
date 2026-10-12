@@ -1,75 +1,75 @@
-# Lesson 021 - DC Motor with L293D
+# Lesson 021 - 用 L293D 驱动直流电机
 
-## What Are We Building Today?
+## 今天我们要做什么?
 
-So far, everything we have controlled has been a low-power digital device (LEDs, LCDs, ICs). What if we want to move physical objects in the real world?
-We need a **DC Motor**! 
+到目前为止, 我们控制过的都是低功耗的数字器件 (LED, LCD, 各种 IC). 要是我们想在真实世界里挪动实打实的物体呢?
+我们需要一台**直流电机**!
 
-However, DC motors require significantly more current than an ATmega328P pin can provide (a single pin provides max 40mA, but a motor can draw hundreds of milliamps!). If you connect a motor directly to your microcontroller, you will instantly destroy the chip!
-To solve this, we will use an **L293D H-Bridge Motor Driver IC**.
+不过, 直流电机需要的电流比 ATmega328P 的一个引脚能提供的多得多 (单个引脚最多给 40mA, 可电机一拉就是几百毫安!). 你要是把电机直接接到单片机上, 芯片当场就毁了!
+为了解决这个问题, 我们用一颗 **L293D H 桥电机驱动 IC**.
 
-Today, we will learn how to write 16-bit Timer configurations in assembly to generate Pulse Width Modulation (PWM) signals, which will allow us to precisely control the *speed* and *direction* of the motor!
+今天我们要学会用汇编写 16 位定时器配置, 产生脉冲宽度调制 (PWM) 信号, 这样就能精确控制电机的*转速*和*方向*!
 
 [CODE](https://github.com/mytechnotalent/Assembler/blob/main/lessons/021/lesson.s)
 
 ---
 
-## Hardware Check: The L293D H-Bridge
-The L293D acts as a powerful middle-man. We send it low-power logical signals, and it connects the motor to a high-power energy source.
+## 硬件检查: L293D H 桥
+L293D 扮演一个有力的中间人. 我们给它送低功率的逻辑信号, 它负责把电机接到大功率的能源上.
 
-- **IN1 (Pin 2)** and **IN2 (Pin 3)**: These control the *Direction* of the motor.
-  - If `IN1` is HIGH and `IN2` is LOW, the motor spins Forward.
-  - If `IN1` is LOW and `IN2` is HIGH, the motor spins in Reverse.
-  - If both are LOW, the motor stops (Brakes).
-- **EN1 (Pin 1)**: This is the Enable pin. If we send it a PWM signal, we can control the exact *Speed* of the motor!
+- **IN1 (Pin 2)** 和 **IN2 (Pin 3)**: 它们控制电机的*方向*.
+  - 如果 `IN1` 是高电平, `IN2` 是低电平, 电机正转.
+  - 如果 `IN1` 是低电平, `IN2` 是高电平, 电机反转.
+  - 如果两个都是低电平, 电机停止 (刹车).
+- **EN1 (Pin 1)**: 这是使能脚. 如果我们给它送 PWM 信号, 就能控制电机的精确*转速*!
 
-We will connect `IN1` to `PD2`, `IN2` to `PD3`, and `EN1` to `PB1`.
-Notice that `PB1` is specifically chosen because it is hardwired inside the silicon to **Timer 1 Channel A (OC1A)**!
+我们把 `IN1` 接到 `PD2`, `IN2` 接到 `PD3`, `EN1` 接到 `PB1`.
+注意 `PB1` 是特意选的, 因为它在硅片内部就硬连到 **Timer 1 的 A 通道 (OC1A)** 上!
 
-## The Code Walkthrough
+## 代码讲解
 
-### 1. Configuring Timer 1 (16-Bit Timer)
-Unlike Timer 0 (which is 8-bit), Timer 1 is a massive 16-bit timer. It is capable of much higher precision. To configure it for Fast PWM 8-bit mode, we must configure `TCCR1A` (Control Register A) and `TCCR1B` (Control Register B).
+### 1. 配置 Timer 1 (16 位定时器)
+跟 Timer 0 (8 位) 不一样, Timer 1 是一个庞大的 16 位定时器. 它能达到高得多的精度. 要把它配成 8 位快速 PWM 模式, 我们得配置 `TCCR1A` (控制寄存器 A) 和 `TCCR1B` (控制寄存器 B).
 
 ```assembly
-  ; Configure Timer 1 for Fast PWM 8-bit mode, non-inverting on OC1A
+  ; 把 Timer 1 配成 8 位快速 PWM 模式, OC1A 上非反相输出
   LDI    R16, (1<<COM1A1) | (1<<WGM10)
   STS    TCCR1A, R16
-  
+
   LDI    R16, (1<<WGM12) | (1<<CS11)
   STS    TCCR1B, R16
 ```
-- `COM1A1`: Tells the hardware to automatically toggle the `PB1` pin based on the timer comparison.
-- `WGM10` and `WGM12`: Selects "Mode 5: Fast PWM, 8-bit".
-- `CS11`: Sets the clock prescaler to 8.
+- `COM1A1`: 告诉硬件根据定时器的比较结果自动翻转 `PB1` 引脚.
+- `WGM10` 和 `WGM12`: 选择 "模式 5: 快速 PWM, 8 位".
+- `CS11`: 把时钟预分频设为 8.
 
-### 2. The 16-Bit Register Write Sequence
-To set the speed (Duty Cycle) of the PWM, we must write a value to the 16-bit Output Compare Register `OCR1A`.
-Because the AVR is an 8-bit processor, it cannot write 16 bits at once! `OCR1A` is split into two 8-bit registers: `OCR1AH` (High Byte) and `OCR1AL` (Low Byte).
+### 2. 16 位寄存器的写入顺序
+要设置 PWM 的速度 (占空比), 我们必须往 16 位的输出比较寄存器 `OCR1A` 里写一个值.
+因为 AVR 是 8 位处理器, 它没法一次写 16 位! `OCR1A` 被拆成两个 8 位寄存器: `OCR1AH` (高字节) 和 `OCR1AL` (低字节).
 
-**CRITICAL RULE:** When writing to 16-bit registers in an AVR, you MUST write the High Byte first! The hardware stores the High Byte in a temporary hidden buffer, and only applies the full 16-bit value when you write the Low Byte.
+**关键规则:** 在 AVR 里往 16 位寄存器写数据时, 必须先写高字节! 硬件会把高字节先存进一个临时的隐藏缓冲里, 等你写低字节的时候, 才把完整的 16 位值真正生效.
 
 ```assembly
-  LDI    R17, 0                        ; High Byte is 0 (we only need 8 bits for speed)
-  LDI    R16, 200                      ; Low Byte is 200 (High Speed!)
-  
-  STS    OCR1AH, R17                   ; MUST write High Byte first!
-  STS    OCR1AL, R16                   ; Writes Low Byte, triggering the 16-bit update
+  LDI    R17, 0                        ; 高字节是 0 (控制速度只需要 8 位)
+  LDI    R16, 200                      ; 低字节是 200 (高速!)
+
+  STS    OCR1AH, R17                   ; 必须先写高字节!
+  STS    OCR1AL, R16                   ; 写低字节, 触发 16 位更新
 ```
 
-### 3. The Control Loop
-To spin the motor Forward at high speed:
+### 3. 控制循环
+要让电机高速正转:
 ```assembly
-  SBI    PORTD, PD2                    ; IN1 = HIGH
-  CBI    PORTD, PD3                    ; IN2 = LOW
-  
-  LDI    R16, 200                      ; Speed = 200/255
+  SBI    PORTD, PD2                    ; IN1 = 高电平
+  CBI    PORTD, PD3                    ; IN2 = 低电平
+
+  LDI    R16, 200                      ; 速度 = 200/255
   LDI    R17, 0
   STS    OCR1AH, R17
   STS    OCR1AL, R16
 ```
-We can just as easily reverse it and slow it down by swapping the `IN1/IN2` pins and lowering the `OCR1AL` value!
+我们只要把 `IN1/IN2` 两个引脚对调, 再把 `OCR1AL` 的值调低, 就能同样轻松地让它反转并减速!
 
 ---
 
-Congratulations! You have successfully mastered 16-bit Timer configurations, buffered 16-bit register writes, and hardware H-Bridge motor control in bare metal assembly!
+恭喜! 你已经在裸机汇编里掌握了 16 位定时器配置, 带缓冲的 16 位寄存器写入, 还有硬件 H 桥电机控制!

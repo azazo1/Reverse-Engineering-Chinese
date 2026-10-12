@@ -1,65 +1,65 @@
-# Lesson 006 - Active Buzzer
+# Lesson 006 - 有源蜂鸣器
 
-## What Are We Building Today?
+## 今天我们要做什么?
 
-Welcome to Lesson 6! We've made lights blink, fade, and change colors. We've even made them respond to buttons. Now, it's time to make some **NOISE**!
+欢迎来到第 6 课! 我们已经让灯闪过, 淡过, 变过颜色, 还让它们会响应按钮. 现在, 该弄点**响动**了!
 
-Today, we are going to use an **Active Buzzer** to beep loudly in a repetitive pattern: BEEP... silence... BEEP... silence!
+今天我们要用一个**有源蜂鸣器**, 让它按重复的节奏大声叫: 嘀... 安静... 嘀... 安静!
 
-By the end of this lesson, you'll see how closely related light and sound are when it comes to controlling them with digital logic.
+学完这一课, 你就会发现, 用数字逻辑来控制的时候, 光和声音其实亲得很.
 
 [CODE](https://github.com/mytechnotalent/Assembler/blob/main/lessons/006/lesson.s)
 
 ---
 
-## Hardware Check: The Active Buzzer
+## 硬件检查: 有源蜂鸣器
 
-An **Active Buzzer** is a small speaker component that has a built-in oscillator. 
+**有源蜂鸣器**是一个自带振荡器的小喇叭.
 
-What does that mean? It means it does the hard work for you! 
-If you send 5 Volts (HIGH) to an active buzzer, the built-in oscillator automatically generates a loud tone (usually around 2.5 kHz or 2,500 beeps per second). When you send 0 Volts (LOW), it stays completely silent.
+这是什么意思? 意思是它把累活都替你干了!
+如果你给有源蜂鸣器送 5 伏 (高电平), 它内部的振荡器就会自动发出响亮的声音 (一般在 2.5 kHz 左右, 也就是每秒 2500 次). 你送 0 伏 (低电平) 的时候, 它就完全不响.
 
-This makes it incredibly easy to use. In fact, controlling an active buzzer is exactly the same as turning an LED on and off!
+这让它用起来特别省事. 事实上, 控制有源蜂鸣器和开关一颗 LED 完全是一回事!
 
-*Note: There are also **Passive Buzzers**, which require you to turn the pin on and off thousands of times a second manually to make a sound. We'll play with those in a future lesson!*
+*注意: 还有一种**无源蜂鸣器**, 得靠你每秒手动开关引脚几千次才能发声. 我们以后再跟它玩!*
 
-## The Code Walkthrough
+## 代码讲解
 
-We are going to connect our Active Buzzer's positive leg to **Pin 5** on the Arduino, which is connected to **PD5** on the microcontroller. The negative leg goes to GND.
+我们把有源蜂鸣器的正极接到 Arduino 的 **Pin 5**, 它在单片机上对应 **PD5**. 负极接地.
 
-### 1. The Defines
+### 1. 定义部分
 ```assembly
-.equ DDRD,   0x0A                      ; Data Direction Register for Port D
-.equ PORTD,  0x0B                      ; Data Register for Port D
-.equ PD5,    5                         ; Pin 5 on Port D (Arduino Pin 5)
+.equ DDRD,   0x0A                      ; Port D 的数据方向寄存器
+.equ PORTD,  0x0B                      ; Port D 的数据寄存器
+.equ PD5,    5                         ; Port D 的第 5 脚 (Arduino Pin 5)
 ```
-Just like blinking an LED, we need to talk to the `DDRD` gatekeeper and the `PORTD` switch. Our target pin is `PD5`.
+就跟点灯一样, 我们得跟 `DDRD` 这个看门人和 `PORTD` 这个开关打交道. 我们的目标引脚是 `PD5`.
 
-### 2. Setting Up the Output
+### 2. 设置输出
 ```assembly
-  SBI    DDRD, PD5                     ; Set PD5 (Buzzer) as an output
+  SBI    DDRD, PD5                     ; 把 PD5 (蜂鸣器) 设为输出
 ```
-Wait a second, did I say LED? This is exactly the same command we used for the LED in Lesson 2! `SBI` (Set Bit in I/O Register) tells `DDRD` to allow electricity to flow out of pin `PD5`. 
+等一下, 我刚才是不是说 LED? 这跟第 2 课里给 LED 用的命令一模一样! `SBI` (置位 I/O 寄存器中的某一位) 告诉 `DDRD` 允许电流从 `PD5` 流出去.
 
-### 3. The Beeping Loop
+### 3. 鸣叫循环
 ```assembly
-.loop:                                 
-  SBI    PORTD, PD5                    ; Turn buzzer ON (HIGH)
-  RCALL  delay_500ms                   ; Wait 500ms
-  CBI    PORTD, PD5                    ; Turn buzzer OFF (LOW)
-  RCALL  delay_500ms                   ; Wait 500ms
-  RJMP   .loop                         ; Restart loop
+.loop:
+  SBI    PORTD, PD5                    ; 打开蜂鸣器 (高电平)
+  RCALL  delay_500ms                   ; 等待 500ms
+  CBI    PORTD, PD5                    ; 关闭蜂鸣器 (低电平)
+  RCALL  delay_500ms                   ; 等待 500ms
+  RJMP   .loop                         ; 重新开始循环
 ```
-This should look very familiar! 
-1. `SBI PORTD, PD5` sends 5 Volts out. The buzzer's internal circuitry turns this into a loud beep!
-2. We wait 500 milliseconds (half a second) while it beeps.
-3. `CBI PORTD, PD5` turns the pin OFF (0 Volts). The buzzer goes totally silent.
-4. We wait another 500 milliseconds in silence.
-5. `RJMP .loop` repeats the process forever!
+这看起来应该很眼熟!
+1. `SBI PORTD, PD5` 送出 5 伏. 蜂鸣器内部的电路把它变成一声响亮的鸣叫!
+2. 它叫的时候我们等 500 毫秒 (半秒).
+3. `CBI PORTD, PD5` 把引脚关掉 (0 伏). 蜂鸣器彻底安静.
+4. 我们在一片安静里再等 500 毫秒.
+5. `RJMP .loop` 让这个过程永远重复下去!
 
-### Why does this look just like Lesson 2?
-Because to a digital pin, **an LED and an Active Buzzer are the exact same thing**. The microcontroller just outputs 5V. It doesn't care if that 5V is turned into light (LED), sound (Buzzer), or motion (Motor). It's just sending electricity!
+### 为什么这跟第 2 课看起来一样?
+因为对一个数字引脚来说, **一颗 LED 和一个有源蜂鸣器是完全相同的东西**. 单片机只管输出 5V. 它才不管这 5V 最后变成的是光 (LED), 声音 (蜂鸣器) 还是运动 (电机). 它只是在送电而已!
 
 ---
 
-Congratulations! You've just built your first digital sound machine using pure Assembly!
+恭喜! 你刚刚用纯汇编做出了你的第一台数字发声机!

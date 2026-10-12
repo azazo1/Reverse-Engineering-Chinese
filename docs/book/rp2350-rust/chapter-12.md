@@ -1,20 +1,20 @@
-# Chapter 12: Real-Time and Concurrency
+# Chapter 12: 实时性与并发
 
-## Introduction
+## 引言
 
-A microcontroller must do many things at once: blink an LED, sample a button,
-echo serial data, and maybe steer servo outputs — all on one core, interleaved
-in microseconds. This chapter defines the concurrency problem and argues for the
-solution the rest of the course uses: **cooperative async scheduling**, as
-provided by Embassy.
+单片机必须同时做很多事: 闪 LED, 采样按键, 回显串口数据,
+也许还要驱动舵机输出 - 这些全都在一个核上, 以微秒级的粒度交错
+执行. 本章先定义并发这个问题, 再说明本课程后续一直采用的
+解决方案: **协作式 async 调度**, 也就是 Embassy
+提供的那套机制.
 
-## One Core, Many Tasks
+## 一个核, 多个任务
 
-The RP2350 has two cores, but each core runs exactly one instruction stream at a
-time. "Many tasks" really means: interleave them quickly enough that the
-hardware world sees each one making progress when it needs to.
+RP2350 有两个核, 但每个核在同一时刻只跑一条指令流.
+所谓 "多个任务", 真正的含义是: 把它们交错得足够快, 让
+硬件世界看到每个任务在需要的时候都在推进.
 
-Consider three jobs:
+考虑三个任务:
 
 ```
 +----------------+   +----------------+   +----------------+
@@ -23,17 +23,17 @@ Consider three jobs:
 +----------------+   +----------------+   +----------------+
 ```
 
-None of them is doing useful work most of the time. A blink is a 500 ms wait
-with a 1 us toggle. A button sample is a 5 ms wait around a 1 us read. The core
-is idle for 99.99% of the time; the challenge is where the waits live and who
-orchestrates the interleaving.
+它们大多数时间都没在做有用的工作. 一次闪灯是等 500 ms,
+再花 1 us 翻转. 一次按键采样是围绕 1 us 的读取等上 5 ms. 核在
+99.99% 的时间里都是空闲的; 真正的难点在于这些等待放在哪里, 以及由谁
+来编排这种交错.
 
-## Cooperative Scheduling
+## 协作式调度
 
-There are two ways to share one core. **Preemptive** scheduling lets the
-kernel/RTOS force a task to pause at any instruction (`SysTick` interrupt +
-context switch). With **cooperative** scheduling, a task runs until it
-voluntarily yields, then another task runs.
+共享一个核有两种方式. **抢占式** 调度让
+内核/RTOS 能在任意一条指令处强行暂停某个任务 (`SysTick` 中断加上
+上下文切换). 而 **协作式** 调度下, 任务一直运行到它
+自愿让出为止, 然后另一个任务才开始跑.
 
 ```
 Cooperative:      A runs | A yields | B runs | B waits | A runs ...
@@ -41,42 +41,42 @@ Cooperative:      A runs | A yields | B runs | B waits | A runs ...
                         tasks must grant the CPU themselves
 ```
 
-Async Rust and Embassy are cooperative: an `async fn` yields at each `.await`.
-Nobody can seize the CPU mid-operation; code runs atomically from one `.await`
-to the next. This makes shared data dramatically safer — no two tasks ever touch
-the same variable concurrently at the instruction level within one core.
+async Rust 和 Embassy 都是协作式的: 一个 `async fn` 在每个 `.await` 处让出.
+没有谁能在一段操作中途夺走 CPU; 从一次 `.await`
+到下一次之间, 代码是原子执行的. 这让共享数据安全得多 - 在同一个核里,
+两个任务永远不会在指令层面同时碰同一个变量.
 
-## Busy-Waiting
+## 忙等待
 
-The naive delay is a **busy-wait**: the core does nothing but count, a few
-million times, until enough clock cycles pass:
+最朴素的延时就是 **忙等待**: 核什么也不干, 只是计数, 数上几
+百万次, 直到时钟周期数够了为止:
 
 ```rust
 fn delay_ms(ms: u64) {
-    for _ in 0..(ms * 150_000) { }   // waste 150k cycles per ms
+    for _ in 0..(ms * 150_000) { }   // 每毫秒浪费 15 万个周期
 }
 ```
 
-Busy-waiting has two costs:
+忙等待有两个代价:
 
-1. **The core is useless during the wait.** While one task spins, the button is
-   never sampled and incoming UART bytes overflow the FIFO.
-2. **Timing is fragile.** The loop's cycle count depends on compiler
-   optimization and features.
+1. **等待期间核完全没用.** 一个任务在空转时, 按键就
+   永远不会被采样, 进来的 UART 字节还会把 FIFO 撑爆.
+2. **时序很脆弱.** 这个循环的周期数取决于编译器的
+   优化和特性开关.
 
-Firmware uses busy-waits only where strict, short, loop-accurate timing is
-required — and even then carefully. For ordinary delays we use the hardware
-timer instead.
+只有在需要严格, 短促, 精确到循环周期的时序时, 固件才会用忙等待 -
+而且即便如此也要小心. 普通的延时我们改用硬件
+定时器.
 
-## Events, Interrupts, and the Async Model
+## 事件, 中断与 async 模型
 
-The hardware itself solves the waiting problem. Peripherals raise **interrupts**
-when an event happens: a byte arrived, a timer expired, a DMA transfer finished.
-The CPU then runs a short **interrupt handler** and returns.
+硬件本身就解决了等待的问题. 事件发生时, 外设会发起 **中断**:
+收到一个字节, 定时器到期, DMA 传输完成.
+CPU 随后执行一小段 **中断处理函数**, 然后返回.
 
-Async Rust is the elegant generalization. Think of each interrupt as a signal
-that an event occurred; the executor sleeps until some event fires, then wakes
-the specific future that was waiting on it:
+async Rust 是这件事优雅的推广. 把每个中断都看成一个信号,
+表示某个事件发生了; 执行器一直睡到有事件触发, 然后唤醒
+正在等这个事件的那个具体的 future:
 
 ```
 +-------------+         +--------------+         +--------------+
@@ -86,15 +86,15 @@ the specific future that was waiting on it:
 +-------------+         +--------------+         +--------------+
 ```
 
-The CPU is genuinely asleep (`wfi` — wait for interrupt) between events,
-consuming ~no power and no cycles. When a byte arrives, the UART interrupt wakes
-the executor, which resumes the exact task that was waiting for that byte. This
-is the model `Timer::after_millis(...).await`, `uart.read(...).await`, and
-every other Embassy call uses.
+事件之间, CPU 是真的在睡 (`wfi` - 等待中断),
+几乎不耗电也不耗周期. 当一个字节到达时, UART 中断唤醒
+执行器, 执行器再恢复那个正在等这个字节的任务. 这
+就是 `Timer::after_millis(...).await`, `uart.read(...).await` 以及
+所有其它 Embassy 调用所采用的模型.
 
-## The Embassy Approach
+## Embassy 的做法
 
-Embassy packages all of this into the primitives we program with:
+Embassy 把这一切都打包成我们编程时直接使用的原语:
 
 ```
 +------------------+
@@ -106,20 +106,20 @@ Embassy packages all of this into the primitives we program with:
 +------------------+
 ```
 
-Application code writes ordinary-looking async functions; the executor
-interleaves them, the time driver covers delays, and the HAL bridges async
-futures to hardware events. In the next four chapters we meet each component:
-futures and `async`/`await` (Chapter 13), the executor (Chapter 14), time
-(Chapter 15), and the HAL (Chapters 16–17).
+应用代码写的还是看起来很普通的 async 函数; 执行器
+负责交错它们, time driver 负责延时, HAL 则把 async
+future 和硬件事件桥接起来. 接下来四章我们逐个认识这些组件:
+future 与 `async`/`await` (第 13 章), 执行器 (第 14 章), 时间
+(第 15 章), 以及 HAL (第 16-17 章).
 
-## Summary
+## 小结
 
-- One core means one instruction stream; concurrency is fast interleaving.
-- Embassy uses cooperative scheduling — tasks yield at `.await`.
-- Busy-waiting wastes the only core and is used sparingly.
-- Peripherals signal completion via interrupts; async Rust turns those signals
-  into resumable waits.
-- Embassy = executor (scheduling) + time driver (delays) + HAL (hardware),
-  which is exactly the stack all three drivers are built on.
+- 一个核意味着一条指令流; 并发就是快速的交错.
+- Embassy 采用协作式调度 - 任务在 `.await` 处让出.
+- 忙等待浪费唯一的核, 只能偶尔使用.
+- 外设通过中断报告完成; async Rust 把这些信号
+  变成可恢复的等待.
+- Embassy = 执行器 (调度) + time driver (延时) + HAL (硬件),
+  这正是三个驱动都建立在其上的那套栈.
 
-Next we open the box on Rust's async machinery: futures and `poll`.
+接下来我们打开 Rust async 机制这个盒子: future 与 `poll`.

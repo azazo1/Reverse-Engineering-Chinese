@@ -1,149 +1,149 @@
-# Chapter 15: Calling Convention and Stack Frames
+# Chapter 15: 调用约定与栈帧
 
-## Introduction
+## 引言
 
-When one function calls another, both must agree on where arguments go, which registers are preserved, and how the stack is managed.  These rules form the **calling convention**.  RISC-V defines a standard calling convention in its ABI specification, and our blink driver follows it precisely.  This chapter examines how arguments are passed, how functions save and restore state, and how the stack frame is structured.
+当一个函数调用另一个函数时, 双方必须就参数放在哪里, 哪些寄存器要保持不变, 以及栈怎么管理达成一致. 这些规则合起来就是**调用约定 (calling convention)**. RISC-V 在它的 ABI 规范里定义了一套标准调用约定, 我们的闪烁驱动严格照着它来. 本章考察参数是怎么传的, 函数怎么保存和恢复状态, 以及栈帧的结构长什么样.
 
-## The RISC-V Calling Convention
+## RISC-V 调用约定
 
-### Register Roles
+### 寄存器角色
 
-| Register | ABI Name | Role | Saver |
+| 寄存器 | ABI 名 | 作用 | 谁保存 |
 |----------|----------|------|-------|
-| x0 | zero | Hardwired zero | — |
-| x1 | ra | Return address | Caller |
-| x2 | sp | Stack pointer | Callee |
-| x3 | gp | Global pointer | — |
-| x4 | tp | Thread pointer | — |
-| x5–x7 | t0–t2 | Temporaries | Caller |
-| x8 | s0/fp | Saved register / frame pointer | Callee |
-| x9 | s1 | Saved register | Callee |
-| x10–x11 | a0–a1 | Arguments / return values | Caller |
-| x12–x17 | a2–a7 | Arguments | Caller |
-| x18–x27 | s2–s11 | Saved registers | Callee |
-| x28–x31 | t3–t6 | Temporaries | Caller |
+| x0 | zero | 硬连线为零 | - |
+| x1 | ra | 返回地址 | 调用者 |
+| x2 | sp | 栈指针 | 被调用者 |
+| x3 | gp | 全局指针 | - |
+| x4 | tp | 线程指针 | - |
+| x5-x7 | t0-t2 | 临时寄存器 | 调用者 |
+| x8 | s0/fp | 保存寄存器 / 帧指针 | 被调用者 |
+| x9 | s1 | 保存寄存器 | 被调用者 |
+| x10-x11 | a0-a1 | 参数 / 返回值 | 调用者 |
+| x12-x17 | a2-a7 | 参数 | 调用者 |
+| x18-x27 | s2-s11 | 保存寄存器 | 被调用者 |
+| x28-x31 | t3-t6 | 临时寄存器 | 调用者 |
 
-### Key Rules
+### 关键规则
 
-1. **Arguments** are passed in `a0`–`a7` (up to 8 registers).  Our functions use `a0`–`a2`.
-2. **Return values** are placed in `a0`–`a1`.
-3. **Caller-saved** registers (`t0`–`t6`, `a0`–`a7`, `ra`) may be overwritten by the callee.  The caller must save them if needed after the call.
-4. **Callee-saved** registers (`s0`–`s11`, `sp`) must be preserved by the callee.  If a function modifies them, it must save and restore them.
-5. **The stack pointer** (`sp`) must be restored to its original value before returning.
+1. **参数**通过 `a0`-`a7` 传递 (最多 8 个寄存器). 我们的函数用 `a0`-`a2`.
+2. **返回值**放在 `a0`-`a1` 里.
+3. **调用者保存**的寄存器 (`t0`-`t6`, `a0`-`a7`, `ra`) 可能被被调用者覆盖. 如果调用之后还需要它们, 调用者必须自己先保存.
+4. **被调用者保存**的寄存器 (`s0`-`s11`, `sp`) 必须由被调用者保持原值. 如果函数改动了它们, 就得自己保存再恢复.
+5. **栈指针** (`sp`) 在返回之前必须恢复成原来的值.
 
-## Parameter Passing in Our Firmware
+## 固件里的参数传递
 
-### GPIO_Config: Three Parameters
-
-```asm
-  li    a0, PADS_BANK0_GPIO16_OFFSET             # a0 = pad offset
-  li    a1, IO_BANK0_GPIO16_CTRL_OFFSET          # a1 = ctrl offset
-  li    a2, 16                                   # a2 = GPIO number
-  call  GPIO_Config                              # call
-```
-
-The callee receives `a0` = 0x44, `a1` = 0x84, `a2` = 16 — no memory access needed.
-
-### GPIO_Set / GPIO_Clear: One Parameter
+### GPIO_Config: 三个参数
 
 ```asm
-  li    a0, 16                                   # a0 = GPIO number
-  call  GPIO_Set                                 # call
+  li    a0, PADS_BANK0_GPIO16_OFFSET             # a0 = pad 偏移
+  li    a1, IO_BANK0_GPIO16_CTRL_OFFSET          # a1 = ctrl 偏移
+  li    a2, 16                                   # a2 = GPIO 编号
+  call  GPIO_Config                              # 调用
 ```
 
-### Delay_MS: One Parameter
+被调用者拿到的是 `a0` = 0x44, `a1` = 0x84, `a2` = 16 - 完全不需要访问内存.
+
+### GPIO_Set / GPIO_Clear: 一个参数
 
 ```asm
-  li    a0, 500                                  # a0 = milliseconds
-  call  Delay_MS                                 # call
+  li    a0, 16                                   # a0 = GPIO 编号
+  call  GPIO_Set                                 # 调用
 ```
 
-## Leaf Functions
+### Delay_MS: 一个参数
 
-A leaf function calls no other functions.  Since `ra` is never overwritten, there is no need to save it:
+```asm
+  li    a0, 500                                  # a0 = 毫秒数
+  call  Delay_MS                                 # 调用
+```
+
+## 叶子函数
+
+叶子函数不调用任何其他函数. 既然 `ra` 从不会被覆盖, 也就不需要保存它:
 
 ```asm
 Init_Stack:
-  li    sp, STACK_TOP                            # set SP to top of RAM stack
-  ret                                            # return (ra preserved)
+  li    sp, STACK_TOP                            # 把 SP 设为 RAM 栈顶
+  ret                                            # 返回 (ra 未被破坏)
 ```
 
 ```asm
 GPIO_Set:
-  li    t0, SIO_GPIO_OUT_SET                     # load SIO GPIO_OUT_SET address
-  li    t1, 1                                    # bit value
-  sll   t1, t1, a0                               # shift to GPIO position
-  sw    t1, 0(t0)                                # set GPIO output high
-  ret                                            # return
+  li    t0, SIO_GPIO_OUT_SET                     # 加载 SIO GPIO_OUT_SET 地址
+  li    t1, 1                                    # 位的值
+  sll   t1, t1, a0                               # 移到对应 GPIO 的位置
+  sw    t1, 0(t0)                                # 把 GPIO 输出拉高
+  ret                                            # 返回
 ```
 
-These functions use only `t0`–`t2` and `a0`–`a2` (caller-saved), so they have no callee-save obligations.
+这些函数只用 `t0`-`t2` 和 `a0`-`a2` (都是调用者保存的), 所以它们没有保存寄存器的义务.
 
-Leaf functions in our firmware:
+固件里的叶子函数:
 
-| Function | File | Registers Used |
+| 函数 | 文件 | 用到的寄存器 |
 |----------|------|---------------|
 | Init_Stack | stack.s | sp |
 | Init_Trap_Vector | reset_handler.s | t0 |
 | Init_XOSC | xosc.s | t0, t1 |
 | Enable_XOSC_Peri_Clock | xosc.s | t0, t1, t2 |
 | Init_Subsystem | reset.s | t0, t1, t2 |
-| Enable_Coprocessor | coprocessor.s | (none) |
+| Enable_Coprocessor | coprocessor.s | (无) |
 | GPIO_Set | gpio.s | t0, t1, a0 |
 | GPIO_Clear | gpio.s | t0, t1, a0 |
 | Delay_MS | delay.s | t0, t1, a0 |
 
-## Non-Leaf Functions
+## 非叶子函数
 
-A non-leaf function calls other functions and must save `ra`:
+非叶子函数会调用其他函数, 所以必须保存 `ra`:
 
 ```asm
 GPIO_Config:
-  addi  sp, sp, -4                               # allocate stack frame
-  sw    ra, 0(sp)                                # save return address
-  ...                                            # function body
-  lw    ra, 0(sp)                                # restore return address
-  addi  sp, sp, 4                                # deallocate stack frame
-  ret                                            # return to caller
+  addi  sp, sp, -4                               # 分配栈帧
+  sw    ra, 0(sp)                                # 保存返回地址
+  ...                                            # 函数体
+  lw    ra, 0(sp)                                # 恢复返回地址
+  addi  sp, sp, 4                                # 释放栈帧
+  ret                                            # 返回调用者
 ```
 
-GPIO_Config is treated as a non-leaf because it is called from main and preserves the ability to call sub-functions.
+GPIO_Config 被当作非叶子函数处理, 因为它由 main 调用, 而且要保留调用子函数的能力.
 
-## The Stack Frame
+## 栈帧
 
-### Allocation
+### 分配
 
 ```asm
   addi  sp, sp, -4                               # sp = sp - 4
 ```
 
-The stack grows downward (toward lower addresses).  Subtracting from `sp` allocates space.
+栈向下增长 (朝低地址方向). 从 `sp` 里减去一个数, 就是分配空间.
 
-### Save
+### 保存
 
 ```asm
   sw    ra, 0(sp)                                # memory[sp] = ra
 ```
 
-The return address is stored at the top of the new frame.
+返回地址被存到新栈帧的顶部.
 
-### Restore
+### 恢复
 
 ```asm
   lw    ra, 0(sp)                                # ra = memory[sp]
 ```
 
-The return address is loaded back.
+返回地址被装回来.
 
-### Deallocation
+### 释放
 
 ```asm
   addi  sp, sp, 4                                # sp = sp + 4
 ```
 
-The frame is removed by adding back the same amount.
+把刚才减掉的量加回去, 栈帧就撤掉了.
 
-### Stack Layout
+### 栈的布局
 
 ```
 High addresses (STACK_TOP = 0x20082000)
@@ -155,7 +155,7 @@ High addresses (STACK_TOP = 0x20082000)
 Low addresses
 ```
 
-For a larger frame saving multiple registers:
+如果要保存多个寄存器, 栈帧就更大:
 
 ```
 +------------------+
@@ -165,67 +165,67 @@ For a larger frame saving multiple registers:
 +------------------+
 ```
 
-Our firmware only needs a 4-byte frame (just `ra`), keeping the stack usage minimal.
+我们的固件只需要 4 字节的栈帧 (只存 `ra`), 栈的用量保持在最小.
 
-## The main Function
+## main 函数
 
-`main` is effectively a non-leaf function (it calls GPIO_Config, GPIO_Set, GPIO_Clear, Delay_MS), but it never returns — it contains an infinite loop:
+`main` 实际上算非叶子函数 (它调用了 GPIO_Config, GPIO_Set, GPIO_Clear, Delay_MS), 但它从不返回 - 它里面是个无限循环:
 
 ```asm
 main:
 .GPIO16_Config:
-  li    a0, PADS_BANK0_GPIO16_OFFSET             # load pad offset
-  li    a1, IO_BANK0_GPIO16_CTRL_OFFSET          # load ctrl offset
-  li    a2, 16                                   # load GPIO number
-  call  GPIO_Config                              # configure GPIO16
+  li    a0, PADS_BANK0_GPIO16_OFFSET             # 加载 pad 偏移
+  li    a1, IO_BANK0_GPIO16_CTRL_OFFSET          # 加载 ctrl 偏移
+  li    a2, 16                                   # 加载 GPIO 编号
+  call  GPIO_Config                              # 配置 GPIO16
 .Loop:
-  li    a0, 16                                   # GPIO number
-  call  GPIO_Set                                 # LED on
-  li    a0, 500                                  # 500ms
-  call  Delay_MS                                 # wait
-  li    a0, 16                                   # GPIO number
-  call  GPIO_Clear                               # LED off
-  li    a0, 500                                  # 500ms
-  call  Delay_MS                                 # wait
-  j     .Loop                                    # repeat forever
+  li    a0, 16                                   # GPIO 编号
+  call  GPIO_Set                                 # 点亮 LED
+  li    a0, 500                                  # 500 毫秒
+  call  Delay_MS                                 # 等待
+  li    a0, 16                                   # GPIO 编号
+  call  GPIO_Clear                               # 熄灭 LED
+  li    a0, 500                                  # 500 毫秒
+  call  Delay_MS                                 # 等待
+  j     .Loop                                    # 永远重复
 ```
 
-Since the `j .Loop` ensures main never reaches `ret`, there is no need to save `ra` — it would never be restored.
+由于 `j .Loop` 保证 main 永远执行不到 `ret`, 所以没必要保存 `ra` - 它根本没有机会被恢复.
 
-## Reset_Handler: The Root
+## Reset_Handler: 调用链的根
 
-Reset_Handler is the root of the call chain.  It uses `call` for initialization functions and `j` for main:
+Reset_Handler 是整条调用链的根. 它对初始化函数用 `call`, 对 main 用 `j`:
 
 ```asm
 Reset_Handler:
-  call  Init_Stack                               # leaf
-  call  Init_Trap_Vector                         # leaf
-  call  Init_XOSC                                # leaf
-  call  Enable_XOSC_Peri_Clock                   # leaf
-  call  Init_Subsystem                           # leaf
-  call  Enable_Coprocessor                       # leaf
-  j     main                                     # never returns
+  call  Init_Stack                               # 叶子函数
+  call  Init_Trap_Vector                         # 叶子函数
+  call  Init_XOSC                                # 叶子函数
+  call  Enable_XOSC_Peri_Clock                   # 叶子函数
+  call  Init_Subsystem                           # 叶子函数
+  call  Enable_Coprocessor                       # 叶子函数
+  j     main                                     # 永不返回
 ```
 
-Each `call` overwrites `ra`.  This is safe because Reset_Handler calls them sequentially and never needs to return — there is no caller above Reset_Handler.
+每一次 `call` 都会覆盖 `ra`. 这样做是安全的, 因为 Reset_Handler 是顺序调用它们的, 而且从不需要返回 - Reset_Handler 上面根本没有调用者.
 
-## Contrast with ARM
+## 与 ARM 对照
 
-| Feature | ARM | RISC-V |
+| 特性 | ARM | RISC-V |
 |---------|-----|--------|
-| Save/restore | `push {r4-r12, lr}` / `pop {r4-r12, lr}` | `addi sp` + `sw` / `lw` + `addi sp` |
-| Arguments | r0–r3 | a0–a7 |
-| Return address | lr (r14) | ra (x1) |
-| Callee-saved | r4–r11 | s0–s11 |
-| Stack alignment | 8-byte (AAPCS) | 16-byte (RISC-V ABI, relaxed for embedded) |
+| 保存/恢复 | `push {r4-r12, lr}` / `pop {r4-r12, lr}` | `addi sp` + `sw` / `lw` + `addi sp` |
+| 参数 | r0-r3 | a0-a7 |
+| 返回地址 | lr (r14) | ra (x1) |
+| 被调用者保存 | r4-r11 | s0-s11 |
+| 栈对齐 | 8 字节 (AAPCS) | 16 字节 (RISC-V ABI, 嵌入式可放宽) |
 
-ARM's `push`/`pop` save multiple registers in one instruction.  RISC-V requires explicit `sw`/`lw` for each register — more verbose but conceptually simpler.
+ARM 的 `push`/`pop` 一条指令就能保存多个寄存器. RISC-V 则要求每个寄存器都显式写 `sw`/`lw` - 更啰嗦, 但概念上更简单.
 
-## Summary
+## 小结
 
-- Arguments pass in `a0`–`a7`; return values in `a0`–`a1`.
-- Leaf functions (no calls) need not save `ra`.
-- Non-leaf functions save `ra` to the stack with `sw ra, 0(sp)` and restore with `lw ra, 0(sp)`.
-- The stack grows downward; `addi sp, sp, -N` allocates, `addi sp, sp, N` deallocates.
-- Temporary registers (`t0`–`t6`) are caller-saved — free to use without saving.
-- Saved registers (`s0`–`s11`) are callee-saved — must be preserved if used.
+- 参数通过 `a0`-`a7` 传递; 返回值放在 `a0`-`a1` 里.
+- 叶子函数 (不调用别的函数) 不需要保存 `ra`.
+- 非叶子函数用 `sw ra, 0(sp)` 把 `ra` 存到栈上, 用 `lw ra, 0(sp)` 恢复.
+- 栈向下增长; `addi sp, sp, -N` 是分配, `addi sp, sp, N` 是释放.
+- 临时寄存器 (`t0`-`t6`) 是调用者保存的 - 可以随便用, 不用保存.
+- 保存寄存器 (`s0`-`s11`) 是被调用者保存的 - 一旦用到就必须保持原值.

@@ -1,47 +1,47 @@
-# Reverse Engineering: embedded-wasm-blinky
+# 逆向分析: embedded-wasm-blinky
 
-## Table of Contents
+## 目录
 
-1. [Binary Overview](#1-binary-overview)
-2. [ELF Header](#2-elf-header)
-3. [Section Layout](#3-section-layout)
-4. [Memory Map & Segments](#4-memory-map--segments)
-5. [Boot Sequence](#5-boot-sequence)
-6. [Vector Table](#6-vector-table)
-7. [Firmware Function Map](#7-firmware-function-map)
-8. [Hardware Register Access](#8-hardware-register-access)
-9. [Pulley Interpreter Deep Dive](#9-pulley-interpreter-deep-dive)
-10. [Embedded cwasm Blob](#10-embedded-cwasm-blob)
-11. [Host-Guest Call Flow](#11-host-guest-call-flow)
-12. [RE Observations](#12-re-observations)
-13. [Pulley Instruction Set Architecture](#13-pulley-instruction-set-architecture)
-14. [Pulley Bytecode Disassembly](#14-pulley-bytecode-disassembly)
-15. [Ghidra Analysis Walkthrough](#15-ghidra-analysis-walkthrough)
+1. [二进制概览](#1-二进制概览)
+2. [ELF 头](#2-elf-头)
+3. [段布局](#3-段布局)
+4. [内存映射与段](#4-内存映射与段)
+5. [启动流程](#5-启动流程)
+6. [中断向量表](#6-中断向量表)
+7. [固件函数映射](#7-固件函数映射)
+8. [硬件寄存器访问](#8-硬件寄存器访问)
+9. [Pulley 解释器深入剖析](#9-pulley-解释器深入剖析)
+10. [内嵌的 cwasm 数据块](#10-内嵌的-cwasm-数据块)
+11. [宿主与客体调用流程](#11-宿主与客体调用流程)
+12. [逆向观察](#12-逆向观察)
+13. [Pulley 指令集架构](#13-pulley-指令集架构)
+14. [Pulley 字节码反汇编](#14-pulley-字节码反汇编)
+15. [Ghidra 分析实战](#15-ghidra-分析实战)
 
 ---
 
-## 1. Binary Overview
+## 1. 二进制概览
 
-| Property          | Value                                    |
+| 属性              | 值                                       |
 | ----------------- | ---------------------------------------- |
-| File              | `embedded-wasm-blinky`                   |
-| Size on disk      | 1,174,232 bytes (1.12 MiB)               |
-| Format            | ELF32 ARM little-endian                  |
-| ABI               | EABI5, hard-float                        |
-| Target            | ARMv8-M Mainline (Cortex-M33)            |
+| 文件              | `embedded-wasm-blinky`                   |
+| 磁盘大小          | 1,174,232 字节 (1.12 MiB)                |
+| 格式              | ELF32 ARM 小端                           |
+| ABI               | EABI5, 硬浮点                            |
+| 目标              | ARMv8-M Mainline (Cortex-M33)            |
 | MCU               | RP2350 (Raspberry Pi Pico 2)             |
-| Stripped          | No (symbol table + string table present) |
-| Text functions    | 2,375                                    |
-| Read-only symbols | 2,660                                    |
+| 是否 strip        | 否 (符号表 + 字符串表都在)               |
+| 代码函数数        | 2,375                                    |
+| 只读符号数        | 2,660                                    |
 
-The binary is a bare-metal `no_std` Rust firmware that hosts a Wasmtime
-Component Model runtime with the Pulley bytecode interpreter. It blinks
-the onboard LED on GPIO25 at 500 ms intervals, with the blink logic
-running as a WebAssembly guest component.
+这个二进制是一份裸机 `no_std` Rust 固件, 内部承载着 Wasmtime 组件模型
+运行时和 Pulley 字节码解释器. 它以 500 ms 的间隔让 GPIO25 上的板载
+LED 闪烁, 而闪烁逻辑本身是作为一个 WebAssembly 客体
+组件运行的.
 
 ---
 
-## 2. ELF Header
+## 2. ELF 头
 
 ```
 Magic:   7f 45 4c 46 01 01 01 03 00 00 00 00 00 00 00 00
@@ -57,13 +57,13 @@ Program headers:                   6 (at offset 52)
 Section headers:                   16 (at offset 1,173,592)
 ```
 
-**Entry Point**: `0x1000010d` — the `Reset` handler in `.text`. The LSB is
-set (0x0D vs 0x0C) to indicate Thumb mode, required by ARMv8-M. The actual
-code starts at `0x1000010c`.
+**入口点**: `0x1000010d` - `.text` 里的 `Reset` 处理程序. 最低位被
+置 1 (0x0D 而非 0x0C) 以表示 Thumb 模式, 这是 ARMv8-M 的要求. 真正的
+代码从 `0x1000010c` 开始.
 
 ---
 
-## 3. Section Layout
+## 3. 段布局
 
 ```
 Nr  Name            Type        Addr        Size      Flags  Description
@@ -81,34 +81,34 @@ Nr  Name            Type        Addr        Size      Flags  Description
 15  .strtab         STRTAB      file only   0x5dda0          String table (383 KiB)
 ```
 
-### Size Breakdown
+### 大小分解
 
-The Pico 2 board has **4 MiB** (4,194,304 B) of external QSPI flash.
-The linker script (`rp2350.x`) conservatively allocates **2 MiB**
-(2,097,152 B). Percentages below are relative to the 4 MiB physical
-flash.
+Pico 2 板子有 **4 MiB** (4,194,304 B) 的外部 QSPI flash.
+链接脚本 (`rp2350.x`) 保守地只分配了 **2 MiB**
+(2,097,152 B). 下面的百分比都是相对 4 MiB 物理
+flash 而言的.
 
-| Region         | Section         | Size          | % of 4 MiB Flash     |
+| 区域           | 段              | 大小          | 占 4 MiB Flash 的比例 |
 | -------------- | --------------- | ------------- | -------------------- |
-| Code           | `.text`         | 544,880 B     | 13.0%                |
-| Constants      | `.rodata`       | 122,800 B     | 2.9%                 |
-| Vectors        | `.vector_table` | 248 B         | <0.1%                |
-| Boot meta      | `.start_block`  | 20 B          | <0.1%                |
-| Init data      | `.data`         | 36 B          | <0.1%                |
-| **Flash used** |                 | **667,984 B** | **15.9%**            |
-| **Flash free** |                 | 3,526,320 B   | 84.1%                |
-| BSS (RAM)      | `.bss`          | 262,308 B     | 51.2% of 512 KiB RAM |
+| 代码           | `.text`         | 544,880 B     | 13.0%                |
+| 常量           | `.rodata`       | 122,800 B     | 2.9%                 |
+| 向量表         | `.vector_table` | 248 B         | <0.1%                |
+| 启动元数据     | `.start_block`  | 20 B          | <0.1%                |
+| 初始化数据     | `.data`         | 36 B          | <0.1%                |
+| **已用 Flash** |                 | **667,984 B** | **15.9%**            |
+| **剩余 Flash** |                 | 3,526,320 B   | 84.1%                |
+| BSS (RAM)      | `.bss`          | 262,308 B     | 占 512 KiB RAM 的 51.2% |
 
-The firmware uses 652 KiB of the available 4 MiB flash (31.9% of the
-2 MiB linker allocation). The `.text` section (532 KiB) is dominated by
-the Wasmtime runtime: the Pulley interpreter dispatch loop, serde
-deserialization for component metadata, BTree collections, type registry,
-and component linker code. The actual blinky firmware functions occupy
-only ~2 KiB.
+固件用了 4 MiB flash 里的 652 KiB (占链接器分配的 2 MiB
+的 31.9%). `.text` 段 (532 KiB) 绝大部分是 Wasmtime 运行时:
+Pulley 解释器的派发循环, 组件元数据的 serde
+反序列化, BTree 容器, 类型注册表,
+以及组件链接器代码. 真正属于 blinky 固件的函数只占
+大约 2 KiB.
 
 ---
 
-## 4. Memory Map & Segments
+## 4. 内存映射与段
 
 ```
 Segment  VirtAddr     PhysAddr     MemSiz   Flags  Contents
@@ -120,7 +120,7 @@ Segment  VirtAddr     PhysAddr     MemSiz   Flags  Contents
   5      0x00000000   0x00000000   0x00000  RW     GNU_STACK (zero-size)
 ```
 
-### Physical Address Space
+### 物理地址空间
 
 ```
 Flash (XIP):  0x10000000 - 0x100a2953  (668 KiB used of 4 MiB)
@@ -141,60 +141,60 @@ RAM (SRAM):   0x20000000 - 0x200400cb  (256 KiB used of 512 KiB)
 Stack:        0x20080000  Initial SP (top of 512 KiB SRAM, grows down)
 ```
 
-**Segment 3** has a split-address load: `PhysAddr = 0x100a2930` (flash)
-but `VirtAddr = 0x20000000` (RAM). The Reset handler copies these 36
-bytes from flash to RAM during the `.data` initialization loop.
+**段 3** 的加载地址是分离的: `PhysAddr = 0x100a2930` (flash),
+而 `VirtAddr = 0x20000000` (RAM). Reset 处理程序在 `.data` 初始化
+循环里把这 36 个字节从 flash 复制到 RAM.
 
 ---
 
-## 5. Boot Sequence
+## 5. 启动流程
 
-### 5.1 RP2350 Boot ROM -> IMAGE_DEF
+### 5.1 RP2350 引导 ROM -> IMAGE_DEF
 
-The RP2350 Boot ROM scans flash for a valid image definition block. Our
-`.start_block` section at `0x100000f8` contains:
+RP2350 引导 ROM 会在 flash 里扫描合法的镜像定义块. 我们位于
+`0x100000f8` 的 `.start_block` 段内容是:
 
 ```
 d3deffff 42012110 ff010000 00000000 793512ab
 ```
 
-This is `hal::block::ImageDef::secure_exe()` — it tells the Boot ROM
-this is a secure ARM executable, allowing the ROM to set up XIP and
-transfer control to the vector table.
+这就是 `hal::block::ImageDef::secure_exe()` - 它告诉引导 ROM
+这是一个安全的 ARM 可执行文件, 于是 ROM 会配置好 XIP 并
+把控制权交给向量表.
 
-### 5.2 Vector Table -> Reset Handler
+### 5.2 向量表 -> Reset 处理程序
 
-The processor reads the vector table at `0x10000000`:
+处理器读取位于 `0x10000000` 的向量表:
 
 ```
 Word 0: 0x20080000  <- Initial Stack Pointer (top of 512 KiB SRAM)
 Word 1: 0x1000010d  <- Reset vector (Thumb-mode address of Reset handler)
 ```
 
-After power-on reset, the CPU loads SP from word 0 and branches to the
-Reset vector.
+上电复位之后, CPU 从 word 0 加载 SP, 然后跳转到
+Reset 向量.
 
-### 5.3 Reset Handler (0x1000010c)
+### 5.3 Reset 处理程序 (0x1000010c)
 
 ```armasm
 Reset:
-    bl      DefaultPreInit          ; No-op (empty pre-init hook)
+    bl      DefaultPreInit          ; 空操作 (空的预初始化钩子)
 
-    ; --- Zero .bss (0x20000028 -> 0x200400cc) ---
-    ldr     r0, =0x20000028         ; BSS start
-    ldr     r1, =0x200400cc         ; BSS end
+    ; --- 清零 .bss (0x20000028 -> 0x200400cc) ---
+    ldr     r0, =0x20000028         ; BSS 起始
+    ldr     r1, =0x200400cc         ; BSS 结束
     movs    r2, #0
 .bss_loop:
     cmp     r1, r0
     beq     .bss_done
-    stmia   r0!, {r2}              ; Write zero, advance pointer
+    stmia   r0!, {r2}              ; 写入零, 指针前进
     b       .bss_loop
 
-    ; --- Copy .data from flash to RAM ---
+    ; --- 把 .data 从 flash 复制到 RAM ---
 .bss_done:
-    ldr     r0, =0x20000000         ; RAM dest (.data VMA)
-    ldr     r1, =0x20000024         ; RAM end
-    ldr     r2, =0x100a2930         ; Flash source (.data LMA)
+    ldr     r0, =0x20000000         ; RAM 目标 (.data VMA)
+    ldr     r1, =0x20000024         ; RAM 结束
+    ldr     r2, =0x100a2930         ; Flash 源 (.data LMA)
 .data_loop:
     cmp     r1, r0
     beq     .data_done
@@ -202,52 +202,52 @@ Reset:
     stmia   r0!, {r3}
     b       .data_loop
 
-    ; --- Enable FPU ---
+    ; --- 使能 FPU ---
 .data_done:
-    ldr     r0, =0xe000ed88         ; CPACR (Coprocessor Access Control)
+    ldr     r0, =0xe000ed88         ; CPACR (协处理器访问控制)
     ldr     r2, [r0]
-    orr     r2, r2, #0xf00000      ; Full access to CP10 + CP11 (FPU)
+    orr     r2, r2, #0xf00000      ; 完全放开 CP10 + CP11 (FPU)
     str     r2, [r0]
     dsb     sy
     isb     sy
 
-    bl      main                    ; Enter Rust main()
-    udf     #0                      ; Trap if main returns (should never)
+    bl      main                    ; 进入 Rust main()
+    udf     #0                      ; 若 main 返回则陷入 (不应该发生)
 ```
 
 ### 5.4 `main()` (0x10008410)
 
-The `#[hal::entry]` macro generates a thin wrapper that calls
-`__cortex_m_rt_main` at `0x100075a8`:
+`#[hal::entry]` 宏生成一个很薄的包装函数, 它调用位于
+`0x100075a8` 的 `__cortex_m_rt_main`:
 
 ```armasm
 main:
-    ; Enable all 32 SIO GPIO outputs
-    ldr     r0, =0xd0000100         ; SIO GPIO_OE base
+    ; 使能全部 32 路 SIO GPIO 输出
+    ldr     r0, =0xd0000100         ; SIO GPIO_OE 基址
     movs    r1, #1
-    str     r1, [r0, #0]            ; GPIO_OE_SET for each bank
+    str     r1, [r0, #0]            ; 为每个 bank 设置 GPIO_OE_SET
     ...
 
-    ; Enable FPU (redundant, also done in Reset — belt & suspenders)
+    ; 使能 FPU (冗余, Reset 里也做过 - 双保险)
     ldr     r0, =0xe000ed88         ; CPACR
     ldr     r1, [r0]
-    orr     r1, r1, #0x303          ; CP10 + CP11 full access
+    orr     r1, r1, #0x303          ; CP10 + CP11 完全放开
     str     r1, [r0]
 
-    bl      init_heap               ; Initialize 256 KiB heap allocator
-    bl      init_hardware           ; Clock setup, UART, GPIO
-    bl      run_wasm                ; Create Wasmtime engine, run component
+    bl      init_heap               ; 初始化 256 KiB 堆分配器
+    bl      init_hardware           ; 时钟配置, UART, GPIO
+    bl      run_wasm                ; 创建 Wasmtime 引擎, 运行组件
 ```
 
 ---
 
-## 6. Vector Table
+## 6. 中断向量表
 
-The vector table at `0x10000000` is 248 bytes (62 entries):
+位于 `0x10000000` 的向量表有 248 字节 (62 项):
 
 ```
 Offset  Vector              Handler          Address
-0x0000  Initial SP          —                0x20080000
+0x0000  Initial SP          -                0x20080000
 0x0004  Reset               Reset            0x1000010d
 0x0008  NMI                 DefaultHandler   0x1007c7ed
 0x000c  HardFault           HardFault_       0x10084d75
@@ -255,12 +255,12 @@ Offset  Vector              Handler          Address
 0x0014  BusFault            DefaultHandler   0x1007c7ed
 0x0018  UsageFault          DefaultHandler   0x1007c7ed
 0x001c  SecureFault         DefaultHandler   0x1007c7ed
-0x0020  Reserved            —                0x00000000
-0x0024  Reserved            —                0x00000000
-0x0028  Reserved            —                0x00000000
+0x0020  Reserved            -                0x00000000
+0x0024  Reserved            -                0x00000000
+0x0028  Reserved            -                0x00000000
 0x002c  SVCall              DefaultHandler   0x1007c7ed
 0x0030  DebugMonitor        DefaultHandler   0x1007c7ed
-0x0034  Reserved            —                0x00000000
+0x0034  Reserved            -                0x00000000
 0x0038  PendSV              DefaultHandler   0x1007c7ed
 0x003c  SysTick             DefaultHandler   0x1007c7ed
 0x0040+ IRQ0-IRQ51          DefaultHandler   0x1007c7ed
@@ -272,7 +272,7 @@ Offset  Vector              Handler          Address
 DefaultHandler_:
     push    {r7, lr}
     mov     r7, sp
-    b.n     .                       ; Infinite loop (hang on unhandled exception)
+    b.n     .                       ; 死循环 (未处理异常时挂起)
 ```
 
 ### HardFault (0x10084d74)
@@ -281,91 +281,91 @@ DefaultHandler_:
 HardFault_:
     push    {r7, lr}
     mov     r7, sp
-    b.n     .                       ; Infinite loop (hang on hard fault)
+    b.n     .                       ; 死循环 (硬错误时挂起)
 ```
 
-Both handlers preserve the frame pointer then spin forever. This is the
-`cortex-m-rt` default — no recovery, no diagnostic output.
+两个处理程序都保存帧指针然后永远自旋. 这是 `cortex-m-rt`
+的默认行为 - 不做恢复, 也不输出诊断信息.
 
-No peripheral interrupts are used. All 52 IRQ vectors point to
-`DefaultHandler`. The firmware is entirely polled:
+固件不使用任何外设中断. 全部 52 个 IRQ 向量都指向
+`DefaultHandler`. 整个固件完全是轮询式的:
 
-- GPIO writes are direct SIO register stores
-- UART TX is blocking (poll TXFF flag)
-- Delays use SysTick polling via `cortex_m::delay::Delay`
+- GPIO 写入是直接写 SIO 寄存器
+- UART 发送是阻塞的 (轮询 TXFF 标志)
+- 延时通过 `cortex_m::delay::Delay` 轮询 SysTick
 
 ---
 
-## 7. Firmware Function Map
+## 7. 固件函数映射
 
-### 7.1 Application Functions
+### 7.1 应用函数
 
-| Address      | Size  | Symbol               | Purpose                                                                   |
+| 地址         | 大小  | 符号                 | 用途                                                                      |
 | ------------ | ----- | -------------------- | ------------------------------------------------------------------------- |
-| `0x1000010c` | 0x3e  | `Reset`              | BSS zero, .data copy, FPU enable, call main                               |
-| `0x100073dc` | 0x1cc | `init_hardware`      | Clocks, UART0, GPIO25, SysTick                                            |
-| `0x100075a8` | 0x6c  | `__cortex_m_rt_main` | SIO GPIO enable, FPU, init_heap, init_hardware, run_wasm                  |
+| `0x1000010c` | 0x3e  | `Reset`              | BSS 清零, .data 复制, 使能 FPU, 调用 main                                 |
+| `0x100073dc` | 0x1cc | `init_hardware`      | 时钟, UART0, GPIO25, SysTick                                              |
+| `0x100075a8` | 0x6c  | `__cortex_m_rt_main` | 使能 SIO GPIO, FPU, init_heap, init_hardware, run_wasm                    |
 | `0x10007760` | 0x856 | `run_wasm`           | Engine::new, Component::deserialize, Store::new, Linker, instantiate, run |
-| `0x10007fb8` | 0x20  | `init_heap`          | Initialize 256 KiB linked-list heap                                       |
-| `0x10006858` | 0xc2  | `led::set_low`       | Clear GPIO via SIO, UART log                                              |
-| `0x1000691c` | 0xc2  | `led::set_high`      | Set GPIO via SIO, UART log                                                |
-| `0x100069e0` | 0x108 | `led::store_pin`     | Store GPIO pin handle for led module                                      |
-| `0x10007614` | 0x14c | `uart::write_msg`    | Blocking UART TX                                                          |
-| `0x10008410` | 0x8   | `main`               | Thin #[entry] wrapper                                                     |
-| `0x1007c7ec` | 0x6   | `DefaultHandler`     | Infinite loop (unhandled exception)                                       |
-| `0x1007c7f4` | 0x6   | `DefaultPreInit`     | No-op (returns immediately)                                               |
-| `0x10084d74` | 0x6   | `HardFault`          | Infinite loop (hard fault)                                                |
+| `0x10007fb8` | 0x20  | `init_heap`          | 初始化 256 KiB 链表堆                                                     |
+| `0x10006858` | 0xc2  | `led::set_low`       | 通过 SIO 清除 GPIO, UART 日志                                             |
+| `0x1000691c` | 0xc2  | `led::set_high`      | 通过 SIO 置位 GPIO, UART 日志                                             |
+| `0x100069e0` | 0x108 | `led::store_pin`     | 为 led 模块保存 GPIO 引脚句柄                                             |
+| `0x10007614` | 0x14c | `uart::write_msg`    | 阻塞式 UART 发送                                                          |
+| `0x10008410` | 0x8   | `main`               | 很薄的 #[entry] 包装                                                      |
+| `0x1007c7ec` | 0x6   | `DefaultHandler`     | 死循环 (未处理异常)                                                       |
+| `0x1007c7f4` | 0x6   | `DefaultPreInit`     | 空操作 (立即返回)                                                         |
+| `0x10084d74` | 0x6   | `HardFault`          | 死循环 (硬错误)                                                           |
 
-### 7.2 Wasmtime Runtime (Top-20 by Size)
+### 7.2 Wasmtime 运行时 (按大小排前 20)
 
-| Address      | Size     | Demangled Name                                                 |
+| 地址         | 大小     | 还原后的名称                                                   |
 | ------------ | -------- | -------------------------------------------------------------- |
 | `0x10032c98` | 16,464 B | `wasmtime_environ::tunables::OperatorCost::deserialize`        |
 | `0x10068210` | 16,456 B | `pulley_interpreter::decode::decode_one_extended`              |
-| `0x10064ef4` | 12,518 B | `pulley_interpreter::interp::Interpreter::run` (dispatch loop) |
+| `0x10064ef4` | 12,518 B | `pulley_interpreter::interp::Interpreter::run` (派发循环)      |
 | `0x1002e43c` | 8,696 B  | `wasmtime::engine::serialization::Metadata::check_cost`        |
 | `0x1000d7b8` | 2,304 B  | `wasmtime::runtime::vm::interpreter::InterpreterRef::call`     |
 
-### 7.3 BSS Layout
+### 7.3 BSS 布局
 
-| Address      | Size      | Symbol      | Purpose                         |
+| 地址         | 大小      | 符号        | 用途                            |
 | ------------ | --------- | ----------- | ------------------------------- |
-| `0x20000028` | 4 B       | `TLS_VALUE` | Wasmtime TLS shim (platform.rs) |
-| `0x2000002c` | 16 B      | `led::PINS` | GPIO pin handles for LED module |
-| `0x2000003c` | 262,144 B | `HEAP_MEM`  | Raw heap backing memory         |
-| `0x2004003c` | 32 B      | `HEAP`      | Linked-list allocator state     |
+| `0x20000028` | 4 B       | `TLS_VALUE` | Wasmtime TLS 垫片 (platform.rs) |
+| `0x2000002c` | 16 B      | `led::PINS` | LED 模块的 GPIO 引脚句柄        |
+| `0x2000003c` | 262,144 B | `HEAP_MEM`  | 堆的原始后备内存                |
+| `0x2004003c` | 32 B      | `HEAP`      | 链表分配器状态                  |
 
-### 7.4 Data Layout
+### 7.4 .data 布局
 
-| Address      | Size | Symbol          | Purpose                      |
+| 地址         | 大小 | 符号            | 用途                         |
 | ------------ | ---- | --------------- | ---------------------------- |
-| `0x20000000` | 1 B  | `UART` (.1)     | UART initialized flag        |
-| `0x20000001` | 35 B | (padding/other) | Remaining .data initializers |
+| `0x20000000` | 1 B  | `UART` (.1)     | UART 初始化标志              |
+| `0x20000001` | 35 B | (填充/其他)     | 其余 .data 初始化数据        |
 
 ---
 
-## 8. Hardware Register Access
+## 8. 硬件寄存器访问
 
-### 8.1 Peripheral Base Addresses
+### 8.1 外设基地址
 
-| Base Address | Peripheral | Usage in Firmware       |
+| 基地址       | 外设       | 固件中的用途            |
 | ------------ | ---------- | ----------------------- |
-| `0x40020000` | RESETS     | Subsystem reset control |
-| `0x40028000` | IO_BANK0   | GPIO function selection |
-| `0x40030000` | PADS_BANK0 | Pad configuration       |
-| `0x40040000` | XOSC       | Crystal oscillator      |
-| `0x40048000` | PLL_SYS    | System PLL (150 MHz)    |
+| `0x40020000` | RESETS     | 子系统复位控制          |
+| `0x40028000` | IO_BANK0   | GPIO 功能选择           |
+| `0x40030000` | PADS_BANK0 | 焊盘配置                |
+| `0x40040000` | XOSC       | 晶体振荡器              |
+| `0x40048000` | PLL_SYS    | 系统 PLL (150 MHz)      |
 | `0x4004c000` | PLL_USB    | USB PLL (48 MHz)        |
-| `0x40050000` | CLOCKS     | Clock generators        |
-| `0x40070000` | UART0      | Debug serial output     |
-| `0xd0000000` | SIO        | Single-cycle I/O (GPIO) |
-| `0xe000e010` | SysTick    | System timer (delay)    |
-| `0xe000ed88` | CPACR      | FPU access control      |
+| `0x40050000` | CLOCKS     | 时钟发生器              |
+| `0x40070000` | UART0      | 调试串口输出            |
+| `0xd0000000` | SIO        | 单周期 I/O (GPIO)       |
+| `0xe000e010` | SysTick    | 系统定时器 (延时)       |
+| `0xe000ed88` | CPACR      | FPU 访问控制            |
 
-### 8.2 GPIO Control (LED Blink)
+### 8.2 GPIO 控制 (LED 闪烁)
 
-The LED module writes directly to the SIO (Single-cycle I/O) registers
-to toggle GPIO25:
+LED 模块直接写 SIO (Single-cycle I/O) 寄存器
+来翻转 GPIO25:
 
 ```
 led::set_high (0x1000691c):
@@ -383,7 +383,7 @@ led::set_low (0x10006858):
     str     r1, [r0]                ; Set GPIO25 low
 ```
 
-GPIO25 is configured as a push-pull SIO output during `init_hardware`:
+GPIO25 在 `init_hardware` 期间被配置为推挽 SIO 输出:
 
 ```
 init_hardware (0x100073dc):
@@ -401,7 +401,7 @@ init_hardware (0x100073dc):
     str     r1, [r0]
 ```
 
-### 8.3 SysTick Timer (Delay)
+### 8.3 SysTick 定时器 (延时)
 
 ```
 init_hardware:
@@ -413,7 +413,7 @@ init_hardware:
     str     r2, [r1]
 ```
 
-### 8.4 UART0 Configuration
+### 8.4 UART0 配置
 
 ```
 uart::init:
@@ -426,24 +426,24 @@ uart::init:
 
 ---
 
-## 9. Pulley Interpreter Deep Dive
+## 9. Pulley 解释器深入剖析
 
-### 9.1 Architecture
+### 9.1 架构
 
-Pulley is Wasmtime's portable bytecode interpreter. Instead of emitting
-native ARM code (which would require a JIT and MMU), the build script
-AOT-compiles the Wasm component to Pulley bytecode during `cargo build`.
-At runtime, the ARM firmware interprets this bytecode instruction by
-instruction.
+Pulley 是 Wasmtime 的可移植字节码解释器. 构建脚本不生成
+本机 ARM 代码 (那需要 JIT 和 MMU), 而是在 `cargo build` 期间
+把 Wasm 组件 AOT 编译成 Pulley 字节码.
+运行时, ARM 固件逐条指令地解释这些
+字节码.
 
-### 9.2 Interpreter Entry (`InterpreterRef::call`)
+### 9.2 解释器入口 (`InterpreterRef::call`)
 
 ```
 Location:  0x1000d7b8  (2,304 bytes)
 ```
 
-This function is the bridge between native ARM code and the Pulley VM.
-Call sequence:
+这个函数是本机 ARM 代码与 Pulley 虚拟机之间的桥梁.
+调用顺序:
 
 ```
 run_wasm()
@@ -455,97 +455,97 @@ run_wasm()
           -> Interpreter::run()     ; Main dispatch loop
 ```
 
-### 9.3 Main Dispatch Loop (`Interpreter::run`)
+### 9.3 主派发循环 (`Interpreter::run`)
 
 ```
 Location:  0x10064ef4  (12,518 bytes)
 ```
 
-This is the hot loop that executes Pulley bytecode. It uses a two-level
-dispatch scheme:
+这是执行 Pulley 字节码的热点循环. 它采用两级
+派发方案:
 
-**Level 1: Primary opcode (1-byte)**
+**第 1 级: 主操作码 (1 字节)**
 
 ```armasm
 Interpreter::run (0x10064ef4):
     push    {r4-r7, lr}
     stmdb   sp!, {r8-r11}
     sub     sp, #12
-    mov.w   r8, #0x80000000         ; Sentinel value
+    mov.w   r8, #0x80000000         ; 哨兵值
 
 .fetch:
-    mov     r0, r1                  ; r1 = program counter (PC)
-    ldrb.w  r2, [r0], #1           ; Fetch 1-byte opcode, advance PC
-    str     r0, [sp, #8]            ; Save updated PC
+    mov     r0, r1                  ; r1 = 程序计数器 (PC)
+    ldrb.w  r2, [r0], #1           ; 取 1 字节操作码, PC 前进
+    str     r0, [sp, #8]            ; 保存更新后的 PC
 
-    tbh     [pc, r2, lsl #1]        ; Table Branch Halfword — 256-entry jump table
+    tbh     [pc, r2, lsl #1]        ; Table Branch Halfword - 256 项跳转表
 ```
 
-The `tbh` instruction is a Thumb-2 table branch. It reads a halfword
-from `pc + r2*2` and branches to `pc + offset*2`. This gives a direct
-computed goto to 256 possible opcode handlers.
+`tbh` 指令是 Thumb-2 的表分支. 它从 `pc + r2*2` 读取一个半字,
+然后跳转到 `pc + offset*2`. 这就实现了一个直接的
+计算跳转, 通向 256 个可能的操作码处理程序.
 
-**Level 2: Extended opcode (2-byte prefix)**
+**第 2 级: 扩展操作码 (2 字节前缀)**
 
-When the primary opcode is the "extended" sentinel (0xDC), a second
-2-byte opcode is fetched:
+当主操作码是 "扩展" 哨兵值 (0xDC) 时, 会再取一个
+2 字节的操作码:
 
 ```
 Location:  0x10068210  (16,456 bytes)
 ```
 
-### 9.4 Register File
+### 9.4 寄存器文件
 
-The Pulley VM uses a virtual register file stored in the `Vm` struct:
+Pulley 虚拟机使用一个虚拟寄存器文件, 存放在 `Vm` 结构体里:
 
-- **x0-x30**: 64-bit general-purpose registers (at offset `+0x200`,
-  8 bytes each)
-- **f0-f31**: 128-bit float/vector registers
-- **sp**: stack pointer (at offset `+0x40c` from Vm base)
-- **lr**: return address register
+- **x0-x30**: 64 位通用寄存器 (位于偏移 `+0x200`,
+  每个 8 字节)
+- **f0-f31**: 128 位浮点/向量寄存器
+- **sp**: 栈指针 (位于相对 Vm 基址的偏移 `+0x40c`)
+- **lr**: 返回地址寄存器
 
-### 9.5 Host Call Mechanism
+### 9.5 宿主调用机制
 
-When Pulley bytecode calls a host-imported function (like
-`gpio::set_high` or `timing::delay_ms`), the interpreter returns with
-code 0 (`CallIndirectHost`). The `InterpreterRef::call` loop:
+当 Pulley 字节码调用一个宿主导入的函数 (比如
+`gpio::set_high` 或 `timing::delay_ms`) 时, 解释器会带着返回码 0
+(`CallIndirectHost`) 返回. `InterpreterRef::call` 的循环会:
 
-1. Reads the host function index from the Pulley state
-2. Looks up the host function in the trap handler TLS
-3. Calls the native ARM host function directly
-4. Stores the return value back into Pulley registers
-5. Re-enters `Vm::call_run` to continue interpreting
+1. 从 Pulley 状态里读出宿主函数索引
+2. 在陷阱处理程序的 TLS 里查找这个宿主函数
+3. 直接调用本机 ARM 宿主函数
+4. 把返回值写回 Pulley 寄存器
+5. 重新进入 `Vm::call_run` 继续解释
 
 ---
 
-## 10. Embedded cwasm Blob
+## 10. 内嵌的 cwasm 数据块
 
-### 10.1 Location and Format
+### 10.1 位置与格式
 
-The precompiled Pulley bytecode is embedded in `.rodata` at
-`0x1008a059`, referenced by the `WASM_BINARY` constant. It is
-**24,680 bytes** (0x6068).
+预编译好的 Pulley 字节码内嵌在 `.rodata` 的
+`0x1008a059` 处, 由 `WASM_BINARY` 常量引用. 它
+有 **24,680 字节** (0x6068).
 
-The blob is itself an **ELF file** — Wasmtime's serialization format
-wraps Pulley bytecode in a standard ELF container:
+这个数据块本身就是一个 **ELF 文件** - Wasmtime 的序列化格式
+把 Pulley 字节码包在标准的 ELF 容器里:
 
 ```
 Hex dump at 0x1008a059:
 7f 45 4c 46 02 01 01 c8 ... .ELF....
 ```
 
-Header analysis:
+头部解析:
 
-| Field  | Value                          |
+| 字段   | 值                             |
 | ------ | ------------------------------ |
 | Magic  | `\x7fELF`                      |
-| Class  | ELF64 (byte `02` at offset 4)  |
-| Data   | Little-endian                  |
+| Class  | ELF64 (偏移 4 处的字节 `02`)   |
+| Data   | 小端                           |
 | Target | `pulley32-unknown-unknown-elf` |
 
-### 10.2 Build Pipeline
+### 10.2 构建流水线
 
-The cwasm is produced by the build script (`build.rs`):
+cwasm 由构建脚本 (`build.rs`) 生成:
 
 ```
 wasm-app/src/lib.rs
@@ -563,14 +563,14 @@ blinky.cwasm  (Pulley ELF container with pre-lowered bytecode)
 WASM_BINARY const in .rodata
 ```
 
-At runtime, `Component::deserialize()` reads this blob, validates the
-engine configuration matches (target, tunables, memory settings), and
-maps the Pulley bytecode sections for the interpreter.
+运行时, `Component::deserialize()` 读取这个数据块, 校验
+引擎配置是否匹配 (目标, tunables, 内存设置), 然后
+为解释器映射 Pulley 字节码的各段.
 
-### 10.3 Guest Code Logic
+### 10.3 客体代码逻辑
 
-The guest component (`wasm-app/src/lib.rs`) compiles down to Pulley
-bytecode that implements:
+客体组件 (`wasm-app/src/lib.rs`) 编译成实现下面逻辑的 Pulley
+字节码:
 
 ```
 const LED_PIN: u32 = 25;
@@ -582,15 +582,15 @@ loop {
 }
 ```
 
-Each `call_import` triggers the `CallIndirectHost` return path in the
-Pulley interpreter, transitioning from bytecode execution to native ARM
-host functions.
+每次 `call_import` 都会触发 Pulley 解释器里的 `CallIndirectHost`
+返回路径, 从字节码执行切换到本机 ARM
+宿主函数.
 
 ---
 
-## 11. Host-Guest Call Flow
+## 11. 宿主与客体调用流程
 
-### 11.1 Full Call Chain for `gpio::set_high(25)`
+### 11.1 `gpio::set_high(25)` 的完整调用链
 
 ```
 [Pulley VM]  Bytecode: call_indirect_host #0, args=[25]
@@ -609,7 +609,7 @@ host functions.
             Bit 25 set = GPIO25 driven high (LED on)
 ```
 
-### 11.2 Full Call Chain for `timing::delay_ms(500)`
+### 11.2 `timing::delay_ms(500)` 的完整调用链
 
 ```
 [Pulley VM]  Bytecode: call_indirect_host #2, args=[500]
@@ -624,10 +624,10 @@ host functions.
 [Hardware]  SysTick countdown for 500 ms (polling loop)
 ```
 
-### 11.3 UART Diagnostic Output
+### 11.3 UART 诊断输出
 
-After setting or clearing the GPIO, the host function writes a
-diagnostic message via UART0:
+置位或清除 GPIO 之后, 宿主函数会通过 UART0 写一条
+诊断信息:
 
 ```
 led::set_high:
@@ -639,179 +639,179 @@ led::set_low:
 
 ---
 
-## 12. RE Observations
+## 12. 逆向观察
 
-### 12.1 Binary Composition
+### 12.1 二进制构成
 
-The firmware is ~99.6% Wasmtime runtime, ~0.4% application code:
+固件里约 99.6% 是 Wasmtime 运行时, 约 0.4% 是应用代码:
 
-| Component                   | Approx Size | % of .text |
+| 组成                        | 大致大小    | 占 .text 比例 |
 | --------------------------- | ----------- | ---------- |
-| Wasmtime runtime            | ~542 KiB    | 99.4%      |
-| Pulley interpreter (run)    | 12.2 KiB    | 2.3%       |
-| Pulley decoder (extended)   | 16.1 KiB    | 3.0%       |
-| Serde deserialization       | ~50 KiB     | 9.2%       |
-| Application (led+uart+main) | ~2.5 KiB    | 0.5%       |
+| Wasmtime 运行时             | ~542 KiB    | 99.4%      |
+| Pulley 解释器 (run)         | 12.2 KiB    | 2.3%       |
+| Pulley 解码器 (extended)    | 16.1 KiB    | 3.0%       |
+| Serde 反序列化              | ~50 KiB     | 9.2%       |
+| 应用代码 (led+uart+main)    | ~2.5 KiB    | 0.5%       |
 
-### 12.2 What a Reverse Engineer Would See in Ghidra
+### 12.2 逆向工程师在 Ghidra 里会看到什么
 
-Opening this binary in Ghidra with the ARM Cortex processor module:
+用 ARM Cortex 处理器模块在 Ghidra 里打开这个二进制:
 
-1. **Immediate recognition**: ELF with symbols — Ghidra will auto-analyze
-   and name ~7,700 functions. Rust mangled names are long but readable.
+1. **一眼就能认出**: 带符号的 ELF - Ghidra 会自动分析并命名
+   约 7,700 个函数. Rust 的名称修饰结果很长, 但可读.
 
-2. **Vector table**: Ghidra's ARM analyzer will find the vector table at
-   `0x10000000` and identify the Reset handler.
+2. **中断向量表**: Ghidra 的 ARM 分析器会找到位于
+   `0x10000000` 的向量表, 并识别出 Reset 处理程序.
 
-3. **The `tbh` dispatch**: The Pulley interpreter's `tbh` (Table Branch
-   Halfword) at `0x10064f18` creates a 256-entry switch statement. Ghidra
-   will identify this as a switch/case and create labeled branches, but
-   the sheer size (12 KiB of handlers) makes manual analysis tedious.
+3. **`tbh` 派发**: Pulley 解释器在 `0x10064f18` 处的 `tbh` (Table Branch
+   Halfword) 构成一个 256 项的 switch 语句. Ghidra
+   会把它识别成 switch/case 并生成带标签的分支, 但
+   规模实在太大 (12 KiB 的处理程序), 手工分析很枯燥.
 
-4. **No obfuscation**: The binary is not stripped, not packed, and has
-   full symbol tables. All function boundaries are recoverable.
+4. **没有混淆**: 二进制没有 strip, 没有加壳, 而且带
+   完整的符号表. 所有函数边界都能恢复出来.
 
-5. **The cwasm blob**: A reverse engineer would find the `\x7fELF` magic
-   inside `.rodata` and recognize it as an embedded ELF. Extracting and
-   analyzing it separately reveals Pulley bytecode — an unfamiliar ISA
-   that requires understanding the Pulley opcode table to disassemble.
+5. **cwasm 数据块**: 逆向工程师会在 `.rodata` 里发现 `\x7fELF` 魔数,
+   认出这是一个内嵌的 ELF. 把它单独提取出来分析, 就会看到 Pulley
+   字节码 - 一套陌生的 ISA, 要反汇编它得先弄懂
+   Pulley 的操作码表.
 
-6. **Hardware identification**: The peripheral base addresses
-   (`0xd0000014` SIO, `0x40070000` UART0) immediately identify this as
-   an RP2350/RP2040-family device.
+6. **硬件识别**: 外设基地址
+   (`0xd0000014` SIO, `0x40070000` UART0) 立刻就能确定这是
+   RP2350/RP2040 系列的芯片.
 
-### 12.3 Security Observations
+### 12.3 安全性观察
 
-- **No code signing**: The ELF is loaded as a plain binary, no signature
-  verification at the Wasmtime level (RP2350 Secure Boot is separate).
+- **没有代码签名**: ELF 以普通二进制方式加载, Wasmtime 层面不做
+  签名校验 (RP2350 的安全启动是另一回事).
 
-- **Full symbol table**: 383 KiB of debug strings reveal internal
-  structure, function names, and crate dependencies. A production build
-  should strip symbols (`cargo build --release` + `strip`).
+- **完整符号表**: 383 KiB 的调试字符串暴露了内部
+  结构, 函数名和 crate 依赖. 生产构建
+  应该 strip 符号 (`cargo build --release` + `strip`).
 
-- **Deterministic execution**: No interrupts, no DMA — the firmware is
-  entirely sequential and predictable, which simplifies both RE and
-  timing analysis.
+- **执行是确定性的**: 没有中断, 没有 DMA - 固件
+  完全是顺序且可预测的, 这让逆向和
+  时序分析都变简单了.
 
-- **Wasmtime sandboxing**: The Wasm guest cannot access hardware directly;
-  all I/O goes through the host's `set_high`, `set_low`, and `delay_ms`
-  functions, which bounds the guest's capability to LED control and
-  timing.
+- **Wasmtime 沙箱**: Wasm 客体无法直接访问硬件;
+  所有 I/O 都经过宿主的 `set_high`, `set_low` 和 `delay_ms`
+  函数, 这就把客体的能力限制在 LED 控制和
+  延时上.
 
-### 12.4 Key Addresses Quick Reference
+### 12.4 关键地址速查
 
-| Address      | What                                          |
+| 地址         | 说明                                          |
 | ------------ | --------------------------------------------- |
-| `0x10000000` | Vector table (initial SP + exception vectors) |
-| `0x100000f8` | RP2350 IMAGE_DEF boot block                   |
-| `0x1000010c` | Reset handler (entry point)                   |
+| `0x10000000` | 向量表 (初始 SP + 异常向量)                   |
+| `0x100000f8` | RP2350 IMAGE_DEF 启动块                       |
+| `0x1000010c` | Reset 处理程序 (入口点)                       |
 | `0x100073dc` | init_hardware                                 |
 | `0x100075a8` | __cortex_m_rt_main                            |
 | `0x10007760` | run_wasm                                      |
 | `0x10007fb8` | init_heap                                     |
-| `0x1000691c` | led::set_high (host binding)                  |
-| `0x10006858` | led::set_low (host binding)                   |
-| `0x10008410` | main (thin wrapper)                           |
+| `0x1000691c` | led::set_high (宿主绑定)                      |
+| `0x10006858` | led::set_low (宿主绑定)                       |
+| `0x10008410` | main (很薄的包装)                             |
 | `0x10007614` | uart::write_msg                               |
-| `0x10064ef4` | Pulley Interpreter::run (dispatch loop)       |
+| `0x10064ef4` | Pulley Interpreter::run (派发循环)            |
 | `0x10068210` | Pulley decode_one_extended                    |
-| `0x1000d7b8` | InterpreterRef::call (native->Pulley bridge)  |
-| `0x1008a059` | Embedded cwasm blob (Pulley ELF)              |
-| `0x1007c7ec` | DefaultHandler (infinite loop)                |
-| `0x10084d74` | HardFault (infinite loop)                     |
-| `0xd0000014` | SIO GPIO_OUT_SET register                     |
-| `0xd0000018` | SIO GPIO_OUT_CLR register                     |
-| `0x40070000` | UART0 base                                    |
+| `0x1000d7b8` | InterpreterRef::call (本机到 Pulley 的桥)     |
+| `0x1008a059` | 内嵌的 cwasm 数据块 (Pulley ELF)              |
+| `0x1007c7ec` | DefaultHandler (死循环)                       |
+| `0x10084d74` | HardFault (死循环)                            |
+| `0xd0000014` | SIO GPIO_OUT_SET 寄存器                       |
+| `0xd0000018` | SIO GPIO_OUT_CLR 寄存器                       |
+| `0x40070000` | UART0 基址                                    |
 | `0x2000003c` | HEAP_MEM (256 KiB)                            |
-| `0x20080000` | Initial stack pointer                         |
+| `0x20080000` | 初始栈指针                                    |
 
 ---
 
-## 13. Pulley Instruction Set Architecture
+## 13. Pulley 指令集架构
 
-### 13.1 Overview
+### 13.1 概览
 
-Pulley is Wasmtime's portable bytecode interpreter (wasmtime 43.0.0,
-`pulley-interpreter` crate v43.0.0). It defines a register-based ISA
-with variable-length instructions, designed for efficient interpretation
-rather than native execution.
+Pulley 是 Wasmtime 的可移植字节码解释器 (wasmtime 43.0.0,
+`pulley-interpreter` crate v43.0.0). 它定义了一套基于寄存器的
+ISA, 指令长度可变, 为高效解释而不是本机执行
+而设计.
 
-### 13.2 Encoding Format
+### 13.2 编码格式
 
-**Primary opcodes** use a 1-byte opcode followed by operands:
+**主操作码** 用 1 字节操作码加上操作数:
 
 ```
 [opcode:1] [operands:0-9]
 ```
 
-There are **220 primary opcodes** (0x00-0xDB). Opcode `0xDC` is the
-**ExtendedOp** sentinel — when the interpreter encounters it, it reads
-a 2-byte extended opcode:
+一共有 **220 个主操作码** (0x00-0xDB). 操作码 `0xDC` 是
+**ExtendedOp** 哨兵值 - 解释器遇到它时, 会再读一个
+2 字节的扩展操作码:
 
 ```
 [0xDC] [ext_opcode:2] [operands:0-N]
 ```
 
-There are **310 extended opcodes** (0x0000-0x0135) for SIMD, float
-conversions, and complex operations.
+一共有 **310 个扩展操作码** (0x0000-0x0135), 用于 SIMD, 浮点
+转换以及复杂运算.
 
-### 13.3 Register File
+### 13.3 寄存器文件
 
-Pulley has 32 general-purpose 64-bit registers:
+Pulley 有 32 个 64 位通用寄存器:
 
-| Register    | Index | Purpose                                  |
+| 寄存器      | 编号  | 用途                                     |
 | ----------- | ----- | ---------------------------------------- |
-| `x0`-`x15`  | 0-15  | Arguments, return values, temporaries    |
-| `x16`-`x25` | 16-25 | Callee-saved (pushed by push_frame_save) |
-| `x26`-`x29` | 26-29 | Callee-saved                             |
-| `sp`        | 30    | Stack pointer                            |
-| `spilltmp0` | 31    | Spill temporary (compiler internal)      |
+| `x0`-`x15`  | 0-15  | 参数, 返回值, 临时值                     |
+| `x16`-`x25` | 16-25 | 被调用者保存 (由 push_frame_save 压栈)   |
+| `x26`-`x29` | 26-29 | 被调用者保存                             |
+| `sp`        | 30    | 栈指针                                   |
+| `spilltmp0` | 31    | 溢出临时寄存器 (编译器内部用)            |
 
-In addition, there are 32 float/vector registers (`f0`-`f31`, 128 bits
-each) and a dedicated link register (`lr`) for return addresses.
+此外还有 32 个浮点/向量寄存器 (`f0`-`f31`, 每个 128 位),
+以及一个专门用于返回地址的链接寄存器 (`lr`).
 
-### 13.4 Key Instructions Used by This Binary
+### 13.4 本二进制用到的关键指令
 
-| Opcode | Mnemonic            | Operands           | Description                              |
+| 操作码 | 助记符              | 操作数             | 说明                                     |
 | ------ | ------------------- | ------------------ | ---------------------------------------- |
-| `0x00` | `nop`               | (none)             | No operation                             |
-| `0x01` | `ret`               | (none)             | Return to caller (pop lr, branch)        |
-| `0x02` | `call`              | `i32 offset`       | Call relative, save lr                   |
-| `0x07` | `call_indirect`     | `r`                | Call through register (function pointer) |
-| `0x08` | `jump`              | `i32 offset`       | Unconditional relative jump              |
-| `0x0a` | `br_if32`           | `r, i32 offset`    | Branch if reg != 0 (32-bit test)         |
-| `0x41` | `xmov`              | `r_dst, r_src`     | Copy 64-bit register                     |
-| `0x42` | `xzero`             | `r`                | Set register to 0                        |
-| `0x44` | `xconst8`           | `r, i8`            | Load sign-extended 8-bit immediate       |
-| `0x45` | `xconst16`          | `r, i16`           | Load sign-extended 16-bit immediate      |
-| `0x48` | `xadd32`            | `r, r, r`          | 32-bit add                               |
-| `0x84` | `xload32le_o32`     | `r, r, i32`        | Load 32-bit LE from base + offset        |
-| `0x88` | `xstore32le_o32`    | `r, i32, r`        | Store 32-bit LE to base + offset         |
-| `0xa8` | `push_frame`        | (none)             | Save lr, allocate frame                  |
-| `0xa9` | `pop_frame`         | (none)             | Restore lr, deallocate frame             |
-| `0xaa` | `push_frame_save`   | `u16 amt, bitmask` | Save lr + callee-saved regs, alloc frame |
-| `0xab` | `pop_frame_restore` | `u16 amt, bitmask` | Restore callee-saved regs + lr, dealloc  |
-| `0xdc` | *(extended prefix)* | `u16 ext_op, ...`  | Extended opcode sentinel                 |
+| `0x00` | `nop`               | (无)               | 空操作                                   |
+| `0x01` | `ret`               | (无)               | 返回调用者 (弹出 lr, 跳转)               |
+| `0x02` | `call`              | `i32 offset`       | 相对调用, 保存 lr                        |
+| `0x07` | `call_indirect`     | `r`                | 通过寄存器调用 (函数指针)                |
+| `0x08` | `jump`              | `i32 offset`       | 无条件相对跳转                           |
+| `0x0a` | `br_if32`           | `r, i32 offset`    | 寄存器 != 0 时分支 (32 位判断)           |
+| `0x41` | `xmov`              | `r_dst, r_src`     | 复制 64 位寄存器                         |
+| `0x42` | `xzero`             | `r`                | 把寄存器置 0                             |
+| `0x44` | `xconst8`           | `r, i8`            | 加载符号扩展的 8 位立即数                |
+| `0x45` | `xconst16`          | `r, i16`           | 加载符号扩展的 16 位立即数               |
+| `0x48` | `xadd32`            | `r, r, r`          | 32 位加法                                |
+| `0x84` | `xload32le_o32`     | `r, r, i32`        | 从 base + offset 加载 32 位小端          |
+| `0x88` | `xstore32le_o32`    | `r, i32, r`        | 把 32 位小端存入 base + offset           |
+| `0xa8` | `push_frame`        | (无)               | 保存 lr, 分配栈帧                        |
+| `0xa9` | `pop_frame`         | (无)               | 恢复 lr, 释放栈帧                        |
+| `0xaa` | `push_frame_save`   | `u16 amt, bitmask` | 保存 lr 和被调用者保存寄存器, 分配栈帧   |
+| `0xab` | `pop_frame_restore` | `u16 amt, bitmask` | 恢复被调用者保存寄存器和 lr, 释放栈帧    |
+| `0xdc` | *(扩展前缀)*        | `u16 ext_op, ...`  | 扩展操作码哨兵值                         |
 
-#### Extended Opcodes
+#### 扩展操作码
 
-| Ext Op   | Mnemonic             | Operands | Description                     |
-| -------- | -------------------- | -------- | ------------------------------- |
-| `0x0001` | `call_indirect_host` | `u8`     | Call host function by index     |
-| `0x0002` | `xpcadd`             | `r, i32` | PC-relative address computation |
-| `0x0003` | `xmov_fp`            | `r`      | Move frame pointer to register  |
+| 扩展码   | 助记符               | 操作数   | 说明                        |
+| -------- | -------------------- | -------- | --------------------------- |
+| `0x0001` | `call_indirect_host` | `u8`     | 按索引调用宿主函数          |
+| `0x0002` | `xpcadd`             | `r, i32` | PC 相对地址计算             |
+| `0x0003` | `xmov_fp`            | `r`      | 把帧指针移到寄存器          |
 
-`call_indirect_host` is the critical instruction for guest-to-host
-transitions. The operand byte identifies which host import to call.
+`call_indirect_host` 是客体到宿主切换的关键指令. 操作数字节
+指明了要调用哪个宿主导入.
 
 ---
 
-## 14. Pulley Bytecode Disassembly
+## 14. Pulley 字节码反汇编
 
-### 14.1 Guest::run() — Blink Loop
+### 14.1 Guest::run() - 闪烁循环
 
-The guest component's `run()` function compiles to Pulley bytecode that
-implements the LED blink loop. The structure is:
+客体组件的 `run()` 函数编译成实现 LED 闪烁循环的
+Pulley 字节码. 结构如下:
 
 ```
 ; function[N]: Guest::run()
@@ -851,46 +851,46 @@ xload32le_o32 x_delay_fn, x_vmctx, ...     ; delay_ms fn ptr
     xmov x1, x_vmctx
     call_indirect x_delay_fn           ; delay_ms(500)
 
-    jump .loop                         ; Infinite loop — never returns
+    jump .loop                         ; Infinite loop - never returns
 ```
 
-**Key observations:**
+**关键观察:**
 
-- Pin 25 is a compile-time constant (`xconst8 x2, 25`) loaded every
-  iteration — the compiler does not hoist it out of the loop
-- Delay 500 ms is re-loaded each iteration (`xconst16 x2, 500`)
-- `call_indirect` through function pointer registers — these are
-  loaded from the VMContext component tables
-- The function never returns — `jump` creates an infinite loop
+- 引脚 25 是编译期常量 (`xconst8 x2, 25`), 每次迭代都重新
+  加载 - 编译器没有把它提到循环外面
+- 500 ms 的延时每次迭代也重新加载 (`xconst16 x2, 500`)
+- `call_indirect` 通过函数指针寄存器调用 - 这些指针
+  从 VMContext 的组件表里加载
+- 函数从不返回 - `jump` 构成一个死循环
 
-### 14.2 panic() — Infinite Loop
+### 14.2 panic() - 死循环
 
 ```
 push_frame
 jump 0x0                              ; jump to self (infinite spin)
 ```
 
-Matches `fn panic(_: &PanicInfo) -> ! { loop { spin_loop() } }`.
+这与 `fn panic(_: &PanicInfo) -> ! { loop { spin_loop() } }` 对应.
 
 ---
 
-## 15. Ghidra Analysis Walkthrough
+## 15. Ghidra 分析实战
 
-### 15.1 Import and Initial Analysis
+### 15.1 导入与初步分析
 
-1. **File -> Import File**: Select the ELF. Ghidra auto-detects
-   `ARM:LE:32:v8T` (ARMv8 Thumb). Accept the defaults.
+1. **File -> Import File**: 选中那个 ELF. Ghidra 会自动识别出
+   `ARM:LE:32:v8T` (ARMv8 Thumb). 保持默认选项.
 
-2. **Auto-analysis**: Click "Yes" when prompted to analyze. Ghidra will:
-   - Identify 2,375 functions from the symbol table
-   - Resolve Rust-mangled names
-   - Detect the ARM vector table at `0x10000000`
-   - Find cross-references between functions
-   - Identify the `tbh` dispatch table in the Pulley interpreter
+2. **自动分析**: 弹出提示时点 "Yes". Ghidra 会:
+   - 从符号表里识别出 2,375 个函数
+   - 还原 Rust 的名称修饰
+   - 检测出位于 `0x10000000` 的 ARM 向量表
+   - 找出函数之间的交叉引用
+   - 识别出 Pulley 解释器里的 `tbh` 派发表
 
-3. **Analysis time**: ~30 seconds for this 1.12 MiB binary.
+3. **分析耗时**: 这个 1.12 MiB 的二进制大约 30 秒.
 
-### 15.2 Symbol Tree Navigation
+### 15.2 符号树导航
 
 ```
 Functions/ (2,375 total)
@@ -907,58 +907,58 @@ Functions/ (2,375 total)
 +-- ... (2,362 more)
 ```
 
-### 15.3 Finding and Extracting the cwasm Blob
+### 15.3 找到并提取 cwasm 数据块
 
-1. Navigate to `0x1008a059` in the Listing view
-2. Ghidra shows the `7f 45 4c 46` (ELF magic) bytes
-3. Right-click -> **Select Bytes** -> enter length 24680 (0x6068)
-4. **File -> Export Selection** -> Binary format -> save as `blinky.cwasm`
+1. 在 Listing 视图里跳转到 `0x1008a059`
+2. Ghidra 会显示 `7f 45 4c 46` (ELF 魔数) 这些字节
+3. 右键 -> **Select Bytes** -> 输入长度 24680 (0x6068)
+4. **File -> Export Selection** -> Binary 格式 -> 保存为 `blinky.cwasm`
 
-The extracted file is a valid ELF64 targeting `pulley32-unknown-unknown-elf`.
-To analyze the Pulley bytecode inside this blob, use the
-[G-Pulley](https://github.com/mytechnotalent/G-Pulley) Ghidra extension.
+提取出来的文件是一个合法的 ELF64, 目标平台为 `pulley32-unknown-unknown-elf`.
+要分析这个数据块里的 Pulley 字节码, 可以使用
+[G-Pulley](https://github.com/mytechnotalent/G-Pulley) 这个 Ghidra 扩展.
 
-### 15.4 Ghidra + G-Pulley: Full-Stack Analysis
+### 15.4 Ghidra + G-Pulley: 全栈分析
 
-With the [G-Pulley](https://github.com/mytechnotalent/G-Pulley) extension
-installed, Ghidra can analyze **both** the ARM host firmware and the
-Pulley guest bytecode:
+装好 [G-Pulley](https://github.com/mytechnotalent/G-Pulley) 扩展之后,
+Ghidra 就能同时分析 ARM 宿主固件和
+Pulley 客体字节码:
 
-| Aspect                  | ARM Host Code             | Pulley Guest Code (G-Pulley)        |
-| ----------------------- | ------------------------- | ----------------------------------- |
-| Disassembly             | Full ARM Thumb-2          | Full Pulley ISA mnemonics           |
-| Function identification | Automatic from symbols    | Automatic (cwasm loader + analyzer) |
-| Cross-references        | Full xref graph           | Function calls and branches         |
-| Control flow            | CFG with switch detection | Branch and jump targets resolved    |
-| Host call boundary      | `InterpreterRef::call`    | `call_indirect_host` instructions   |
+| 方面           | ARM 宿主代码              | Pulley 客体代码 (G-Pulley)          |
+| -------------- | ------------------------- | ----------------------------------- |
+| 反汇编         | 完整的 ARM Thumb-2        | 完整的 Pulley ISA 助记符            |
+| 函数识别       | 从符号表自动识别          | 自动 (cwasm 加载器 + 分析器)        |
+| 交叉引用       | 完整的 xref 图            | 函数调用与分支                      |
+| 控制流         | 带 switch 识别的 CFG      | 已解析的分支与跳转目标              |
+| 宿主调用边界   | `InterpreterRef::call`    | `call_indirect_host` 指令           |
 
-**G-Pulley provides**:
+**G-Pulley 提供**:
 
-- Custom ELF loader that extracts the `.cwasm` blob from the firmware
-  and loads Pulley bytecode into Ghidra's Listing view
-- SLEIGH processor spec for Pulley 32-bit and 64-bit ISA (Wasmtime v43.0.0)
-- Post-load analyzer that discovers functions, trampolines, and host calls
-- Full opcode decoding for all 220 primary + 310 extended Pulley opcodes
+- 自定义 ELF 加载器, 能从固件里提取 `.cwasm` 数据块,
+  并把 Pulley 字节码加载进 Ghidra 的 Listing 视图
+- Pulley 32 位与 64 位 ISA (Wasmtime v43.0.0) 的 SLEIGH 处理器描述
+- 加载后分析器, 用于发现函数, 蹦床和宿主调用
+- 对全部 220 个主操作码和 310 个扩展 Pulley 操作码的完整解码
 
-### 15.5 Recommended Ghidra Workflow
+### 15.5 推荐的 Ghidra 工作流
 
-1. **Install G-Pulley**: Download from
-   [G-Pulley releases](https://github.com/mytechnotalent/G-Pulley/releases).
-   In Ghidra: **File -> Install Extensions -> + -> select zip**. Restart.
+1. **安装 G-Pulley**: 从
+   [G-Pulley releases](https://github.com/mytechnotalent/G-Pulley/releases) 下载.
+   在 Ghidra 里: **File -> Install Extensions -> + -> 选中 zip**. 重启.
 
-2. **Analyze the ARM firmware**: Import the ELF. Ghidra auto-detects
-   `ARM:LE:32:v8T`. Run auto-analysis. Follow Reset -> main ->
-   `__cortex_m_rt_main` -> `run_wasm` for the boot sequence.
+2. **分析 ARM 固件**: 导入 ELF. Ghidra 会自动识别出
+   `ARM:LE:32:v8T`. 运行自动分析. 沿着 Reset -> main ->
+   `__cortex_m_rt_main` -> `run_wasm` 追启动流程.
 
-3. **Examine host bindings**: Navigate to `led::set_high` and
-   `led::set_low` to see the SIO GPIO register writes. Navigate to
-   `uart::write_msg` for the UART diagnostic output path.
+3. **查看宿主绑定**: 跳到 `led::set_high` 和
+   `led::set_low`, 看 SIO GPIO 的寄存器写入. 跳到
+   `uart::write_msg` 看 UART 诊断输出的路径.
 
-4. **Trace the interpreter**: Start at `InterpreterRef::call`, follow
-   into `Interpreter::run`, examine the `tbh` switch to understand how
-   each opcode category is handled.
+4. **追踪解释器**: 从 `InterpreterRef::call` 开始, 跟到
+   `Interpreter::run` 里, 研究 `tbh` 跳转表, 弄清
+   每一类操作码是怎么处理的.
 
-5. **Analyze the Pulley bytecode**: Import the firmware ELF again using
-   G-Pulley's cwasm loader (select "Pulley cwasm" format). G-Pulley
-   extracts the embedded cwasm blob, disassembles all Pulley opcodes,
-   and identifies guest functions, trampolines, and host calls.
+5. **分析 Pulley 字节码**: 用 G-Pulley 的 cwasm 加载器再导入一次
+   固件 ELF (选择 "Pulley cwasm" 格式). G-Pulley 会
+   提取内嵌的 cwasm 数据块, 反汇编所有 Pulley 操作码,
+   并识别出客体函数, 蹦床和宿主调用.

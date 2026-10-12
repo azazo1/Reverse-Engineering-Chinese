@@ -1,15 +1,15 @@
-# Chapter 27: uart.rs — The Echo State Machine
+# Chapter 27: uart.rs - 回显状态机
 
-## Introduction
+## 引言
 
-`uart.rs` is the UART driver's pure logic core: `UartController` converts an
-incoming byte into the exact byte slice to echo back, and keeps a running echo
-statistic. This chapter reproduces the complete file, then dissects the single
-large method that makes echo work — `process_char`.
+`uart.rs` 是 UART 驱动的纯逻辑核心: `UartController` 把收到的字节
+转换成需要回显回去的那段字节切片, 并维护一份回显统计. 本章
+完整重现这个文件, 然后逐一剖析那个让回显工作的
+大方法 - `process_char`.
 
-## Complete Source Code
+## 完整源代码
 
-Here is `src/uart.rs` in full:
+下面是 `src/uart.rs` 的完整内容:
 
 ```rust
 /*
@@ -44,11 +44,11 @@ Here is `src/uart.rs` in full:
 //! FILE: uart.rs
 //!
 //! DESCRIPTION:
-//! RP2350 UART Echo State Machine.
+//! RP2350 UART 回显状态机.
 //!
 //! BRIEF:
-//! Implements UART character echo logic.
-//! Provides testable state machine for echo functionality.
+//! 实现 UART 字符回显逻辑.
+//! 为回显功能提供可测试的状态机.
 //!
 //! AUTHOR: Kevin Thomas
 //! CREATION DATE: December 4, 2025
@@ -56,14 +56,14 @@ Here is `src/uart.rs` in full:
 
 use crate::config::{BACKSPACE, BACKSPACE_SEQ, DELETE};
 
-/// UART controller with echo tracking.
+/// 带回显计数的 UART 控制器.
 ///
 /// # Details
-/// Maintains UART echo count for statistics.
-/// Provides methods for character processing with backspace support.
+/// 维护用于统计的 UART 回显计数.
+/// 提供带退格支持的字符处理方法.
 ///
 /// # Fields
-/// * `echo_count` - Number of characters echoed
+/// * `echo_count` - 已回显的字符数
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[allow(dead_code)]
 pub struct UartController {
@@ -71,13 +71,13 @@ pub struct UartController {
 }
 
 impl Default for UartController {
-    /// Returns default UartController instance.
+    /// 返回默认的 UartController 实例.
     ///
     /// # Details
-    /// Delegates to new() for initialization.
+    /// 把初始化工作委托给 new().
     ///
     /// # Returns
-    /// * `Self` - New UartController with default values
+    /// * `Self` - 带默认值的新 UartController
     #[allow(dead_code)]
     fn default() -> Self {
         Self::new()
@@ -85,30 +85,30 @@ impl Default for UartController {
 }
 
 impl UartController {
-    /// Creates new UART controller with default settings.
+    /// 创建带默认设置的新 UART 控制器.
     ///
     /// # Details
-    /// Initializes controller with zero echo count.
-    /// Ready to receive characters immediately.
+    /// 把回显计数初始化为零.
+    /// 立刻就能接收字符.
     ///
     /// # Returns
-    /// * `Self` - New UartController instance
+    /// * `Self` - 新的 UartController 实例
     #[allow(dead_code)]
     pub fn new() -> Self {
         Self { echo_count: 0 }
     }
 
-    /// Processes a received character and returns echo response.
+    /// 处理收到的字符并返回回显响应.
     ///
     /// # Details
-    /// Handles backspace by returning erase sequence.
-    /// Normal characters are echoed as-is.
+    /// 对退格返回擦除序列.
+    /// 普通字符原样回显.
     ///
     /// # Arguments
-    /// * `ch` - The character received
+    /// * `ch` - 收到的字符
     ///
     /// # Returns
-    /// * `&'static [u8]` - Bytes to echo back
+    /// * `&'static [u8]` - 要回显回去的字节
     #[allow(dead_code)]
     pub fn process_char(&mut self, ch: u8) -> &'static [u8] {
         self.echo_count += 1;
@@ -169,10 +169,10 @@ impl UartController {
         }
     }
 
-    /// Returns total echo count.
+    /// 返回回显总数.
     ///
     /// # Returns
-    /// * `u64` - Number of characters echoed
+    /// * `u64` - 已回显的字符数
     #[allow(dead_code)]
     pub fn echo_count(&self) -> u64 {
         self.echo_count
@@ -183,7 +183,7 @@ impl UartController {
 mod tests {
     use super::*;
 
-    // ==================== UartController Construction Tests ====================
+    // ==================== UartController 构造测试 ====================
 
     #[test]
     fn test_new_controller() {
@@ -198,7 +198,7 @@ mod tests {
         assert_eq!(default.echo_count(), new.echo_count());
     }
 
-    // ==================== Character Processing Tests ====================
+    // ==================== 字符处理测试 ====================
 
     #[test]
     fn test_process_char_returns_same() {
@@ -332,7 +332,7 @@ mod tests {
         assert_eq!(ctrl.echo_count(), 4);
     }
 
-    // ==================== Trait Tests ====================
+    // ==================== trait 测试 ====================
 
     #[test]
     fn test_clone() {
@@ -372,10 +372,10 @@ mod tests {
 }
 ```
 
-The whole machine is one struct, three methods, and a wide `match`. The tests
-land in three banners: construction, character processing, and traits.
+整台机器就是一个结构体, 三个方法, 外加一个很宽的 `match`. 测试
+分成三块横幅: 构造, 字符处理和 trait.
 
-## The Controller Struct and new
+## 控制器结构体与 new
 
 ```rust
 pub struct UartController {
@@ -383,15 +383,15 @@ pub struct UartController {
 }
 ```
 
-One field — the prior 's with a single `u64` counter. Derives match the pattern
-of `LedController` and `ButtonController`: `Clone, Copy, Debug, PartialEq, Eq`.
-`new()` starts the counter at zero. `echo_count()` is the trivial getter.
-`UartController` is the smallest controller in the course, and it needs the
-largest `match` — the opposite of the blink driver's one-line toggle.
+只有一个字段 - 和前面几个控制器一样, 只带一个 `u64` 计数器. 派生列表与
+`LedController` 和 `ButtonController` 完全一致: `Clone, Copy, Debug, PartialEq, Eq`.
+`new()` 把计数器从零开始. `echo_count()` 是最简单的取值方法.
+`UartController` 是本课程里最小的控制器, 而它需要的却是
+最大的 `match` - 这与闪烁驱动那个一行的 toggle 正好相反.
 
 ## process_char
 
-Everything interesting lives here:
+所有有意思的东西都在这里:
 
 ```rust
 pub fn process_char(&mut self, ch: u8) -> &'static [u8] {
@@ -404,31 +404,31 @@ pub fn process_char(&mut self, ch: u8) -> &'static [u8] {
 }
 ```
 
-Three design decisions, in order:
+三个设计决定, 按顺序看:
 
-1. **Count every character** — `self.echo_count += 1` unconditionally, before
-   any branching. Even a byte that produces no echo (unknown) is counted,
-   because `main` received it. `test_backspace_increments_count` and
-   `test_mixed_chars_and_backspace` pin this.
+1. **每个字符都计数** - `self.echo_count += 1` 是无条件执行的, 放在
+   任何分支之前. 即使某个字节不产生回显 (未知字节) 也会被计数,
+   因为 `main` 确实收到了它. `test_backspace_increments_count` 和
+   `test_mixed_chars_and_backspace` 把这一点钉死了.
 
-2. **Backspace short-circuit** — Either erase spelling returns the three-byte
-   `BACKSPACE_SEQ`. This is faster than matching the same range twice and
-   keeps `BACKSPACE`/`DELETE` as named config constants.
+2. **退格短路** - 两种擦除写法都返回三字节的
+   `BACKSPACE_SEQ`. 这比把同一段范围匹配两次更快, 而且
+   让 `BACKSPACE`/`DELETE` 保持为有名字的配置常量.
 
-3. **Exhaustive-match on the rest** — Control characters and printable ASCII
-   are echoed verbatim; anything outside the table falls to `_ => b""`. The
-   `_` arm guarantees the match never misses a byte and never needs a megabyte
-   of arms.
+3. **其余部分用穷尽 match** - 控制字符和可打印 ASCII
+   都原样回显; 表外的一切都落到 `_ => b""`. 这个
+   `_` 分支保证 match 永远不会漏掉任何字节, 也永远不需要堆上
+   一大堆分支.
 
-The return type deserves attention: `&'static [u8]`. Every arm returns a
-lifetime-bound slice — a byte-string literal like `b"!"`, or the static
-`BACKSPACE_SEQ`, or a slice of the static `CHARS` table. No memory is borrowed
-from the caller and none is allocated per call, which is why `process_char`
-returns a reference and `main` can hand it straight to `uart.write`.
+返回类型值得多看一眼: `&'static [u8]`. 每个分支返回的都是一个
+带生命周期约束的切片 - 可能是像 `b"!"` 这样的字节串字面量, 也可能是静态的
+`BACKSPACE_SEQ`, 还可能是静态 `CHARS` 表的一段切片. 没有任何内存是从
+调用方借来的, 每次调用也不做任何分配, 所以 `process_char`
+返回的是引用, 而 `main` 可以直接把它交给 `uart.write`.
 
-### The Alphanumeric Table arm
+### 字母数字表分支
 
-The letters-and-digits arm is clever and deserves the extra lines:
+字母和数字的那个分支很巧妙, 值得多花几行:
 
 ```rust
 b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' => {
@@ -438,15 +438,15 @@ b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' => {
 }
 ```
 
-`static CHARS` is the 62-character alphabet held once in flash at a fixed
-address. `.position()` finds the incoming byte in that table and
-`&CHARS[idx..idx + 1]` returns a *one-element slice* — not a `u8` value, because
-the method must return slices. `.unwrap()` is safe because the arm's range
-guarantees the byte is present.
+`static CHARS` 是那 62 个字符的字母表, 在 flash 里固定地址处
+只保存一份. `.position()` 在这个表里找到传入的字节, 而
+`&CHARS[idx..idx + 1]` 返回的是一个*单元素切片* - 不是 `u8` 值, 因为
+这个方法必须返回切片. `.unwrap()` 是安全的, 因为这个分支的范围
+已经保证了该字节一定存在.
 
-### Escape Bytes
+### 转义字节
 
-Bytes that need careful literals get explicit arms:
+有些字节需要小心书写字面量, 于是给了它们单独的分支:
 
 ```rust
 b'"'  => b"\"",
@@ -454,36 +454,36 @@ b'\\' => b"\\",
 b'\'' => b"\'",
 ```
 
-The three backslash escapes survive rustfmt in the driver file, and the tests
-`test_process_punctuation` and `test_process_symbols` confirm the quotes and
-slashes round-trip.
+这三个反斜杠转义在驱动文件里经受住了 rustfmt 的整理, 而测试
+`test_process_punctuation` 和 `test_process_symbols` 确认了引号和
+斜杠能原样往返.
 
-## The Tests
+## 测试
 
-The suite is the controller's contract, in reason-ordered groups:
+这套测试就是控制器的契约, 按道理分组排列:
 
-- **Construction tests** — fresh count is zero; `default()` equals `new()`.
-- **Character processing tests** — identity echo for letters, digits,
-  punctuation, symbols, brackets, spaces, and control bytes; erase sequences
-  for both backspaces; empty echo for unknown; count increments on every input
-  including backspaces and mixed runs.
-- **Trait tests** — `Clone`, `Copy`, `PartialEq`, and the readable `Debug`
-  format.
+- **构造测试** - 新建的计数为零; `default()` 等于 `new()`.
+- **字符处理测试** - 字母, 数字,
+  标点, 符号, 括号, 空格和控制字节都原样回显; 两种退格都返回擦除序列;
+  未知字节回显为空; 每一次输入计数都会增加,
+  包括退格和混合输入.
+- **trait 测试** - `Clone`, `Copy`, `PartialEq`, 以及可读的 `Debug`
+  格式.
 
-The asymmetry test is the sharpest: `test_not_equal_after_process` shows two
-controllers that start equal cease to be equal after one processes a byte.
-The `echo_count` is behavior, not decoration.
+最锋利的是那个不对称测试: `test_not_equal_after_process` 展示两个
+起初相等的控制器, 在其中一个处理了一个字节之后就不再相等.
+`echo_count` 是行为的一部分, 不是装饰.
 
-## Summary
+## 小结
 
-- `UartController` holds a single counter and exposes `new`, `process_char`,
-  and `echo_count`.
-- `process_char` counts every input, short-circuits backspaces to the erase
-  sequence, and answers an exhaustive `match` for everything else.
-- Every arm returns a `&'static [u8]` — no allocation, no borrowed-from-caller
-  lifetime.
-- The alphanumeric arm indexes a 62-byte `static` table to return a slice.
-- Fourteen processing tests plus construction and trait tests make echo
-  behavior a compiled contract.
+- `UartController` 只持有一个计数器, 并暴露 `new`, `process_char`
+  和 `echo_count`.
+- `process_char` 给每个输入计数, 把退格短路到擦除
+  序列, 其余一切交给一个穷尽的 `match`.
+- 每个分支都返回 `&'static [u8]` - 没有分配, 也没有从调用方借来的
+  生命周期.
+- 字母数字分支通过索引一个 62 字节的 `static` 表来返回切片.
+- 十四个处理测试, 加上构造测试和 trait 测试, 让回显
+  行为成为一份被编译进代码的契约.
 
-Next, the hardware story behind UART's clean `await`: interrupts and DMA.
+接下来是 UART 那个干净的 `await` 背后的硬件故事: 中断和 DMA.

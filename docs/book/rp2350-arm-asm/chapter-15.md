@@ -1,37 +1,37 @@
-# Chapter 15: Sections, Memory Layout, and the Linker Script
+# Chapter 15: 段, 内存布局与链接脚本
 
-## Introduction
+## 引言
 
-Assembly source files organize code and data into **sections**.  The linker script maps those sections to physical memory regions — flash and RAM.  Together, sections and the linker script determine where every byte of our blink firmware lives at runtime.  This chapter explains how our linker.ld places code in flash, reserves the stack in RAM, and enforces alignment and size constraints.
+汇编源文件把代码和数据组织进**段**. 链接脚本再把这些段映射到物理内存区域 - flash 和 RAM. 段和链接脚本合在一起, 决定了闪烁固件在运行时每一个字节待在哪里. 本章解释我们的 linker.ld 如何把代码放进 flash, 在 RAM 里预留栈, 并施加对齐与大小约束.
 
-## What Are Sections?
+## 什么是段?
 
-A section is a named block of content in an object file.  The assembler places each instruction or data item into the current section:
+段是目标文件里一块具名的内容. 汇编器把每条指令或每个数据项放进当前段:
 
 ```asm
-.section .text, "ax"                             // code goes here
-  push  {r4-r12, lr}                             // this instruction is in .text
+.section .text, "ax"                             // 代码放在这里
+  push  {r4-r12, lr}                             // 这条指令位于 .text
 
-.section .rodata, "a"                            // read-only data goes here
+.section .rodata, "a"                            // 只读数据放在这里
 ```
 
-Standard sections used in our firmware:
+固件里用到的标准段:
 
-| Section | Content | Flags | Location |
+| 段 | 内容 | 标志 | 位置 |
 |---------|---------|-------|----------|
-| `.picobin_block` | Boot image metadata | alloc | Flash start |
-| `.vectors` | Vector table | alloc | Flash (after picobin) |
-| `.text` | Executable code | alloc, exec | Flash |
-| `.rodata` | Read-only constants | alloc | Flash |
-| `.data` | Initialized variables | alloc, write | RAM (copied from flash) |
-| `.bss` | Uninitialized variables | alloc, write, nobits | RAM |
-| `.stack` | Stack space | — | RAM (top of SRAM) |
+| `.picobin_block` | 引导镜像元数据 | alloc | Flash 起始处 |
+| `.vectors` | 向量表 | alloc | Flash (picobin 之后) |
+| `.text` | 可执行代码 | alloc, exec | Flash |
+| `.rodata` | 只读常量 | alloc | Flash |
+| `.data` | 已初始化的变量 | alloc, write | RAM (从 flash 复制) |
+| `.bss` | 未初始化的变量 | alloc, write, nobits | RAM |
+| `.stack` | 栈空间 | - | RAM (SRAM 顶部) |
 
-## Our Linker Script
+## 我们的链接脚本
 
-The linker script (linker.ld) defines memory regions and section placement:
+链接脚本 (linker.ld) 定义内存区域和段的位置:
 
-### Memory Regions
+### 内存区域
 
 ```ld
 MEMORY
@@ -41,14 +41,14 @@ MEMORY
 }
 ```
 
-| Region | Start Address | Size | Permissions |
+| 区域 | 起始地址 | 大小 | 权限 |
 |--------|--------------|------|-------------|
-| FLASH | `0x10000000` | 32 MB | Read, execute |
-| RAM | `0x20000000` | 512 KB | Read, write, execute |
+| FLASH | `0x10000000` | 32 MB | 读, 执行 |
+| RAM | `0x20000000` | 512 KB | 读, 写, 执行 |
 
-### Section Placement
+### 段的位置
 
-The `SECTIONS` block maps each section to a memory region:
+`SECTIONS` 块把每个段映射到一个内存区域:
 
 ```ld
 SECTIONS
@@ -75,9 +75,9 @@ SECTIONS
 }
 ```
 
-## Section-by-Section Walkthrough
+## 逐段讲解
 
-### `.embedded_block` — PICOBIN Metadata
+### `.embedded_block` - PICOBIN 元数据
 
 ```ld
   .embedded_block : {
@@ -85,9 +85,9 @@ SECTIONS
   } > FLASH
 ```
 
-The `KEEP` directive prevents the linker from discarding this section during garbage collection.  The PICOBIN block must be at the start of flash for the RP2350 boot ROM to recognize the image.
+`KEEP` 伪指令阻止链接器在垃圾回收时丢弃这个段. PICOBIN 块必须在 flash 起始处, RP2350 的引导 ROM 才能识别这个镜像.
 
-### `.vectors` — Vector Table
+### `.vectors` - 向量表
 
 ```ld
   .vectors : ALIGN(128) {
@@ -95,11 +95,11 @@ The `KEEP` directive prevents the linker from discarding this section during gar
   } > FLASH
 ```
 
-`ALIGN(128)` ensures the vector table starts on a 128-byte boundary.  The Cortex-M33 requires the vector table to be aligned to at least the number of implemented vectors rounded up to the nearest power of two.
+`ALIGN(128)` 保证向量表从 128 字节边界开始. Cortex-M33 要求向量表至少按"已实现的向量数向上取到 2 的幂"对齐.
 
-The `ASSERT` checks that the vector table does not exceed 4096 bytes — a safety constraint.
+`ASSERT` 检查向量表不超过 4096 字节 - 这是一条安全约束.
 
-### `.text` and `.rodata` — Code and Constants
+### `.text` 与 `.rodata` - 代码与常量
 
 ```ld
   .text : {
@@ -108,9 +108,9 @@ The `ASSERT` checks that the vector table does not exceed 4096 bytes — a safet
   } > FLASH
 ```
 
-All executable code and read-only data are placed in flash.  The wildcard `*(.text*)` matches `.text`, `.text.main`, `.text.GPIO_Config`, etc.
+所有可执行代码和只读数据都放在 flash 里. 通配符 `*(.text*)` 能匹配 `.text`, `.text.main`, `.text.GPIO_Config` 等等.
 
-### `.stack` — Stack Reservation
+### `.stack` - 栈的预留
 
 ```ld
   STACK_SIZE = 32K;
@@ -121,11 +121,11 @@ All executable code and read-only data are placed in flash.  The wildcard `*(.te
   } > RAM
 ```
 
-`NOLOAD` means this section occupies address space but is not loaded from flash — the stack is runtime-only.  The 32 KB reservation provides ample space for our firmware's modest call depth.
+`NOLOAD` 表示这个段占用地址空间, 但不从 flash 加载 - 栈只在运行时存在. 预留的 32 KB 对我们这个调用深度很浅的固件来说绰绰有余.
 
-## The Final Memory Map
+## 最终的内存映射
 
-After linking, the firmware occupies flash starting at `0x10000000`:
+链接之后, 固件占据从 `0x10000000` 开始的 flash:
 
 ```
 Flash (0x10000000):
@@ -149,41 +149,41 @@ RAM (0x20000000):
 +----------------------------+
 ```
 
-## `ENTRY` Directive
+## `ENTRY` 伪指令
 
 ```ld
 ENTRY(Reset_Handler)
 ```
 
-This tells the linker which symbol is the program entry point.  Debuggers and flash tools use this information.  On Cortex-M, actual execution starts from the reset vector in the vector table, but `ENTRY` provides metadata for the toolchain.
+它告诉链接器哪个符号是程序入口点. 调试器和烧录工具会用到这个信息. 在 Cortex-M 上, 真正的执行是从向量表里的复位向量开始的, 但 `ENTRY` 为工具链提供了元数据.
 
-## Symbol Exports from the Linker Script
+## 链接脚本导出的符号
 
-The linker script can define symbols accessible from assembly:
+链接脚本可以定义能从汇编里访问的符号:
 
 ```ld
   _stack_top = ORIGIN(RAM) + LENGTH(RAM);
 ```
 
-While our firmware uses `.equ` constants in constants.s instead, linker-defined symbols are common in larger projects for separating configuration from code.
+我们的固件改用 constants.s 里的 `.equ` 常量, 不过在更大的项目里, 用链接脚本定义符号来把配置和代码分开是很常见的做法.
 
-## Why Sections Matter
+## 段为什么重要
 
-Without sections, the linker would not know:
+没有段, 链接器就无从知道:
 
-- Which bytes are executable code (flash) vs. data (RAM)
-- What must appear first (PICOBIN block)
-- What alignment is required (vector table)
-- What is runtime-only and should not consume flash (stack)
+- 哪些字节是可执行代码 (flash), 哪些是数据 (RAM)
+- 什么必须排在最前面 (PICOBIN 块)
+- 需要什么样的对齐 (向量表)
+- 什么只在运行时存在, 不该占用 flash (栈)
 
-The section system lets ten separate assembly files contribute code to a single, correctly-ordered binary.
+段这套机制让十个独立的汇编文件各自贡献代码, 最终拼成一个顺序正确, 完整可用的二进制.
 
-## Summary
+## 小结
 
-- Sections organize code and data into named blocks with specific attributes.
-- The linker script maps sections to physical memory regions (flash and RAM).
-- `.embedded_block` (PICOBIN) must be first in flash for the boot ROM.
-- `.vectors` is aligned to 128 bytes for hardware requirements.
-- `.text` contains all executable code, placed in flash.
-- `.stack` reserves 32 KB in RAM with `NOLOAD` (no flash content).
-- The `ENTRY` directive identifies the program entry point for tools.
+- 段把代码和数据组织成带特定属性的具名块.
+- 链接脚本把段映射到物理内存区域 (flash 与 RAM).
+- `.embedded_block` (PICOBIN) 必须排在 flash 最前面, 引导 ROM 才能找到它.
+- `.vectors` 按硬件要求对齐到 128 字节.
+- `.text` 包含所有可执行代码, 放在 flash 里.
+- `.stack` 在 RAM 里预留 32 KB, 用 `NOLOAD` 表示不含 flash 内容.
+- `ENTRY` 伪指令为工具指明程序入口点.

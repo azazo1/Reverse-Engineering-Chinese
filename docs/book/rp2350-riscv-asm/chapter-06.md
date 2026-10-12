@@ -1,20 +1,20 @@
-# Chapter 6: The Fetch-Decode-Execute Cycle in Detail
+# Chapter 6: 详解取指-译码-执行循环
 
-## Introduction
+## 引言
 
-Chapter 1 introduced the fetch-decode-execute cycle as a three-step loop.  This chapter goes deeper: we examine the pipeline, see a concrete instruction trace from our firmware, and understand how branches disrupt sequential flow.
+第 1 章把取指-译码-执行循环介绍成一个三步循环. 本章讲得更深: 我们会考察流水线, 看一段来自固件的真实指令轨迹, 并理解分支如何打断顺序执行.
 
-## The Three Stages
+## 三个阶段
 
-Every instruction passes through three stages:
+每条指令都要经过三个阶段:
 
-1. **Fetch** — the processor reads the instruction bytes from the address stored in the PC.  On the Hazard3 core, a 32-bit instruction is 4 bytes; a compressed (C-extension) instruction is 2 bytes.
-2. **Decode** — the processor extracts the opcode, identifies source registers, destination register, and any immediate value from the binary encoding.
-3. **Execute** — the processor performs the operation: arithmetic, memory access, branch target calculation, or CSR update.
+1. **取指 (Fetch)** - 处理器从 PC 里保存的地址处读取指令字节. 在 Hazard3 内核上, 一条 32 位指令是 4 个字节; 一条压缩指令 (C 扩展) 是 2 个字节.
+2. **译码 (Decode)** - 处理器从二进制编码中提取操作码, 识别源寄存器, 目标寄存器以及可能的立即数.
+3. **执行 (Execute)** - 处理器完成这个操作: 算术, 访存, 计算分支目标, 或者更新 CSR.
 
-## The Pipeline
+## 流水线
 
-The Hazard3 core uses a multi-stage pipeline so that while one instruction is executing, the next is being decoded, and the one after that is being fetched.  In the ideal case, one instruction completes every clock cycle:
+Hazard3 内核使用多级流水线, 所以当一条指令在执行时, 下一条正在译码, 再下一条正在取指. 理想情况下, 每个时钟周期就能完成一条指令:
 
 ```
 Clock:  1     2     3     4     5     6
@@ -25,59 +25,59 @@ Instr3: |     |     | F   | D   | E   |
         +-----+-----+-----+-----+-----+
 ```
 
-F = Fetch, D = Decode, E = Execute.
+F = Fetch (取指), D = Decode (译码), E = Execute (执行).
 
-## A Concrete Example
+## 一个具体的例子
 
-Consider these three consecutive instructions from our XOSC initialization:
+看看 XOSC 初始化里的这三条连续指令:
 
 ```asm
-  li    t0, XOSC_STARTUP                         # load XOSC_STARTUP address
-  li    t1, 0x00c4                               # set delay 50,000 cycles
-  sw    t1, 0(t0)                                # store value into XOSC_STARTUP
+  li    t0, XOSC_STARTUP                         # 加载 XOSC_STARTUP 地址
+  li    t1, 0x00c4                               # 设置延时 50,000 个周期
+  sw    t1, 0(t0)                                # 把值存进 XOSC_STARTUP
 ```
 
-The pipeline processes them as:
+流水线对它们的处理过程是:
 
-| Clock | Fetch | Decode | Execute |
+| 时钟 | 取指 | 译码 | 执行 |
 |-------|-------|--------|---------|
-| 1 | `li t0, ...` | — | — |
-| 2 | `li t1, ...` | `li t0, ...` | — |
-| 3 | `sw t1, ...` | `li t1, ...` | `li t0, ...` → t0 loaded |
-| 4 | next instr | `sw t1, ...` | `li t1, ...` → t1 loaded |
-| 5 | ... | next instr | `sw t1, ...` → memory write |
+| 1 | `li t0, ...` | - | - |
+| 2 | `li t1, ...` | `li t0, ...` | - |
+| 3 | `sw t1, ...` | `li t1, ...` | `li t0, ...` -> t0 已加载 |
+| 4 | 下一条指令 | `sw t1, ...` | `li t1, ...` -> t1 已加载 |
+| 5 | ... | 下一条指令 | `sw t1, ...` -> 写入内存 |
 
-The sequential ordering means `t0` is ready before the `sw` needs it.
+顺序执行意味着在 `sw` 需要 `t0` 之前, `t0` 就已经准备好了.
 
-## How Branch Instructions Affect the Pipeline
+## 分支指令如何影响流水线
 
-When the processor encounters a branch instruction, it may not know the next PC until the execute stage.  If the branch is taken, instructions that were already fetched after the branch are incorrect and must be discarded — this is called a **pipeline flush**.
+当处理器遇到一条分支指令时, 它在执行阶段之前可能并不知道下一个 PC 是什么. 如果分支真的跳转了, 那些已经取进来的, 跟在分支后面的指令就是错的, 必须丢弃 - 这叫作**流水线冲刷 (pipeline flush)**.
 
 ```asm
-  bnez  t1, .Delay_MS_Loop                       # branch until zero
+  bnez  t1, .Delay_MS_Loop                       # 循环直到为零
 ```
 
-If `t1` is not zero, the pipeline is flushed: the instruction after `bnez` that was already fetched is discarded, and the pipeline restarts at `.Delay_MS_Loop`.  For our tight delay loop (3,600 × ms iterations), this flush happens on every iteration except the last.
+如果 `t1` 不为零, 流水线就被冲刷: 跟在 `bnez` 后面已经取进来的那条指令被丢弃, 流水线从 `.Delay_MS_Loop` 重新开始. 对我们这个紧凑的延时循环 (每次毫秒 3,600 轮迭代) 来说, 除了最后一轮, 每一轮都会发生这种冲刷.
 
-## The Hazard3 Execution Model
+## Hazard3 的执行模型
 
-The Hazard3 core in the RP2350 is a simple in-order pipeline.  Key characteristics:
+RP2350 里的 Hazard3 内核是一条简单的顺序流水线. 关键特点:
 
-- Instructions execute in program order — no out-of-order execution.
-- Branch penalties are small (1–2 cycles for the flush).
-- Memory operations on the peripheral bus may stall the pipeline while the bus transaction completes.
-- The C extension (compressed instructions) allows some instructions to be only 2 bytes, improving code density.
+- 指令按程序顺序执行 - 没有乱序执行.
+- 分支代价很小 (冲刷花 1-2 个周期).
+- 对外设总线的访存操作可能会让流水线停顿, 直到总线事务完成.
+- C 扩展 (压缩指令) 让一些指令只有 2 个字节, 提高了代码密度.
 
-## Clock Speed
+## 时钟频率
 
-After our firmware configures XOSC, the Hazard3 core runs at 12 MHz (the XOSC crystal frequency; PLL is not configured in this project).  Each clock cycle is approximately 83 ns.  A peripheral register write may take several cycles due to the APB bus bridge.
+固件配置好 XOSC 之后, Hazard3 内核运行在 12 MHz (也就是 XOSC 晶振频率; 本项目没有配置 PLL). 每个时钟周期大约是 83 ns. 由于要经过 APB 总线桥, 一次外设寄存器写入可能要花好几个周期.
 
-Our delay loop calibration (3,600 iterations per millisecond) accounts for the actual instruction throughput at XOSC speed.
+我们的延时循环标定 (每毫秒 3,600 次迭代) 正是按 XOSC 速度下的实际指令吞吐量算出来的.
 
-## Summary
+## 小结
 
-- The fetch-decode-execute cycle is pipelined: multiple instructions are in-flight simultaneously.
-- Sequential instructions flow smoothly through the pipeline.
-- Branches cause pipeline flushes: the processor discards incorrectly fetched instructions.
-- The Hazard3 core executes in order with small branch penalties.
-- At 12 MHz (XOSC), each cycle is approximately 83 ns.
+- 取指-译码-执行循环是流水化的: 同一时刻有多条指令在途.
+- 顺序指令会顺畅地流过流水线.
+- 分支会造成流水线冲刷: 处理器丢弃错误取入的指令.
+- Hazard3 内核顺序执行, 分支代价很小.
+- 在 12 MHz (XOSC) 下, 每个周期大约是 83 ns.

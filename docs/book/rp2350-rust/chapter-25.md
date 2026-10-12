@@ -1,22 +1,22 @@
-# Chapter 25: Host Testing with cargo test
+# Chapter 25: 用 cargo test 做主机测试
 
-## Introduction
+## 引言
 
-Every driver in this course ships a test suite, and every suite runs on a
-desktop — not the chip. The mechanism is a two-file trick of Cargo configuration
-we glimpsed in Chapters 8, 18, and 19. This chapter turns it into a complete
-story: why host testing matters, how `lib.rs` makes a crate dual-purpose, and
-what `make test` actually commands.
+本课程里的每个驱动都自带一套测试, 而每套测试都跑在桌面
+电脑上 - 不是在芯片上. 靠的是 Cargo 配置里一个由两个文件
+组成的小技巧, 我们在第 8, 18, 19 章都瞥见过它. 本章把它讲成
+一个完整的故事: 主机测试为什么重要, `lib.rs` 如何让一个 crate 一物两用,
+以及 `make test` 实际执行的是什么命令.
 
-## Why Test on the Host
+## 为什么要在主机上测试
 
-Hardware is not a good test harness. Each test run requires flashing, wiring,
-and human observation, and the answers come back in seconds or minutes — or as
-a mysterious LED pattern. State machines, constants, and conversion functions,
-on the other hand, need no hardware at all: give them inputs, assert on
-outputs, repeat.
+硬件不是好的测试环境. 每跑一次测试都要烧录, 接线,
+还要靠人眼观察, 结果要等几秒甚至几分钟才回来 - 或者干脆
+变成一段看不懂的 LED 闪烁. 而状态机, 常量和转换函数,
+则完全不需要硬件: 给它们输入, 断言输出,
+再重复一遍.
 
-Compare the two loops:
+比较一下这两个循环:
 
 ```
 On the chip:                   On the host:
@@ -25,24 +25,24 @@ build -> flash -> wire         cargo test --lib --no-default-features
 -> repeat for each change       -> repeat freely, zero wiring
 ```
 
-Config typos, broken `toggle` transitions, and debounce edge cases are found in
-milliseconds on a laptop, long before the board is ever powered. The test suite
-becomes part of normal development, not an afterthought.
+配置里的笔误, `toggle` 转换的错误, 消抖的边界情况, 在笔记本上
+几毫秒就能发现, 远远早于板子第一次上电. 测试套件
+成了日常开发的一部分, 而不是事后才想起来的事.
 
-## lib.rs and cfg_attr
+## lib.rs 与 cfg_attr
 
-The library root is the hinge. Its single attribution line switches the crate
-between `no_std` (when building firmware) and `std` (when testing):
+库的根文件就是那个枢纽. 它那一行属性让这个 crate 在
+`no_std` (构建固件时) 和 `std` (测试时) 之间切换:
 
 ```rust
 //! FILE: lib.rs
 //!
 //! DESCRIPTION:
-//! RP2350 Blink Driver Library Module Exports.
+//! RP2350 闪烁驱动库模块导出.
 //!
 //! BRIEF:
-//! Exports all public modules for testing and reuse.
-//! Conditionally enables std for host testing.
+//! 导出所有公开模块, 供测试与复用.
+//! 在主机测试时按条件启用 std.
 //!
 //! AUTHOR: Kevin Thomas
 //! CREATION DATE: November 28, 2025
@@ -53,8 +53,8 @@ pub mod config;
 pub mod led;
 ```
 
-Read the magic line out loud: "apply `no_std` only when we are NOT compiling
-for tests."
+把这一行魔法大声读出来: "只有当不是在为测试编译时, 才应用
+`no_std`."
 
 ```
 cargo build                    -> cfg(test) false -> #![no_std]   (bare metal)
@@ -62,37 +62,37 @@ cargo test                     -> cfg(test) true  -> #![no_std] skipped
                                  (std available for the test runner)
 ```
 
-The library is always pure logic — `config.rs`, `led.rs`, `button.rs`,
-`uart.rs` import nothing embedded — so it builds and runs under `std`
-identically. The hardware crates never enter the test build at all.
+这个库始终是纯逻辑 - `config.rs`, `led.rs`, `button.rs`,
+`uart.rs` 都没有导入任何嵌入式相关的东西 - 所以它在 `std` 下
+也能一模一样地构建和运行. 那些硬件相关的 crate 根本不会进入测试构建.
 
-## make test — no-default-features
+## make test - no-default-features
 
-The Makefile's test target is the complete ritual:
+Makefile 的 test 目标就是完整的仪式:
 
 ```make
 test:
 	cargo test --lib --target $(shell rustc --print host-tuple) --no-default-features
 ```
 
-Decode each flag against what we learned:
+拿我们学过的东西来逐个解读这些标志:
 
-- `--lib` — Test only the library target. The binary's `main.rs` is
-  `test = false` and is simply not compiled.
-- `--target $(shell rustc --print host-tuple)` — Compile for the *host* CPU,
-  overriding `.cargo/config.toml`'s embedded target. The tests run as native
-  desktop binaries.
-- `--no-default-features` — Drop the `default` feature from `Cargo.toml`
-  (Chapter 8), which is what pulls in `embassy-executor`, `embassy-time`,
-  `embassy-rp`, `cortex-m`, `cortex-m-rt`, and `panic-halt`. None of those can
-  build for a desktop; none of them exist in this build.
+- `--lib` - 只测试库目标. 二进制的 `main.rs` 是
+  `test = false`, 根本不会被编译.
+- `--target $(shell rustc --print host-tuple)` - 为*主机* CPU 编译,
+  覆盖 `.cargo/config.toml` 里的嵌入式目标. 测试会作为本机
+  桌面二进制运行.
+- `--no-default-features` - 去掉 `Cargo.toml` 里的 `default` feature
+  (第 8 章), 正是它引入了 `embassy-executor`, `embassy-time`,
+  `embassy-rp`, `cortex-m`, `cortex-m-rt` 和 `panic-halt`. 这些没有一个能
+  为桌面构建; 在这个构建里它们一个都不存在.
 
-The result is a second, parallel crate graph: same pure modules, zero embedded
-dependencies, everything testable.
+结果就是第二张并行的 crate 依赖图: 同样的纯模块, 零嵌入式
+依赖, 一切都可以测试.
 
-## Reading the Test Output
+## 读测试输出
 
-A passing button-driver run looks like this:
+按钮驱动测试通过时的样子是这样的:
 
 ```
 $ make test
@@ -108,9 +108,9 @@ test tests::test_rapid_bouncing_rejected     ... ok
 test result: ok. 20 passed; 0 failed; 0 ignored; 0 measured
 ```
 
-Because our types derive `Debug` and `PartialEq` (Chapter 5), a failing
-`assert_eq!` prints both actual and expected values — readable diagnoses without
-any debugger:
+因为我们的类型派生了 `Debug` 和 `PartialEq` (第 5 章), 失败的
+`assert_eq!` 会把实际值和期望值都打印出来 - 不需要任何调试器
+就能看懂诊断信息:
 
 ```
 thread 'tests::test_toggle_off_to_on' panicked at ...
@@ -119,11 +119,11 @@ assertion `left == right` failed
  right: On
 ```
 
-## A Test-Driven Culture
+## 测试驱动的文化
 
-The strict docstring standard and the test suite are two halves of one idea:
-code should explain itself and prove itself. The pattern repeats in every
-single file —
+严格的文档注释标准和测试套件是同一个理念的两半:
+代码应该能自我解释, 也应该能自我证明. 这个模式在每个
+文件里都重复出现 -
 
 ```
 item documented (# Details, # Arguments, # Returns)
@@ -131,19 +131,19 @@ item documented (# Details, # Arguments, # Returns)
 item tested (#[test] under a banner-ized module)
 ```
 
-— so a new constant or method in any driver is finished only when it carries
-both. Contributors and readers alike get the same two guarantees: the name says
-what it does, and the tests agree.
+- 所以任何驱动里新加的常量或方法, 只有两者兼备才算完成.
+贡献者和读者都能得到同样的两重保证: 名字说明了它做什么,
+测试也认可这一点.
 
-## Summary
+## 小结
 
-- Hardware is a poor harness; pure logic is testable at millisecond speed.
-- `#![cfg_attr(not(test), no_std)]` makes the library `std` under test and
-  `no_std` for the target.
-- `make test` = `--lib --target <host> --no-default-features`, compiling only
-  the pure modules for the desktop.
-- Derived `Debug`/`PartialEq` make failures self-explanatory.
-- Every item is documented *and* tested — the two halves of the house standard.
+- 硬件是糟糕的测试环境; 纯逻辑可以用毫秒级的速度测试.
+- `#![cfg_attr(not(test), no_std)]` 让这个库在测试时是 `std`,
+  为目标平台时是 `no_std`.
+- `make test` = `--lib --target <host> --no-default-features`, 只为桌面
+  编译那些纯模块.
+- 派生出来的 `Debug`/`PartialEq` 让失败信息不言自明.
+- 每一项都既有文档*又*有测试 - 这是本课程家规的两半.
 
-Part V complete. The last driver is the most interesting: UART, where interrupts
-and DMA make their first appearance.
+第 V 部分结束. 最后一个驱动最有趣: UART, 中断
+和 DMA 会在那里首次登场.

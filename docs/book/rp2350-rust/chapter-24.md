@@ -1,16 +1,16 @@
-# Chapter 24: main.rs — The Button Polling Loop
+# Chapter 24: main.rs - 按钮轮询循环
 
-## Introduction
+## 引言
 
-The button driver's `main.rs` is only eleven lines longer than the blink one,
-and nine of those are the wiring of a new input pin. It samples the button on a
-5 ms cadence, feeds each sample to the debounce filter, and drives the LED from
-the filter's verdict. This chapter walks through the final file of the second
-driver.
+按钮驱动的 `main.rs` 只比闪烁版长了十一行,
+其中九行是在接一个新的输入引脚. 它以 5 ms 的节奏采样按钮,
+把每个采样喂给消抖滤波器, 再用滤波器的判决去驱动 LED.
+本章要讲完第二个驱动的
+最后一个文件.
 
-## Complete Source Code
+## 完整源代码
 
-Here is `src/main.rs` for the button driver, in full:
+下面是按钮驱动的 `src/main.rs` 的完整内容:
 
 ```rust
 /*
@@ -45,12 +45,12 @@ Here is `src/main.rs` for the button driver, in full:
 //! FILE: main.rs
 //!
 //! DESCRIPTION:
-//! RP2350 Embedded Rust Embassy Button Driver Application.
+//! RP2350 嵌入式 Rust Embassy 按钮驱动应用.
 //!
 //! BRIEF:
-//! Main application entry point for RP2350 GPIO button driver using Embassy.
-//! Implements button input on GPIO 15 controlling LED on GPIO 16.
-//! Button is active-low (tied to GND when pressed).
+//! 使用 Embassy 的 RP2350 GPIO 按钮驱动主程序入口.
+//! 在 GPIO 15 上实现按钮输入, 控制 GPIO 16 上的 LED.
+//! 按钮低电平有效 (按下时接到 GND).
 //!
 //! AUTHOR: Kevin Thomas
 //! CREATION DATE: November 28, 2025
@@ -71,18 +71,18 @@ use embassy_time::Timer;
 use led::{led_state_to_level, LedState};
 use panic_halt as _;
 
-/// Main application entry point.
+/// 主程序入口.
 ///
 /// # Details
-/// Initializes Embassy runtime and runs the main button polling loop.
-/// Uses ButtonController for state management with debouncing.
-/// Button on GPIO15 (active-low) controls LED on GPIO16.
+/// 初始化 Embassy 运行时, 并运行主按钮轮询循环.
+/// 用带消抖的 ButtonController 管理状态.
+/// GPIO15 上的按钮 (低电平有效) 控制 GPIO16 上的 LED.
 ///
 /// # Arguments
-/// * `_spawner` - Embassy task spawner (reserved for future async tasks).
+/// * `_spawner` - Embassy 任务 spawner (为将来的异步任务预留).
 ///
 /// # Returns
-/// * `()` - Never returns (infinite loop).
+/// * `()` - 永不返回 (无限循环).
 #[embassy_executor::main]
 async fn main(_spawner: Spawner) {
     let p = embassy_rp::init(Default::default());
@@ -106,12 +106,12 @@ async fn main(_spawner: Spawner) {
 }
 ```
 
-The structure is the blink main's, with one input added and the controller
-swapped. Everything new lives in how the loop consumes `button`.
+整体结构就是闪烁版 main 的那套, 只是加了一个输入, 并且换掉了
+控制器. 所有新东西都体现在循环如何使用 `button` 上.
 
-## Configuration Locality
+## 配置的就近放置
 
-Three modules, one convention:
+三个模块, 一个约定:
 
 ```rust
 mod button;
@@ -119,47 +119,47 @@ mod config;
 mod led;
 ```
 
-`config` is imported from directly this time — its `DEBOUNCE_DELAY_MS` appears
-in the loop. The active-low comment appears both in `button.rs`'s docs and in
-`main`'s BRIEF: the convention is repeated wherever it governs behavior.
+这次是直接从 `config` 导入的 - 它的 `DEBOUNCE_DELAY_MS` 就出现在
+循环里. 低电平有效的注释在 `button.rs` 的文档和 `main` 的 BRIEF 里都
+出现了: 只要这个约定管着某处行为, 它就会在那里重复一遍.
 
-## Configuring the Input
+## 配置输入引脚
 
 ```rust
 let button = Input::new(p.PIN_15, Pull::Up);
 ```
 
-One line configures an input on GPIO15 with an internal pull-up (Chapters 17
-and 22). The initial state: the line is held HIGH by the pull-up, so `is_high()`
-returns `true` — exactly what the debounce filter expects for "released".
-No pad-level code, no function-select dance; the HAL folded it all into
-`Input::new`.
+这一行就把 GPIO15 配置成带内部上拉的输入 (第 17 章
+和第 22 章). 初始状态是: 这条线被上拉电阻拉高, 所以 `is_high()`
+返回 `true` - 正是消抖滤波器对 "已松开" 的期望.
+不用写焊盘层的代码, 也不用做功能选择的周旋; HAL 把这一切都
+收进了 `Input::new`.
 
-The output pin is created exactly as in the blink driver:
+输出引脚的创建方式和闪烁驱动里完全一样:
 
 ```rust
 let mut led = Output::new(p.PIN_16, Level::Low);
 ```
 
-and the filter starts fresh:
+而滤波器则从全新状态开始:
 
 ```rust
 let mut controller = ButtonController::new();
 ```
 
-## Sampling With Debounce
+## 带消抖的采样
 
-The loop's first act is the sample-and-filter:
+循环的第一件事就是采样加滤波:
 
 ```rust
 loop {
     controller.update(button.is_high());
 ```
 
-`button.is_high()` reads the pad and returns a bool; `controller.update(...)`
-applies the active-low inversion and the counter logic from Chapter 23. The
-sample cadence comes from the bottom of the loop — the `Timer` wait — so every
-iteration is one sample at `DEBOUNCE_DELAY_MS` spacing:
+`button.is_high()` 读取焊盘并返回一个 bool; `controller.update(...)`
+则应用低电平有效的反相, 以及第 23 章的计数器逻辑.
+采样节奏来自循环的末尾 - 也就是那次 `Timer` 等待 - 所以每一次
+迭代就是一次采样, 间隔为 `DEBOUNCE_DELAY_MS`:
 
 ```
 sample  update   is_pressed   set LED   sleep 5ms
@@ -167,12 +167,12 @@ sample  update   is_pressed   set LED   sleep 5ms
    +-------+---------+------------+----------+----> repeat
 ```
 
-Because the whole loop runs in microseconds except the 5 ms sleep, the filter
-samples at a steady ~200 Hz. The executor idles for the money.
+除了那 5 ms 的睡眠, 整个循环只在微秒级的时间里跑完, 于是滤波器
+以稳定的约 200 Hz 采样. 执行器的空闲就是它最大的价值.
 
-## Driving the LED
+## 驱动 LED
 
-The verdict is translated through the shared helper:
+判决结果通过这个共享的辅助函数来转换:
 
 ```rust
 let state = if controller.is_pressed() {
@@ -187,19 +187,19 @@ if led_state_to_level(state) {
 }
 ```
 
-Two decision points, one obvious reading:
+两个判断点, 读起来一目了然:
 
-1. Filter verdict → `LedState` (pressed lights the LED, `LedState::On`).
-2. `LedState` → GPIO level via the reusable `led_state_to_level` from the blink
-   driver (now part of this binary's `mod led`).
+1. 滤波器的判决 → `LedState` (按下就点亮 LED, 也就是 `LedState::On`).
+2. `LedState` → GPIO 电平, 通过闪烁驱动里那个可复用的 `led_state_to_level`
+   完成 (现在它是这个二进制 `mod led` 的一部分).
 
-Holding the button keeps `pressed == true`, so the LED stays lit; releasing
-reverses the dance symmetrically. There is no edge-triggered latch — the state
-follows the filter directly.
+一直按住按钮会让 `pressed == true` 保持成立, 于是 LED 一直亮着; 松开
+则完全对称地反过来. 这里没有边沿触发的锁存 - 状态直接
+跟随滤波器的输出.
 
-## The Whole Program in One View
+## 一眼看完整套程序
 
-The driver is sensor → filter → decision → actuator, in a circle:
+这个驱动就是传感器 → 滤波器 → 判断 → 执行器, 首尾相连:
 
 ```
 +--------+      +------------------+      +---------------+
@@ -213,18 +213,18 @@ The driver is sensor → filter → decision → actuator, in a circle:
 +--------+      +------------------+      +---------------+
 ```
 
-Blink proved a state machine could drive an output on a timer. Button proves an
-input can drive the same state machine through a filter. The UART driver,
-which completes the course, follows the identical shape.
+闪烁驱动证明了状态机可以按定时驱动输出. 按钮驱动证明了
+输入也能经过滤波器去驱动同一个状态机. 为课程收尾的 UART
+驱动, 形状完全一样.
 
-## Summary
+## 小结
 
-- `Input::new(p.PIN_15, Pull::Up)` configures the button input in one line.
-- The loop samples once per `DEBOUNCE_DELAY_MS` (5 ms), feeding the filter
-  through `controller.update(button.is_high())`.
-- The filter's verdict selects `LedState::On/Off`, and the shared
-  `led_state_to_level` drives GPIO16.
-- Entire driver = sensor → debounce → decision → actuator → timer.
+- `Input::new(p.PIN_15, Pull::Up)` 一行就配置好了按钮输入.
+- 循环每 `DEBOUNCE_DELAY_MS` (5 ms) 采样一次, 通过
+  `controller.update(button.is_high())` 喂给滤波器.
+- 滤波器的判决选出 `LedState::On/Off`, 再由共享的
+  `led_state_to_level` 去驱动 GPIO16.
+- 整个驱动 = 传感器 → 消抖 → 判断 → 执行器 → 定时器.
 
-Now we step back and look at the trick that made all of these files testable on
-a laptop: the host test harness.
+现在我们退后一步, 看看那个让这些文件都能在笔记本上测试的
+技巧: 主机测试框架.

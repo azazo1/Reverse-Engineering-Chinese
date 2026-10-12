@@ -1,30 +1,30 @@
-# Lesson 019 - 7-Segment Display
+# Lesson 019 - 七段数码管
 
-## What Are We Building Today?
+## 今天我们要做什么?
 
-A 7-Segment Display is simply 8 LEDs packed inside a plastic shell in the shape of an "8" (plus a decimal point). By selectively turning on specific LEDs, we can draw numbers! 
+一位七段数码管, 说白了就是把 8 颗 LED 塞进一个"8"字形的塑料壳里 (外加一个小数点). 只要按需点亮其中的某几颗 LED, 我们就能画出数字!
 
-Since it has 8 LEDs, it requires 8 wires to control. This is the exact perfect use-case for our `74HC595 Shift Register`! We will write a program that counts from 0 to 9 over and over, drawing each number on the display.
+既然它有 8 颗 LED, 那就得用 8 根线来控制. 这正是我们 `74HC595 Shift Register` 的完美用武之地! 我们要写一个程序, 一遍又一遍地从 0 数到 9, 把每个数字画在数码管上.
 
-Today, we will learn how to permanently bake an Array of data into the Microcontroller's Flash Memory using the `.text` section, and how to read from it using the legendary **Z-Pointer**!
+今天我们要学会怎么用 `.text` 段把一组数据永久"烧"进单片机的 Flash 存储器, 以及怎么用大名鼎鼎的 **Z 指针** 把它读出来!
 
 [CODE](https://github.com/mytechnotalent/Assembler/blob/main/lessons/019/lesson.s)
 
 ---
 
-## Hardware Check: The 7-Segment Display
-The display has 10 pins. 2 of them are tied to Ground (Common Cathode). The remaining 8 pins control the individual segments, named `A` through `G`, plus `DP` (Decimal Point).
-We connect these 8 segment pins to the 8 output pins of our `74HC595` Shift Register.
+## 硬件检查: 七段数码管
+数码管有 10 个引脚. 其中 2 个接到地 (共阴极). 剩下的 8 个引脚控制各个笔画段, 它们分别叫 `A` 到 `G`, 再加上 `DP` (小数点).
+我们把这 8 个笔画段引脚接到 `74HC595` 移位寄存器的 8 个输出脚上.
 
-To draw the number "1", we need to turn on segments `B` and `C`.
-If we wire our Shift Register such that `Q0` connects to `A`, `Q1` to `B`, `Q2` to `C`, etc... then we need to send the binary number `00000110` (which is Hex `0x06`) to the Shift Register to draw a "1"!
+要画出数字 "1", 我们需要点亮 `B` 和 `C` 两段.
+如果我们在接线时让 `Q0` 接 `A`, `Q1` 接 `B`, `Q2` 接 `C`, 依此类推... 那么要画出一个 "1", 我们就得给移位寄存器送二进制数 `00000110` (也就是十六进制的 `0x06`)!
 
-We could hardcode this in our logic with a giant `IF` statement... or we could use an Array!
+我们可以在逻辑里写一个巨大的 `IF` 语句把这些写死... 也可以用一个数组!
 
-## The Code Walkthrough
+## 代码讲解
 
-### 1. Flash Memory Arrays (`.byte`)
-We can declare an array of these binary patterns directly in the `.text` section of our code. The assembler will burn these bytes permanently into the silicon of the ATmega328P's program memory (Flash).
+### 1. Flash 存储器里的数组 (`.byte`)
+我们可以直接在代码的 `.text` 段里声明一个由这些二进制图样组成的数组. 汇编器会把这些字节永久地烧进 ATmega328P 程序存储器 (Flash) 的硅片里.
 
 ```assembly
 segment_patterns:
@@ -33,35 +33,35 @@ segment_patterns:
   .byte 0b01011011                     ; 2
   ...
 ```
-The label `segment_patterns` represents the physical memory address where this list of bytes begins.
+标签 `segment_patterns` 代表这一串字节开始的物理内存地址.
 
-### 2. The Z-Pointer and `LPM`
-AVR microcontrollers are based on the Harvard Architecture, which means they have entirely separate memory spaces for RAM (where variables live) and Flash (where your code lives). Standard `LD` (Load) instructions can only read from RAM. 
-To read from Flash, we *must* use a special instruction: `LPM` (Load Program Memory).
+### 2. Z 指针与 `LPM`
+AVR 单片机基于哈佛架构, 也就是说 RAM (变量住的地方) 和 Flash (你的代码住的地方) 是两套完全分开的内存空间. 标准的 `LD` (Load) 指令只能从 RAM 里读.
+想从 Flash 里读, 我们*必须*用一条特殊指令: `LPM` (Load Program Memory, 读程序存储器).
 
-`LPM` is incredibly picky. It only ever looks at one specific place to find the address: The **Z-Pointer**. 
-The Z-Pointer is a 16-bit virtual register made by combining `R31` (High Byte) and `R30` (Low Byte).
+`LPM` 挑剔得很. 它只在一个固定的地方找地址: **Z 指针**.
+Z 指针是由 `R31` (高字节) 和 `R30` (低字节) 拼成的一个 16 位虚拟寄存器.
 
 ```assembly
 get_segment_pattern:
-  LDI    ZH, hi8(segment_patterns)     ; Load High Byte of Array Address into Z
-  LDI    ZL, lo8(segment_patterns)     ; Load Low Byte of Array Address into Z
+  LDI    ZH, hi8(segment_patterns)     ; 把数组地址的高字节装入 Z
+  LDI    ZL, lo8(segment_patterns)     ; 把数组地址的低字节装入 Z
 ```
-First, we load the base address of our array into the Z-Pointer using the `hi8` and `lo8` macros.
+首先, 我们用 `hi8` 和 `lo8` 这两个宏把数组的基地址装进 Z 指针.
 
 ```assembly
-  ADD    ZL, R16                       ; Add the digit offset to the Low Byte
-  LDI    R17, 0                        
-  ADC    ZH, R17                       ; Add Carry to the High Byte
+  ADD    ZL, R16                       ; 把数字偏移加到低字节上
+  LDI    R17, 0
+  ADC    ZH, R17                       ; 把进位加到高字节上
 ```
-Next, we add our digit (0-9) to the address! We use `ADD` for the Low Byte, and `ADC` (Add with Carry) for the High Byte in case our addition caused the Low Byte to overflow past 255.
+接下来, 我们把要显示的数字 (0-9) 加到地址上! 低字节用 `ADD`, 高字节用 `ADC` (带进位加法), 以防刚才那次加法让低字节超过 255 溢出.
 
 ```assembly
-  LPM    R16, Z                        ; Load Program Memory!
+  LPM    R16, Z                        ; 读程序存储器!
   RET
 ```
-Finally, we execute `LPM R16, Z`. The CPU reaches deep into the Flash memory at the exact address stored in the Z-Pointer, grabs the byte, and pulls it into `R16`!
+最后, 我们执行 `LPM R16, Z`. CPU 会深入到 Flash 里 Z 指针所指的那个确切地址, 抓出那个字节, 拉进 `R16`!
 
 ---
 
-Congratulations! You have successfully mastered Flash memory architecture, 16-bit pointer arithmetic, and the Z-Pointer in bare metal assembly!
+恭喜! 你已经在裸机汇编里掌握了 Flash 存储器架构, 16 位指针运算, 还有 Z 指针!

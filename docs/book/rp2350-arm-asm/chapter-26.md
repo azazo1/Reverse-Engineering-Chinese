@@ -1,67 +1,67 @@
-# Chapter 26: reset.s — Releasing Peripherals from Reset
+# Chapter 26: reset.s - 把外设从复位中释放
 
-## Introduction
+## 引言
 
-After power-on, most peripherals on the RP2350 are held in reset to save power and prevent bus conflicts.  Before our firmware can configure GPIO registers, it must explicitly release IO_BANK0 from reset and wait for the release to complete.  reset.s contains a single function, `Init_Subsystem`, that does exactly this.
+上电之后, RP2350 上的大多数外设都保持在复位状态, 以节省功耗并避免总线冲突. 在我们的固件能够配置 GPIO 寄存器之前, 必须显式地把 IO_BANK0 从复位中释放出来, 并等待释放完成. reset.s 里只有一个函数 `Init_Subsystem`, 它做的就是这件事.
 
-## Complete Source Code
+## 完整源码
 
 ```asm
-.syntax unified                                  // use unified assembly syntax
-.cpu cortex-m33                                  // target Cortex-M33 core
-.thumb                                           // use Thumb instruction set
+.syntax unified                                  // 使用统一汇编语法
+.cpu cortex-m33                                  // 目标核心为 Cortex-M33
+.thumb                                           // 使用 Thumb 指令集
 
 .include "constants.s"
 
-.section .text                                   // code section
-.align 2                                         // align to 4-byte boundary
+.section .text                                   // 代码段
+.align 2                                         // 对齐到 4 字节边界
 
 .global Init_Subsystem
 .type Init_Subsystem, %function
 Init_Subsystem:
 .GPIO_Subsystem_Reset:
-  ldr   r0, =RESETS_RESET                        // load RESETS->RESET address
-  ldr   r1, [r0]                                 // read RESETS->RESET value
-  bic   r1, r1, #(1<<6)                          // clear IO_BANK0 bit
-  str   r1, [r0]                                 // store value into RESETS->RESET address
+  ldr   r0, =RESETS_RESET                        // 加载 RESETS->RESET 地址
+  ldr   r1, [r0]                                 // 读取 RESETS->RESET 的值
+  bic   r1, r1, #(1<<6)                          // 清除 IO_BANK0 位
+  str   r1, [r0]                                 // 把值写入 RESETS->RESET 地址
 .GPIO_Subsystem_Reset_Wait:
-  ldr   r0, =RESETS_RESET_DONE                   // load RESETS->RESET_DONE address
-  ldr   r1, [r0]                                 // read RESETS->RESET_DONE value
-  tst   r1, #(1<<6)                              // test IO_BANK0 reset done
-  beq   .GPIO_Subsystem_Reset_Wait               // wait until done
-  bx    lr                                       // return
+  ldr   r0, =RESETS_RESET_DONE                   // 加载 RESETS->RESET_DONE 地址
+  ldr   r1, [r0]                                 // 读取 RESETS->RESET_DONE 的值
+  tst   r1, #(1<<6)                              // 测试 IO_BANK0 复位完成位
+  beq   .GPIO_Subsystem_Reset_Wait               // 等待完成
+  bx    lr                                       // 返回
 ```
 
-## Line-by-Line Walkthrough
+## 逐行讲解
 
-### Release IO_BANK0 from Reset
+### 把 IO_BANK0 从复位中释放
 
 ```asm
   ldr   r0, =RESETS_RESET                        // r0 = 0x40020000
-  ldr   r1, [r0]                                 // r1 = current reset register value
-  bic   r1, r1, #(1<<6)                          // clear bit 6 (IO_BANK0)
-  str   r1, [r0]                                 // write back
+  ldr   r1, [r0]                                 // r1 = 当前复位寄存器的值
+  bic   r1, r1, #(1<<6)                          // 清除 bit 6 (IO_BANK0)
+  str   r1, [r0]                                 // 写回
 ```
 
-The RESETS_RESET register has one bit per peripheral.  When a bit is 1, that peripheral is held in reset (inactive).  When cleared to 0, the peripheral begins its reset release sequence.
+RESETS_RESET 寄存器里每个外设占一位. 某一位是 1 时, 对应外设被保持在复位状态 (不工作). 把它清成 0, 该外设就开始执行复位释放流程.
 
-Bit 6 corresponds to IO_BANK0, which controls the GPIO function select and control registers.
+bit 6 对应 IO_BANK0, 它控制 GPIO 的功能选择和配置寄存器.
 
-The read-modify-write pattern (`ldr` → `bic` → `str`) preserves all other bits.  Only IO_BANK0 is released; all other peripherals remain in their current state.
+这个读-改-写模式 (`ldr` → `bic` → `str`) 保留了其他所有位. 只有 IO_BANK0 被释放, 其余外设保持原状.
 
-### Wait for Reset Completion
+### 等待复位完成
 
 ```asm
   ldr   r0, =RESETS_RESET_DONE                   // r0 = 0x40020008
-  ldr   r1, [r0]                                 // r1 = current done status
-  tst   r1, #(1<<6)                              // test IO_BANK0 done bit
-  beq   .GPIO_Subsystem_Reset_Wait               // loop if not done
-  bx    lr                                       // done — return
+  ldr   r1, [r0]                                 // r1 = 当前完成状态
+  tst   r1, #(1<<6)                              // 测试 IO_BANK0 完成位
+  beq   .GPIO_Subsystem_Reset_Wait               // 未完成则继续循环
+  bx    lr                                       // 已完成 - 返回
 ```
 
-Clearing the reset bit starts the release process, but it is not instantaneous.  The peripheral needs clock cycles to initialize its internal state.  The RESETS_RESET_DONE register reports completion: bit 6 goes high when IO_BANK0 is fully operational.
+清除复位位只是启动释放流程, 它并不是瞬间完成的. 外设需要若干个时钟周期来初始化内部状态. RESETS_RESET_DONE 寄存器报告完成情况: 当 IO_BANK0 完全可用时, bit 6 变高.
 
-The polling pattern is identical to the XOSC stabilization loop:
+轮询的写法与 XOSC 的稳定等待循环一模一样:
 
 ```
   +-->  ldr r1, [r0]       read RESET_DONE
@@ -74,59 +74,59 @@ The polling pattern is identical to the XOSC stabilization loop:
   bx    lr                 (done — return)
 ```
 
-## Reset Register Bit Map
+## 复位寄存器位图
 
-The RESETS_RESET register controls many peripherals.  Bit 6 is the only one we use:
+RESETS_RESET 寄存器控制着许多外设. bit 6 是我们唯一用到的:
 
-| Bit | Peripheral | Our Usage |
+| 位 | 外设 | 我们的用法 |
 |-----|-----------|-----------|
-| 0 | ADC | Not used |
-| 1 | BUSCTRL | Not used |
-| 2 | DMA | Not used |
-| 3 | HSTX | Not used |
-| 4 | I2C0 | Not used |
-| 5 | I2C1 | Not used |
-| **6** | **IO_BANK0** | **Released** |
-| 7 | IO_QSPI | Not used |
-| 8 | JTAG | Not used |
-| 9 | PADS_BANK0 | Not used |
-| 10 | PADS_QSPI | Not used |
+| 0 | ADC | 未使用 |
+| 1 | BUSCTRL | 未使用 |
+| 2 | DMA | 未使用 |
+| 3 | HSTX | 未使用 |
+| 4 | I2C0 | 未使用 |
+| 5 | I2C1 | 未使用 |
+| **6** | **IO_BANK0** | **已释放** |
+| 7 | IO_QSPI | 未使用 |
+| 8 | JTAG | 未使用 |
+| 9 | PADS_BANK0 | 未使用 |
+| 10 | PADS_QSPI | 未使用 |
 | ... | ... | ... |
 
-## Why the Wait Is Necessary
+## 为什么必须等待
 
-Without polling RESET_DONE, the firmware might immediately try to read GPIO registers before IO_BANK0 has completed initialization.  The result would be:
+如果不轮询 RESET_DONE, 固件可能会在 IO_BANK0 还没初始化完时就去读 GPIO 寄存器. 后果是:
 
-- Reads return zero (registers not yet initialized)
-- Writes are silently ignored
-- GPIO configuration appears to succeed but has no effect
+- 读回全零 (寄存器还没初始化)
+- 写入被静默忽略
+- GPIO 配置看起来成功了, 实际毫无效果
 
-The polling loop guarantees that IO_BANK0 is fully functional before any GPIO register access.
+轮询循环保证在访问任何 GPIO 寄存器之前, IO_BANK0 已经完全可用.
 
-## Function Characteristics
+## 函数特征
 
-`Init_Subsystem` is a leaf function:
+`Init_Subsystem` 是一个叶子函数:
 
-- **No function calls** — does not use `bl`
-- **No stack frame** — does not push/pop registers
-- **Uses only r0, r1** — both are scratch registers (caller-saved)
-- **Returns via `bx lr`** — LR is preserved
+- **没有函数调用** - 不使用 `bl`
+- **没有栈帧** - 不 push/pop 寄存器
+- **只用 r0, r1** - 两者都是临时寄存器 (调用者保存)
+- **通过 `bx lr` 返回** - LR 保持不变
 
-## Local Labels
+## 局部标号
 
-The function uses two local labels:
+这个函数用了两个局部标号:
 
-| Label | Purpose |
+| 标号 | 用途 |
 |-------|---------|
-| `.GPIO_Subsystem_Reset` | Marks the reset release code |
-| `.GPIO_Subsystem_Reset_Wait` | Polling loop target |
+| `.GPIO_Subsystem_Reset` | 标记复位释放代码 |
+| `.GPIO_Subsystem_Reset_Wait` | 轮询循环的目标 |
 
-These are file-local (prefixed with `.`) and serve as documentation anchors.
+它们都是文件内局部的 (以 `.` 开头), 起到文档锚点的作用.
 
-## Summary
+## 小结
 
-- `Init_Subsystem` releases IO_BANK0 from reset by clearing bit 6 in RESETS_RESET.
-- It then polls RESETS_RESET_DONE bit 6 until the release is complete.
-- This must happen before any GPIO register access — otherwise reads return zero.
-- The read-modify-write pattern preserves other peripherals' reset state.
-- This is a leaf function using only scratch registers, requiring no stack frame.
+- `Init_Subsystem` 通过清除 RESETS_RESET 里的 bit 6, 把 IO_BANK0 从复位中释放.
+- 然后它轮询 RESETS_RESET_DONE 的 bit 6, 直到释放完成.
+- 这必须发生在任何 GPIO 寄存器访问之前 - 否则读回的都是零.
+- 读-改-写模式保留了其他外设的复位状态.
+- 这是一个只用临时寄存器的叶子函数, 不需要栈帧.

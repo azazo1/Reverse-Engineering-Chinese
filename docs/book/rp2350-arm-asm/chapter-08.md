@@ -1,38 +1,38 @@
-# Chapter 8: ARM Immediate and Move Instructions
+# Chapter 8: ARM 立即数与传送指令
 
-## Introduction
+## 引言
 
-Before a processor can operate on data it must get that data into a register.  On a RISC machine, transferring constants into registers is one of the most common operations.  This chapter examines how the Cortex-M33 loads immediate values, the constraints the encoding imposes, and the role of the assembler's `ldr Rd, =value` pseudo-instruction that our blink firmware relies on heavily.
+处理器要处理数据, 首先得把数据弄进寄存器. 在 RISC 机器上, 把常量送进寄存器是最常见的操作之一. 本章考察 Cortex-M33 如何加载立即数, 编码本身带来哪些限制, 以及汇编器的 `ldr Rd, =value` 伪指令扮演什么角色 - 我们的闪烁固件非常依赖它.
 
-## The `mov` Instruction
+## `mov` 指令
 
-`mov` copies a value into the destination register:
+`mov` 把一个值复制进目标寄存器:
 
 ```asm
-  mov   r0, #16                                  // r0 = 16 (GPIO number)
+  mov   r0, #16                                  // r0 = 16 (GPIO 编号)
 ```
 
-Thumb-2 encodes an immediate inside the instruction word itself.  The available range depends on the encoding:
+Thumb-2 把立即数编码在指令字本身里面. 可用的范围取决于编码方式:
 
-| Encoding | Range | Notes |
+| 编码方式 | 范围 | 说明 |
 |----------|-------|-------|
-| 16-bit `mov` | 0–255 | Low registers r0–r7 only |
-| 32-bit `mov` | Modified immediate | 8-bit value rotated within 32-bit word |
-| 32-bit `movw` | 0–65535 | Full 16-bit immediate |
-| `movt` | 0–65535 into upper half | Pairs with `movw` for 32-bit values |
+| 16 位 `mov` | 0-255 | 只能用低寄存器 r0-r7 |
+| 32 位 `mov` | 修改型立即数 | 8 位值在 32 位字内循环移位 |
+| 32 位 `movw` | 0-65535 | 完整的 16 位立即数 |
+| `movt` | 0-65535 写入高半部分 | 与 `movw` 配合构成 32 位值 |
 
-The "modified immediate" encoding can represent values like `0xFF`, `0xFF00`, or `0xFF000000`, but not arbitrary 32-bit constants.
+"修改型立即数"编码可以表示 `0xFF`, `0xFF00` 或 `0xFF000000` 这样的值, 但表示不了任意的 32 位常量.
 
-## The `ldr Rd, =value` Pseudo-Instruction
+## `ldr Rd, =value` 伪指令
 
-When a constant does not fit any `mov` encoding, the assembler provides a pseudo-instruction:
+当某个常量放不进任何 `mov` 编码时, 汇编器提供了一条伪指令:
 
 ```asm
   ldr   r0, =PADS_BANK0_GPIO16_OFFSET            // r0 = 0x44
   ldr   r1, =IO_BANK0_GPIO16_CTRL_OFFSET          // r1 = 0x84
 ```
 
-The assembler handles this by placing the 32-bit constant in a "literal pool" — a data area near the code — and generating a PC-relative `ldr`:
+汇编器的做法是把这个 32 位常量放进一个"字面量池 (literal pool)" - 代码附近的一块数据区 - 并生成一条相对于 PC 的 `ldr`:
 
 ```
 Before assembly:
@@ -44,11 +44,11 @@ After assembly:
   .word 0x40038000                                 // literal pool entry
 ```
 
-This is critical for our firmware because peripheral base addresses like `0x40028000` (IO_BANK0_BASE) and `0x40038000` (PADS_BANK0_BASE) are 32-bit values that cannot fit in any immediate encoding.
+这对我们的固件至关重要, 因为像 `0x40028000` (IO_BANK0_BASE) 和 `0x40038000` (PADS_BANK0_BASE) 这样的外设基地址都是 32 位值, 放不进任何立即数编码.
 
-## Literal Pool Placement
+## 字面量池放在哪里
 
-The literal pool must be within ±4095 bytes of the `ldr` instruction (for 32-bit Thumb-2 encoding).  The assembler typically places it after the next unconditional branch or at the end of the section:
+在 32 位 Thumb-2 编码下, 字面量池必须位于 `ldr` 指令的 ±4095 字节之内. 汇编器通常把它放在下一个无条件跳转之后, 或者本节末尾:
 
 ```
 +-----------------+
@@ -62,48 +62,48 @@ The literal pool must be within ±4095 bytes of the `ldr` instruction (for 32-bi
 +-----------------+
 ```
 
-## Our Firmware's Use of Immediates
+## 我们固件里立即数的用法
 
-In our blink driver, constants flow into registers in several ways:
+在闪烁驱动里, 常量通过几种途径进入寄存器:
 
-1. **`ldr Rd, =constant`** for peripheral addresses — used in every source file:
+1. **`ldr Rd, =constant`** 用来加载外设地址 - 每个源文件里都有:
 
 ```asm
   ldr   r0, =XOSC_BASE                           // r0 = 0x40048000
   ldr   r1, =RESETS_BASE                          // r1 = 0x40020000
 ```
 
-2. **Immediate operands** for bit manipulation — common in gpio.s:
+2. **立即数操作数**用来做位操作 - 在 gpio.s 里很常见:
 
 ```asm
-  bic   r5, r5, #(1<<7)                          // clear OD bit 7
-  orr   r5, r5, #(1<<6)                          // set IE bit 6
+  bic   r5, r5, #(1<<7)                          // 清除 OD 第 7 位
+  orr   r5, r5, #(1<<6)                          // 置位 IE 第 6 位
 ```
 
-Here `(1<<7)` = 0x80 and `(1<<6)` = 0x40, both fitting in modified immediate encoding.
+这里 `(1<<7)` = 0x80, `(1<<6)` = 0x40, 两个都能用修改型立即数编码表示.
 
-3. **Small immediates in `mov`** — used in delay.s:
+3. **`mov` 里的小立即数** - 用在 delay.s 里:
 
 ```asm
-  mov   r4, #3600                                // loops per millisecond
+  mov   r4, #3600                                // 每毫秒的循环次数
 ```
 
-The value 3600 (0xE10) fits in a 16-bit `movw` encoding.
+3600 (0xE10) 这个值可以用 16 位的 `movw` 编码表示.
 
-4. **`ldr` of full 32-bit constants** for control register values:
+4. **用 `ldr` 加载完整的 32 位常量**来填控制寄存器的值:
 
 ```asm
-  ldr   r1, =0x00FAB000                          // XOSC_CTRL value
-  orr   r1, r1, #0xAA0                           // form 0x00FABAA0
+  ldr   r1, =0x00FAB000                          // XOSC_CTRL 的值
+  orr   r1, r1, #0xAA0                           // 凑成 0x00FABAA0
 ```
 
-## Why Not Always Use `mov`?
+## 为什么不干脆一直用 `mov`?
 
-Most of our peripheral addresses are 32-bit values in the `0x4xxx_xxxx` or `0x2xxx_xxxx` ranges.  These cannot be represented by any Thumb-2 modified immediate constant, so `ldr Rd, =value` is mandatory.  The assembler silently handles the literal pool, making the code clean while the binary contains the necessary indirection.
+我们大部分外设地址都是 `0x4xxx_xxxx` 或 `0x2xxx_xxxx` 范围内的 32 位值. 它们没法用任何 Thumb-2 修改型立即数表示, 所以必须用 `ldr Rd, =value`. 汇编器默默地处理好字面量池, 让代码保持干净, 而二进制里则包含了必要的那一层间接.
 
-## Summary
+## 小结
 
-- `mov` loads small immediates directly into registers, constrained by encoding limits.
-- `ldr Rd, =value` is a pseudo-instruction that uses a literal pool for arbitrary 32-bit constants.
-- Our firmware relies on `ldr Rd, =value` extensively for peripheral base addresses.
-- Immediate operands in `bic`/`orr`/`tst` use the modified immediate encoding for single-bit and small-mask operations.
+- `mov` 把小立即数直接装进寄存器, 受编码范围限制.
+- `ldr Rd, =value` 是伪指令, 借助字面量池来加载任意 32 位常量.
+- 我们的固件大量依靠 `ldr Rd, =value` 来加载外设基地址.
+- `bic`/`orr`/`tst` 里的立即数操作数用修改型立即数编码, 服务于单位和小掩码操作.

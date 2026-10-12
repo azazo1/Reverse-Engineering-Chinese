@@ -1,101 +1,101 @@
-# Lesson 003 - LED Fading (PWM)
+# Lesson 003 - LED 渐变 (PWM)
 
-## What Are We Building Today?
+## 今天我们要做什么?
 
-Welcome to Lesson 3! In our last lesson, we learned how to turn an LED completely on and completely off. But what if we want to smoothly dim the LED like a movie theater light?
+欢迎来到第 3 课! 上一课我们学会了把 LED 完全点亮和完全熄灭. 但如果我们想让它像电影院里的灯那样缓缓变暗呢?
 
-Today, we are going to learn a magic trick called **PWM** (Pulse Width Modulation) to fade an LED smoothly up and down! 
+今天我们就要学一个魔术, 它叫 **PWM** (脉冲宽度调制), 用它让 LED 平滑地亮起来又暗下去!
 
-By the end of this lesson, an LED connected to **Pin 9** on your Arduino will continuously breathe in and out.
+学完这一课, 接在 Arduino **Pin 9** 上的 LED 会持续地"呼吸".
 
 [CODE](https://github.com/mytechnotalent/Assembler/blob/main/lessons/003/lesson.s)
 
 ---
 
-## The Magic Trick: PWM (Pulse Width Modulation)
+## 这个魔术: PWM (脉冲宽度调制)
 
-Microcontrollers like the ATmega328P are strictly digital. That means pins can only be completely ON (5 Volts) or completely OFF (0 Volts). There is no "in-between" 2.5 Volts. 
+像 ATmega328P 这样的单片机是彻底的数字器件. 也就是说, 引脚只能是完全打开 (5 伏) 或者完全关闭 (0 伏). 没有"中间值" 2.5 伏这种东西.
 
-So how do we make the LED look halfway bright? We play a trick on your eyes!
+那怎么让 LED 看起来半亮呢? 我们对你的眼睛耍个花招!
 
-If we turn the LED ON and OFF incredibly fast—hundreds of times a second—your eyes can't see the flickering. Instead, your brain averages the light out.
-- If the LED is ON for 90% of the time and OFF for 10%, it looks **very bright**.
-- If the LED is ON for 10% of the time and OFF for 90%, it looks **very dim**.
+如果我们让 LED 以极快的速度开关 - 每秒几百次 - 你的眼睛根本看不出它在闪. 你的大脑只会把光平均一下.
+- 如果 LED 有 90% 的时间是亮的, 10% 的时间是灭的, 看起来就**非常亮**.
+- 如果 LED 有 10% 的时间是亮的, 90% 的时间是灭的, 看起来就**非常暗**.
 
-This trick is called **PWM**! We change the "width" of the ON pulse to control the brightness.
+这个花招就叫 **PWM**! 我们改变"点亮脉冲的宽度"来控制亮度.
 
-## The Hardware Timer
+## 硬件定时器
 
-To do this, we don't turn the pin on and off manually in our code. Instead, we use a built-in piece of hardware called **Timer 1**. It works like a background stopwatch that runs completely on its own!
+要做到这一点, 我们不需要在代码里手动开关引脚. 我们用芯片内部一块叫 **Timer 1** 的硬件. 它就像一个在后台自己跑的马表, 完全不用我们操心!
 
-We tell Timer 1 two things:
-1. "Count really fast from 0 to 255, and then loop back to 0."
-2. "Whenever you are lower than my secret number, turn Pin 9 ON. If you pass my secret number, turn Pin 9 OFF."
+我们告诉 Timer 1 两件事:
+1. "飞快地从 0 数到 255, 然后回到 0 重新开始."
+2. "只要你的计数比我的秘密数字小, 就把 Pin 9 打开. 一旦超过我的秘密数字, 就把 Pin 9 关掉."
 
-That secret number is our brightness! 
-
----
-
-## Step-by-Step Code Walkthrough
-
-Let's look at the assembly code to see how we set this up.
-
-### 1. The Defines
-```assembly
-.equ DDRB,   0x04                      ; Data Direction Register for Port B
-.equ PB1,    1                         ; Pin 1 on Port B (Arduino Pin 9)
-```
-Just like Lesson 2, we use `DDRB`. But this time we use `PB1`, which connects to physical Pin 9 on the Arduino board. Pin 9 is special because it is wired directly to Timer 1!
-
-```assembly
-.equ TCCR1A, 0x80                      ; Timer/Counter1 Control Register A
-.equ TCCR1B, 0x81                      ; Timer/Counter1 Control Register B
-.equ OCR1AL, 0x88                      ; Output Compare Register 1 A Low
-```
-These are the new Timer 1 registers. 
-- `TCCR1A` and `TCCR1B` are the control panels. We use them to configure the timer.
-- `OCR1AL` is the "Output Compare Register". **This is our secret brightness number!**
-
-### 2. Setting up the Timer
-In our `main` program, after setting the stack and `DDRB`, we configure the timer:
-```assembly
-  LDI    R16, 0x81                     ; COM1A1=1, WGM10=1 (8-bit Fast PWM)
-  STS    TCCR1A, R16                   ; Store into TCCR1A
-  LDI    R16, 0x0B                     ; WGM12=1, CS11=1, CS10=1 (Prescaler 64)
-  STS    TCCR1B, R16                   ; Store into TCCR1B
-```
-This looks complicated, but it's just flipping switches on the timer's control panel.
-- We set it to **8-bit Fast PWM** mode, which means it counts from 0 to 255.
-- We set a **Prescaler of 64**, which slows the timer down just enough so it pulses at about 976 times per second (perfect for our eyes!).
-- We tell it to connect directly to Pin 9 (`COM1A1=1`).
-
-### 3. Fading Up!
-```assembly
-  LDI    R16, 0                        ; Start brightness at 0
-.fade_up:                              
-  STS    OCR1AL, R16                   ; Update PWM duty cycle
-  RCALL  delay_10ms                    ; Wait 10ms for visible change
-  INC    R16                           ; Increase brightness by 1
-  BRNE   .fade_up                      ; If not rolled over to 0, loop
-```
-Here is where the animation happens! We start our brightness (`R16`) at 0.
-1. `STS OCR1AL, R16` copies our brightness into the Timer.
-2. `RCALL delay_10ms` waits a tiny fraction of a second so our eyes can see the change.
-3. `INC R16` adds 1 to our brightness.
-4. `BRNE .fade_up` loops back and does it again until `R16` hits 255 and rolls over!
-
-### 4. Fading Down!
-```assembly
-  LDI    R16, 255                      ; Start brightness at 255
-.fade_down:                            
-  STS    OCR1AL, R16                   ; Update PWM duty cycle
-  RCALL  delay_10ms                    ; Wait 10ms for visible change
-  DEC    R16                           ; Decrease brightness by 1
-  BRNE   .fade_down                    ; If not reached 0, loop
-  RJMP   .fade_up                      ; Infinite loop back to fade up
-```
-This is the exact same thing in reverse! We start at 255, and use `DEC R16` to subtract 1 until the brightness reaches 0. Then we `RJMP .fade_up` to start the entire breathing animation over again!
+那个秘密数字就是我们的亮度!
 
 ---
 
-Congratulations! You just controlled a complex hardware timer using Assembly language!
+## 逐行代码讲解
+
+我们来看看汇编代码里是怎么设置的.
+
+### 1. 定义部分
+```assembly
+.equ DDRB,   0x04                      ; Port B 的数据方向寄存器
+.equ PB1,    1                         ; Port B 的第 1 脚 (Arduino Pin 9)
+```
+和第 2 课一样, 我们用 `DDRB`. 不过这次用 `PB1`, 它连到 Arduino 板上真实的 Pin 9. Pin 9 很特别, 因为它直接接到了 Timer 1 上!
+
+```assembly
+.equ TCCR1A, 0x80                      ; Timer/Counter1 控制寄存器 A
+.equ TCCR1B, 0x81                      ; Timer/Counter1 控制寄存器 B
+.equ OCR1AL, 0x88                      ; 输出比较寄存器 1 A 低位
+```
+这些是新的 Timer 1 寄存器.
+- `TCCR1A` 和 `TCCR1B` 是控制面板. 我们用它们来配置定时器.
+- `OCR1AL` 是"输出比较寄存器". **这就是我们那个秘密的亮度数字!**
+
+### 2. 设置定时器
+在 `main` 程序里, 设好栈和 `DDRB` 之后, 我们就来配置定时器:
+```assembly
+  LDI    R16, 0x81                     ; COM1A1=1, WGM10=1 (8 位快速 PWM)
+  STS    TCCR1A, R16                   ; 存入 TCCR1A
+  LDI    R16, 0x0B                     ; WGM12=1, CS11=1, CS10=1 (预分频 64)
+  STS    TCCR1B, R16                   ; 存入 TCCR1B
+```
+看着挺复杂, 其实只是在定时器的控制面板上拨几个开关.
+- 我们把它设成 **8 位快速 PWM** 模式, 也就是从 0 数到 255.
+- 我们把**预分频设为 64**, 这刚好把定时器放慢到每秒大约脉冲 976 次 (对人眼来说正合适!).
+- 我们让它直接连到 Pin 9 (`COM1A1=1`).
+
+### 3. 渐亮!
+```assembly
+  LDI    R16, 0                        ; 亮度从 0 开始
+.fade_up:
+  STS    OCR1AL, R16                   ; 更新 PWM 占空比
+  RCALL  delay_10ms                    ; 等 10ms 让变化看得见
+  INC    R16                           ; 亮度加 1
+  BRNE   .fade_up                      ; 如果没回绕到 0, 就继续循环
+```
+动画就是在这里发生的! 我们把亮度 (`R16`) 从 0 开始.
+1. `STS OCR1AL, R16` 把亮度复制进定时器.
+2. `RCALL delay_10ms` 等一小会儿, 让眼睛能看见这个变化.
+3. `INC R16` 把亮度加 1.
+4. `BRNE .fade_up` 跳回去再做一遍, 直到 `R16` 加到 255 然后回绕!
+
+### 4. 渐暗!
+```assembly
+  LDI    R16, 255                      ; 亮度从 255 开始
+.fade_down:
+  STS    OCR1AL, R16                   ; 更新 PWM 占空比
+  RCALL  delay_10ms                    ; 等 10ms 让变化看得见
+  DEC    R16                           ; 亮度减 1
+  BRNE   .fade_down                    ; 如果没到 0, 就继续循环
+  RJMP   .fade_up                      ; 无限循环, 回到渐亮
+```
+这就是同一件事反过来做! 我们从 255 开始, 用 `DEC R16` 一次次减 1, 直到亮度变成 0. 然后 `RJMP .fade_up` 从头开始整个呼吸动画!
+
+---
+
+恭喜! 你刚刚用汇编语言控制了一个复杂的硬件定时器!

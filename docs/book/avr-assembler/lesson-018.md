@@ -1,68 +1,68 @@
-# Lesson 018 - Photocell (Light Sensor)
+# Lesson 018 - 光敏电阻 (光线传感器)
 
-## What Are We Building Today?
+## 今天我们要做什么?
 
-Today we will combine three powerful concepts we have learned: The Analog-to-Digital Converter (ADC), the 74HC595 Shift Register, and the Photocell (Light Dependent Resistor). 
+今天我们要把学过的三个强大概念合起来用: 模数转换器 (ADC), 74HC595 移位寄存器, 还有光敏电阻 (光电池).
 
-We will create a live, glowing **Light-Level Bar Graph**! When the room gets brighter, more LEDs on our 8-LED array will magically light up in sequence! 
+我们要做一条会实时发光的**光照强度条形图**! 房间越亮, 我们那 8 颗 LED 的阵列就依次亮起越多颗!
 
 [CODE](https://github.com/mytechnotalent/Assembler/blob/main/lessons/018/lesson.s)
 
 ---
 
-## Hardware Check: The Voltage Divider
-A Photocell is a resistor whose resistance decreases when light shines on it. We wire it into a Voltage Divider circuit and connect the middle point to the **A0 (Analog 0)** pin of the ATmega328P.
-When the room is dark, the ADC will read a very low number. When you shine a flashlight on it, the ADC will read a number closer to `1023`.
+## 硬件检查: 分压电路
+光敏电阻是一种阻值会随着光照增强而减小的电阻. 我们把它接进一个分压电路, 把中间那一点接到 ATmega328P 的 **A0 (模拟 0)** 引脚上.
+房间很暗的时候, ADC 读到的数很小. 你拿手电筒照它, ADC 读到的数就接近 `1023`.
 
-## The Code Walkthrough
+## 代码讲解
 
-### 1. Division by Subtraction
-We read a 10-bit number from the ADC (0 to 1023), but we only have 8 LEDs. We need to convert `0 - 1023` into an "LED Count" from `0 - 8`. 
+### 1. 用减法做除法
+我们从 ADC 读到一个 10 位数 (0 到 1023), 可我们只有 8 颗 LED. 我们得把 `0 - 1023` 换算成一个 `0 - 8` 的 "LED 个数".
 
-We divide the ADC value by `114` using our trusty Repeated Subtraction algorithm!
+我们用那套靠得住的反复减法算法, 把 ADC 的值除以 `114`!
 
 ```assembly
 .div_loop:
-  LDI    R16, 114                      
-  CP     R24, R16                      
-  LDI    R16, 0                        
-  CPC    R25, R16                      
-  BRLO   .div_done                     ; If ADC < 114, division is done
-  
-  LDI    R16, 114                      
+  LDI    R16, 114
+  CP     R24, R16
+  LDI    R16, 0
+  CPC    R25, R16
+  BRLO   .div_done                     ; 若 ADC < 114, 除法结束
+
+  LDI    R16, 114
   SUB    R24, R16                      ; ADC = ADC - 114
   ...
-  INC    R20                           ; Count++
+  INC    R20                           ; 计数加一
   RJMP   .div_loop
 ```
-When this loop finishes, `R20` holds our perfect "LED Count", a number between 0 and 8!
+这个循环跑完之后, `R20` 里就是完美的 "LED 个数", 一个 0 到 8 之间的数字!
 
-### 2. Building a Bar Graph (SEC and ROL)
-If our LED Count is `3`, we want the Shift Register to light up 3 LEDs (`00000111`). If it's `5`, we want `00011111`. How do we programmatically build this binary mask?
+### 2. 造出条形图 (SEC 和 ROL)
+如果我们的 LED 个数是 `3`, 我们想让移位寄存器点亮 3 颗 LED (`00000111`). 如果是 `5`, 我们想要 `00011111`. 我们怎么用程序造出这个二进制掩码呢?
 
-We use two of the most clever bit-manipulation instructions in the entire AVR instruction set!
+我们用整个 AVR 指令集里最巧妙的两条位操作指令!
 
 ```assembly
 .build_mask:
-  LDI    R16, 0                        ; Start with a blank mask (00000000)
+  LDI    R16, 0                        ; 从一个空掩码开始 (00000000)
 ...
 .mask_loop:
-  SEC                                  ; Set Carry Flag (C=1)
-  ROL    R16                           ; Rotate Left through Carry
-  DEC    R20                           ; Decrement our LED count
-  BRNE   .mask_loop                    ; Repeat for each LED count
+  SEC                                  ; 置位进位标志 (C=1)
+  ROL    R16                           ; 通过进位循环左移
+  DEC    R20                           ; LED 个数减 1
+  BRNE   .mask_loop                    ; 每个 LED 都重复一次
 ```
 
-- **SEC (Set Carry)**: This immediately turns the Carry Flag in the CPU Status Register to a `1`.
-- **ROL (Rotate Left through Carry)**: This slides all the bits in `R16` to the left. The `1` that was sitting in the Carry Flag falls directly into Bit 0!
+- **SEC (Set Carry, 置位进位)**: 它立刻把 CPU 状态寄存器里的进位标志变成 `1`.
+- **ROL (Rotate Left through Carry, 通过进位循环左移)**: 它把 `R16` 里所有位往左挪一格. 原本待在进位标志里的那个 `1` 就正好掉进第 0 位!
 
-If we run this loop 3 times, `R16` transforms:
+如果这个循环跑 3 次, `R16` 会这样变:
 1. `00000000` -> `00000001`
 2. `00000001` -> `00000011`
 3. `00000011` -> `00000111`
 
-It acts like a perfect snow-plow, building a beautiful bar graph mask that we send directly to our Shift Register!
+它就像一台完美的扫雪车, 推出一条漂亮的条形图掩码, 我们把它直接发给移位寄存器!
 
 ---
 
-Congratulations! You have successfully mathematically divided sensor data and used Rotate instructions to create dynamic visual representations in pure assembly!
+恭喜! 你已经会用数学方法切分传感器数据, 并用循环移位指令在纯汇编里造出动态的可视化效果了!

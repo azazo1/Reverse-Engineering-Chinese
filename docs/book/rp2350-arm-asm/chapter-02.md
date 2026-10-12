@@ -1,12 +1,12 @@
-# Chapter 2: Number Systems — Binary, Hexadecimal, and Decimal
+# Chapter 2: 数制 - 二进制, 十六进制和十进制
 
-## Introduction
+## 引言
 
-Every value in our firmware — addresses, register contents, bit masks, constants — is stored as a pattern of ones and zeros.  This chapter teaches the three number systems you will encounter on every page of this tutorial: decimal, binary, and hexadecimal.  You will learn to convert between them, understand bit numbering, and recognize the specific constants used in our blink driver.
+我们固件里的每一个值 - 地址, 寄存器内容, 位掩码, 常量 - 都以一串 1 和 0 的形式存放. 本章讲解你在这份教程每一页都会遇到的三种数制: 十进制, 二进制和十六进制. 你会学会在它们之间互相换算, 理解位的编号方式, 并认出闪烁驱动里用到的那些特定常量.
 
-## Decimal — Base 10
+## 十进制 - 以 10 为底
 
-Decimal is the number system humans use every day.  It has ten digits: 0 through 9.  Each position represents a power of 10:
+十进制是人类每天都在用的数制. 它有十个数字: 0 到 9. 每一位代表 10 的某次幂:
 
 ```
   4   2   3
@@ -18,11 +18,11 @@ Decimal is the number system humans use every day.  It has ten digits: 0 through
                           423
 ```
 
-Decimal appears in our firmware for delay values, GPIO pin numbers, and loop counts.
+在我们的固件里, 十进制用于延时值, GPIO 引脚编号和循环次数.
 
-## Binary — Base 2
+## 二进制 - 以 2 为底
 
-Binary has two digits: 0 and 1.  Each digit is called a **bit**.  Each position represents a power of 2:
+二进制只有两个数字: 0 和 1. 每个数字叫作一个**位 (bit)**. 每一位代表 2 的某次幂:
 
 ```
   1   1   0   1
@@ -35,19 +35,19 @@ Binary has two digits: 0 and 1.  Each digit is called a **bit**.  Each position 
                              13 (decimal)
 ```
 
-The processor operates entirely in binary.  Every register is 32 bits wide — 32 individual ones and zeros.
+处理器完全用二进制工作. 每个寄存器都是 32 位宽 - 也就是 32 个独立的 1 和 0.
 
-In GNU assembly, binary literals use the `0b` prefix:
+在 GNU 汇编里, 二进制字面量使用 `0b` 前缀:
 
 ```asm
-  .hword 0b0001000000100001                      // SECURE mode (0x1021)
+  .hword 0b0001000000100001                      // SECURE 模式 (0x1021)
 ```
 
-## Hexadecimal — Base 16
+## 十六进制 - 以 16 为底
 
-Hexadecimal (hex) has sixteen digits: 0–9 and A–F (where A=10, B=11, C=12, D=13, E=14, F=15).  Each hex digit represents exactly four bits:
+十六进制 (hex) 有十六个数字: 0-9 和 A-F (其中 A=10, B=11, C=12, D=13, E=14, F=15). 每一位十六进制数字恰好代表四位二进制:
 
-| Hex | Binary | Decimal |
+| Hex | 二进制 | 十进制 |
 |-----|--------|---------|
 | 0 | 0000 | 0 |
 | 1 | 0001 | 1 |
@@ -66,26 +66,26 @@ Hexadecimal (hex) has sixteen digits: 0–9 and A–F (where A=10, B=11, C=12, D
 | E | 1110 | 14 |
 | F | 1111 | 15 |
 
-This makes hex the preferred notation for memory addresses and register values because each hex digit maps directly to four bits.
+正因如此, 十六进制成了表示内存地址和寄存器值的首选写法, 因为每一位十六进制数字都直接对应四位二进制.
 
-## The 0x Prefix
+## 0x 前缀
 
-In assembly and C, hexadecimal numbers are written with a `0x` prefix:
+在汇编和 C 里, 十六进制数写作带 `0x` 前缀的形式:
 
 ```
 0x40028000 = 0100 0000 0000 0010 1000 0000 0000 0000 (binary)
 ```
 
-Every memory-mapped address in our firmware is written in hex:
+我们固件里每一个内存映射地址都用十六进制书写:
 
 ```asm
-  .equ XOSC_BASE,  0x40048000                    // crystal oscillator base
-  .equ RESETS_BASE, 0x40020000                    // reset controller base
+  .equ XOSC_BASE,  0x40048000                    // 晶振基地址
+  .equ RESETS_BASE, 0x40020000                    // 复位控制器基地址
 ```
 
-## Bit Numbering
+## 位的编号
 
-Bits in a 32-bit register are numbered 0 (least significant, rightmost) to 31 (most significant, leftmost):
+32 位寄存器里的位从 0 (最低有效位, 最右边) 编号到 31 (最高有效位, 最左边):
 
 ```
 Bit:  31 30 29 28 ... 3  2  1  0
@@ -95,58 +95,58 @@ MSB ---+  |  |  |      |  |  |  +--- LSB
           v  v  v      v  v  v
 ```
 
-When we write `#(1<<6)`, we mean a 32-bit value with only bit 6 set:
+当我们写 `#(1<<6)` 时, 意思是只有一个第 6 位被置位的 32 位值:
 
 ```
 0000 0000 0000 0000 0000 0000 0100 0000 = 0x00000040
 ```
 
-This notation appears throughout our firmware for setting and clearing individual hardware control bits.
+这个写法在我们的固件里随处可见, 用来置位和清除各个硬件控制位.
 
-## Common Bit Patterns in Our Firmware
+## 固件里常见的位模式
 
-| Pattern | Hex | Binary (relevant bits) | Used For |
+| 位模式 | Hex | 二进制 (相关位) | 用途 |
 |---------|-----|----------------------|----------|
-| `1<<6` | 0x00000040 | bit 6 set | IO_BANK0 reset bit |
-| `1<<7` | 0x00000080 | bit 7 set | OD (output disable) pad bit |
-| `1<<8` | 0x00000100 | bit 8 set | ISO (isolation) pad bit |
-| `1<<11` | 0x00000800 | bit 11 set | CLK_PERI enable bit |
-| `1<<31` | 0x80000000 | bit 31 set | XOSC STABLE status bit |
-| `0x1f` | 0x0000001F | bits 4:0 set | FUNCSEL mask (5 bits) |
-| `0x05` | 0x00000005 | bits 2,0 set | FUNCSEL = SIO (GPIO function) |
+| `1<<6` | 0x00000040 | 第 6 位置位 | IO_BANK0 复位位 |
+| `1<<7` | 0x00000080 | 第 7 位置位 | OD (输出禁用) pad 位 |
+| `1<<8` | 0x00000100 | 第 8 位置位 | ISO (隔离) pad 位 |
+| `1<<11` | 0x00000800 | 第 11 位置位 | CLK_PERI 使能位 |
+| `1<<31` | 0x80000000 | 第 31 位置位 | XOSC STABLE 状态位 |
+| `0x1f` | 0x0000001F | 第 4:0 位置位 | FUNCSEL 掩码 (5 位) |
+| `0x05` | 0x00000005 | 第 2,0 位置位 | FUNCSEL = SIO (GPIO 功能) |
 
-## Two's Complement — Signed Numbers
+## 补码 - 有符号数
 
-ARM Cortex-M33 uses **two's complement** for signed integers.  In a 32-bit register:
+ARM Cortex-M33 用**补码 (two's complement)** 表示有符号整数. 在 32 位寄存器里:
 
-- Bit 31 is the sign bit: 0 = positive, 1 = negative.
-- Positive numbers are represented normally.
-- Negative numbers are represented by inverting all bits and adding 1.
+- 第 31 位是符号位: 0 表示正, 1 表示负.
+- 正数按通常方式表示.
+- 负数这样表示: 把所有位取反, 再加 1.
 
-| Decimal | 32-bit Hex | Binary (MSB shown) |
+| 十进制 | 32 位十六进制 | 二进制 (显示 MSB) |
 |---------|-----------|-------------------|
 | +1 | 0x00000001 | 0000...0001 |
 | 0 | 0x00000000 | 0000...0000 |
 | -1 | 0xFFFFFFFF | 1111...1111 |
 | -2 | 0xFFFFFFFE | 1111...1110 |
 
-In our blink driver we use only unsigned values, but understanding two's complement is essential for interpreting condition codes and branch instructions.
+我们的闪烁驱动里只用无符号值, 但理解补码对读懂条件码和跳转指令是必不可少的.
 
-## Data Sizes on ARM Cortex-M33
+## ARM Cortex-M33 上的数据尺寸
 
-| Name | Size | ARM Instruction Suffix |
+| 名称 | 大小 | ARM 指令后缀 |
 |------|------|----------------------|
-| Byte | 8 bits | `b` (ldrb, strb) |
-| Halfword | 16 bits | `h` (ldrh, strh) |
-| Word | 32 bits | (default: ldr, str) |
+| 字节 (Byte) | 8 位 | `b` (ldrb, strb) |
+| 半字 (Halfword) | 16 位 | `h` (ldrh, strh) |
+| 字 (Word) | 32 位 | (默认: ldr, str) |
 
-Registers are 32 bits wide.  Our firmware works exclusively with word-sized (32-bit) loads and stores because all peripheral registers are 32 bits wide.
+寄存器是 32 位宽. 我们的固件只用字 (32 位) 加载和存储, 因为所有外设寄存器都是 32 位宽.
 
-## Summary
+## 小结
 
-- Binary (base 2) is the native language of the processor — every register is 32 bits.
-- Hexadecimal (base 16) condenses binary into a readable format — each hex digit is 4 bits.
-- The `0x` prefix marks hexadecimal; `0b` marks binary.
-- Bits are numbered 0 (LSB) to 31 (MSB).
-- The shift expression `1<<N` creates a mask with only bit N set.
-- ARM Cortex-M33 uses two's complement for signed arithmetic.
+- 二进制 (以 2 为底) 是处理器的母语 - 每个寄存器都是 32 位.
+- 十六进制 (以 16 为底) 把二进制压缩成好读的形式 - 每一位十六进制数字是 4 位.
+- `0x` 前缀标记十六进制; `0b` 标记二进制.
+- 位的编号从 0 (LSB) 到 31 (MSB).
+- 移位表达式 `1<<N` 生成一个只有第 N 位置位的掩码.
+- ARM Cortex-M33 用补码做有符号运算.

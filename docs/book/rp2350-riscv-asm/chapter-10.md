@@ -1,118 +1,118 @@
-# Chapter 10: RISC-V Memory Access — Load and Store Deep Dive
+# Chapter 10: RISC-V 内存访问 - 加载与存储深入剖析
 
-## Introduction
+## 引言
 
-The Hazard3 core is a load-store architecture: arithmetic and logic operate only on registers.  To interact with the outside world — RAM, peripheral registers, the stack — the processor must explicitly load from and store to memory.  This chapter explores every memory-access instruction and addressing mode used in our blink driver.
+Hazard3 内核是加载-存储架构: 算术和逻辑只在寄存器上操作. 要与外部世界打交道 - RAM, 外设寄存器, 栈 - 处理器必须显式地从内存加载, 或者存储到内存. 本章把闪烁驱动里用到的每一条访存指令和每一种寻址方式都过一遍.
 
-## `lw` — Load Word
+## `lw` - 加载字
 
-`lw` reads a 32-bit word from memory into a register:
+`lw` 从内存读一个 32 位的字到寄存器里:
 
 ```asm
   lw    t1, 0(t0)                                # t1 = memory[t0 + 0]
 ```
 
-The syntax is `lw rd, offset(rs1)` where `offset` is a signed 12-bit immediate (-2048 to 2047) and `rs1` is the base register.
+语法是 `lw rd, offset(rs1)`, 其中 `offset` 是有符号 12 位立即数 (-2048 到 2047), `rs1` 是基址寄存器.
 
-### Zero Offset
+### 零偏移
 
 ```asm
   lw    t1, 0(t0)                                # t1 = memory[t0]
 ```
 
-This is the most common form in our firmware.  xosc.s, reset.s, gpio.s, and coprocessor.s all load peripheral registers this way.  We compute the full address in `t0` first, then load with zero offset.
+这是固件里最常见的形式. xosc.s, reset.s, gpio.s 和 coprocessor.s 都这样加载外设寄存器. 我们先把完整地址算进 `t0`, 然后用零偏移加载.
 
-### Non-Zero Offset
+### 非零偏移
 
 ```asm
   lw    t1, 4(t0)                                # t1 = memory[t0 + 4]
 ```
 
-The offset avoids a separate `addi` to adjust the address.  Our firmware uses zero offset exclusively because each peripheral register access computes the full address via `li` and `add`.
+偏移省去了单独一条调整地址的 `addi`. 我们的固件一律使用零偏移, 因为每次访问外设寄存器都会用 `li` 和 `add` 算出完整地址.
 
-## `sw` — Store Word
+## `sw` - 存储字
 
-`sw` writes a 32-bit word from a register to memory:
+`sw` 把一个 32 位的字从寄存器写到内存:
 
 ```asm
   sw    t1, 0(t0)                                # memory[t0 + 0] = t1
 ```
 
-The syntax is `sw rs2, offset(rs1)`.  Store completes the read-modify-write cycle.  After modifying bits with `and`/`or`/`ori`, the result is written back:
+语法是 `sw rs2, offset(rs1)`. 存储补完了读-改-写这个循环. 用 `and`/`or`/`ori` 改完位之后, 结果被写回去:
 
 ```asm
-  lw    t1, 0(t0)                                # read
-  ori   t1, t1, (1<<6)                           # modify
-  sw    t1, 0(t0)                                # write back
+  lw    t1, 0(t0)                                # 读
+  ori   t1, t1, (1<<6)                           # 改
+  sw    t1, 0(t0)                                # 写回
 ```
 
-Every hardware register configuration in our firmware follows this pattern.
+固件里每一次硬件寄存器配置都遵循这个模式.
 
-## Other Load/Store Widths
+## 其他加载/存储宽度
 
-RISC-V provides loads and stores for different widths, though our firmware uses only word-width:
+RISC-V 提供了不同宽度的加载和存储, 不过我们的固件只用到字宽:
 
-| Instruction | Width | Size |
+| 指令 | 宽度 | 大小 |
 |-------------|-------|------|
-| `lb` / `sb` | Byte | 8 bits |
-| `lbu` | Byte (unsigned) | 8 bits |
-| `lh` / `sh` | Halfword | 16 bits |
-| `lhu` | Halfword (unsigned) | 16 bits |
-| `lw` / `sw` | Word | 32 bits |
+| `lb` / `sb` | 字节 | 8 位 |
+| `lbu` | 字节 (无符号) | 8 位 |
+| `lh` / `sh` | 半字 | 16 位 |
+| `lhu` | 半字 (无符号) | 16 位 |
+| `lw` / `sw` | 字 | 32 位 |
 
-The `u` variants (unsigned) zero-extend rather than sign-extend.  All peripheral registers on the RP2350 are 32-bit aligned, so word access is always appropriate.
+带 `u` 的变体 (无符号) 做的是零扩展而不是符号扩展. RP2350 上的所有外设寄存器都是 32 位对齐的, 所以用字访问总是合适的.
 
-## Stack Operations — Manual Push and Pop
+## 栈操作 - 手工压栈与出栈
 
-Unlike ARM (which has dedicated `push` and `pop` instructions), RISC-V manages the stack manually with `addi`, `sw`, and `lw`:
+与 ARM 不同 (ARM 有专门的 `push` 和 `pop` 指令), RISC-V 用 `addi`, `sw` 和 `lw` 手工管理栈:
 
-### Saving the Return Address (Push)
-
-```asm
-  addi  sp, sp, -4                               # allocate stack frame
-  sw    ra, 0(sp)                                # save return address
-```
-
-This decrements the stack pointer by 4 bytes, then stores the return address register (`ra`) at the new stack top.
-
-### Restoring the Return Address (Pop)
+### 保存返回地址 (压栈)
 
 ```asm
-  lw    ra, 0(sp)                                # restore return address
-  addi  sp, sp, 4                                # deallocate stack frame
+  addi  sp, sp, -4                               # 分配栈帧
+  sw    ra, 0(sp)                                # 保存返回地址
 ```
 
-This loads `ra` from the stack, then increments the stack pointer back.
+它把栈指针减去 4 个字节, 然后把返回地址寄存器 (`ra`) 存到新的栈顶.
 
-### Our Firmware's Stack Usage
+### 恢复返回地址 (出栈)
 
-GPIO_Config is the only function that saves registers to the stack:
+```asm
+  lw    ra, 0(sp)                                # 恢复返回地址
+  addi  sp, sp, 4                                # 释放栈帧
+```
+
+它从栈上把 `ra` 读回来, 然后把栈指针加回去.
+
+### 固件里的栈使用情况
+
+GPIO_Config 是唯一把寄存器保存到栈上的函数:
 
 ```asm
 GPIO_Config:
-  addi  sp, sp, -4                               # allocate stack frame
-  sw    ra, 0(sp)                                # save return address
-  ...                                            # function body
-  lw    ra, 0(sp)                                # restore return address
-  addi  sp, sp, 4                                # deallocate stack frame
-  ret                                            # return
+  addi  sp, sp, -4                               # 分配栈帧
+  sw    ra, 0(sp)                                # 保存返回地址
+  ...                                            # 函数体
+  lw    ra, 0(sp)                                # 恢复返回地址
+  addi  sp, sp, 4                                # 释放栈帧
+  ret                                            # 返回
 ```
 
-All other functions in our firmware are leaf functions (they do not call other functions), so they use `ra` directly without saving it.
+固件里其他所有函数都是叶子函数 (它们不再调用别的函数), 所以直接使用 `ra`, 不需要保存.
 
-### Contrast with ARM
+### 与 ARM 的对比
 
-| Operation | ARM | RISC-V |
+| 操作 | ARM | RISC-V |
 |-----------|-----|--------|
-| Save registers | `push {r4-r12, lr}` (one instruction) | `addi sp, sp, -N` + multiple `sw` instructions |
-| Restore registers | `pop {r4-r12, lr}` (one instruction) | Multiple `lw` instructions + `addi sp, sp, N` |
-| Stack growth | Automatic with push/pop | Manual with addi/sw/lw |
+| 保存寄存器 | `push {r4-r12, lr}` (一条指令) | `addi sp, sp, -N` 加多条 `sw` 指令 |
+| 恢复寄存器 | `pop {r4-r12, lr}` (一条指令) | 多条 `lw` 指令加 `addi sp, sp, N` |
+| 栈的生长 | 由 push/pop 自动完成 | 由 addi/sw/lw 手工完成 |
 
-ARM's `push`/`pop` are more compact for saving many registers.  RISC-V's explicit approach is simpler conceptually — every step is visible.
+要保存很多寄存器时, ARM 的 `push`/`pop` 更紧凑. RISC-V 的显式做法在概念上更简单 - 每一步都看得见.
 
-## Memory Map and Peripheral Access
+## 内存映射与外设访问
 
-Our firmware accesses these memory regions:
+我们的固件访问这些内存区域:
 
 ```
 +------------------------------+
@@ -130,42 +130,42 @@ Our firmware accesses these memory regions:
 +------------------------------+
 ```
 
-Every peripheral access follows the same steps:
+每次外设访问都遵循同样的步骤:
 
-1. `li` the base address into a register
-2. Optionally `add` an offset
-3. `lw` to read the current value
-4. `and`/`or`/`ori`/`andi` to modify bits
-5. `sw` to write back
+1. 用 `li` 把基地址放进寄存器
+2. 可选地用 `add` 加上偏移
+3. 用 `lw` 读出当前值
+4. 用 `and`/`or`/`ori`/`andi` 修改位
+5. 用 `sw` 写回
 
-## Alignment Requirements
+## 对齐要求
 
-The Hazard3 core requires word-aligned access for `lw` and `sw`:
+Hazard3 内核要求 `lw` 和 `sw` 的访问必须字对齐:
 
-| Access | Alignment | Size |
+| 访问 | 对齐 | 大小 |
 |--------|-----------|------|
-| `lw` / `sw` (word) | 4-byte aligned | 32 bits |
-| `lh` / `sh` (halfword) | 2-byte aligned | 16 bits |
-| `lb` / `sb` (byte) | No alignment | 8 bits |
+| `lw` / `sw` (字) | 4 字节对齐 | 32 位 |
+| `lh` / `sh` (半字) | 2 字节对齐 | 16 位 |
+| `lb` / `sb` (字节) | 无对齐要求 | 8 位 |
 
-All peripheral registers in our firmware are at 4-byte-aligned addresses, so word access is always safe.  Misaligned word access on the Hazard3 core generates a load/store address misaligned exception.
+固件里所有外设寄存器都位于 4 字节对齐的地址上, 所以字访问总是安全的. 在 Hazard3 内核上做未对齐的字访问, 会产生加载/存储地址未对齐异常.
 
-## CSR Access
+## CSR 访问
 
-The Hazard3 core has control and status registers (CSRs) accessed via dedicated instructions:
+Hazard3 内核的控制和状态寄存器 (CSR) 通过专门的指令访问:
 
 ```asm
   csrw  mtvec, t0                                # mtvec = t0
 ```
 
-`csrw` (CSR Write) is a pseudo-instruction expanding to `csrrw x0, csr, rs1`.  Our firmware uses it in Init_Trap_Vector to set the machine trap vector base address.
+`csrw` (CSR Write) 是一条伪指令, 展开为 `csrrw x0, csr, rs1`. 我们的固件在 Init_Trap_Vector 里用它设置机器陷阱向量的基地址.
 
-CSR instructions are not loads/stores — they use a separate internal bus — but conceptually they are "write a register to a special location."
+CSR 指令不是加载/存储 - 它们走一条独立的内部总线 - 但概念上它们就是 "把一个寄存器写到某个特殊位置".
 
-## Summary
+## 小结
 
-- `lw` and `sw` are the primary memory access instructions, using base+offset addressing.
-- The stack is managed explicitly with `addi sp`, `sw`, and `lw` — there are no dedicated push/pop instructions.
-- Peripheral registers are accessed at fixed addresses using the read-modify-write pattern.
-- CSR instructions (`csrw`) provide access to control and status registers like `mtvec`.
-- All word accesses must be 4-byte aligned.
+- `lw` 和 `sw` 是主要的访存指令, 使用基址加偏移的寻址方式.
+- 栈用 `addi sp`, `sw` 和 `lw` 显式管理 - 没有专门的 push/pop 指令.
+- 外设寄存器在固定地址上访问, 使用读-改-写模式.
+- CSR 指令 (`csrw`) 提供对 `mtvec` 这类控制和状态寄存器的访问.
+- 所有字访问都必须 4 字节对齐.

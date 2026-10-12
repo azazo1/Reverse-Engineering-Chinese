@@ -1,74 +1,74 @@
-# Lesson 009 - Servo Motor
+# Lesson 009 - 舵机
 
-## What Are We Building Today?
+## 今天我们要做什么?
 
-So far, everything we have built just blinks, beeps, or reads inputs. Today, we bring our microcontroller to life with **motion**!
+到目前为止, 我们做出来的东西只会闪, 会叫, 或者读取输入. 今天我们要用**运动**让单片机活起来!
 
-A standard RC Servo Motor (like the SG90 included in your kit) is a tiny geared motor that can precisely rotate to any angle between 0 and 180 degrees. Instead of turning continuously like a car wheel, it acts like a steering wheel. 
+一个标准的 RC 舵机 (比如你套件里带的 SG90) 是一台小小的带减速齿轮的电机, 它能精确地转到 0 到 180 度之间的任意角度. 它不像车轮那样一直转, 而是像方向盘那样摆.
 
-Today we will use pure AVR assembly to mathematically command a servo to slowly sweep back and forth from 0° to 180° forever, acting like an automated windshield wiper!
+今天我们要用纯 AVR 汇编, 用数学的方式指挥舵机从 0° 到 180° 慢慢地来回扫动, 永远不停, 就像自动雨刮器一样!
 
 [CODE](https://github.com/mytechnotalent/Assembler/blob/main/lessons/009/lesson.s)
 
 ---
 
-## Hardware Check: The Magic of PWM
+## 硬件检查: PWM 的魔法
 
-How do we tell a motor what angle to point at using a single wire? 
-The answer is a very specific type of **Pulse Width Modulation (PWM)**. 
+我们怎么用一根线告诉电机该转到哪个角度呢?
+答案是一种非常特别的**脉冲宽度调制 (PWM)**.
 
-Unlike fading an LED (where the frequency doesn't really matter as long as it's fast), a servo is extremely picky!
-1. The pulse must repeat exactly **50 times a second** (50 Hz). This means the period (length) of the wave is **20 milliseconds**.
-2. The width of the "ON" part of the pulse determines the angle:
-   - **1.0 millisecond pulse** = 0 Degrees
-   - **1.5 millisecond pulse** = 90 Degrees (Middle)
-   - **2.0 millisecond pulse** = 180 Degrees
+给 LED 调光的时候, 频率其实无所谓, 只要够快就行; 可舵机挑剔得很!
+1. 脉冲必须精确地每秒重复 **50 次** (50 Hz). 也就是说波的周期 (长度) 是 **20 毫秒**.
+2. 脉冲里"打开"那部分的宽度决定了角度:
+   - **1.0 毫秒脉冲** = 0 度
+   - **1.5 毫秒脉冲** = 90 度 (中间)
+   - **2.0 毫秒脉冲** = 180 度
 
-## The Code Walkthrough
+## 代码讲解
 
-We will once again use the powerful 16-bit **Timer1**, but we will use a brand new mode: **Mode 14 (Fast PWM, TOP=ICR1)**. 
-Why Mode 14? Because it lets us completely customize the period (50 Hz) using the `ICR1` register, leaving `OCR1A` free to customize the pulse width (the angle)!
+我们又要请出强大的 16 位 **Timer1** 了, 不过这次用一个全新的模式: **模式 14 (快速 PWM, TOP=ICR1)**.
+为什么要用模式 14? 因为它让我们可以用 `ICR1` 寄存器完全自定义周期 (50 Hz), 把 `OCR1A` 空出来专门定制脉冲宽度 (也就是角度)!
 
-### 1. Setting the Period (The 50 Hz Frame)
+### 1. 设置周期 (50 Hz 的帧)
 ```assembly
-  LDI    R16, 0x1A                     ; WGM13=1, WGM12=1, CS11=1 (Prescaler 8)
-  STS    TCCR1B, R16                   ; Write to TCCR1B
-  
-  LDI    R16, 0x9C                     ; TOP High byte (40000 = 0x9C40)
-  STS    ICR1H, R16                    ; Write to ICR1H
-  LDI    R16, 0x40                     ; TOP Low byte
-  STS    ICR1L, R16                    ; Write to ICR1L
-```
-With the clock at 16 MHz and a Prescaler of 8, our timer ticks 2,000,000 times a second. 
-We want a 20ms period (50 Hz). `0.020 seconds * 2,000,000 ticks/sec = 40,000 ticks`.
-So, we load `40,000` (which is `0x9C40` in hex) into the `ICR1` register. The timer now resets every 20ms perfectly!
+  LDI    R16, 0x1A                     ; WGM13=1, WGM12=1, CS11=1 (预分频 8)
+  STS    TCCR1B, R16                   ; 写入 TCCR1B
 
-### 2. Sweeping Up
-```assembly
-  ADIW   R24, 10                       ; Add 10 to R25:R24 (Increase pulse width)
-  STS    OCR1AH, R25                   ; Write to OCR1AH
-  STS    OCR1AL, R24                   ; Write to OCR1AL
-  RCALL  delay_5ms                     ; Wait 5ms for smooth movement
+  LDI    R16, 0x9C                     ; TOP 高字节 (40000 = 0x9C40)
+  STS    ICR1H, R16                    ; 写入 ICR1H
+  LDI    R16, 0x40                     ; TOP 低字节
+  STS    ICR1L, R16                    ; 写入 ICR1L
 ```
-Our angle pulse width is stored in the 16-bit register pair `R25:R24`. We use `ADIW` (Add Immediate to Word) to instantly add 10 to our 16-bit value, increasing the pulse width slightly!
-Then we update `OCR1A` (remember: High byte first, then Low byte!). 
+时钟是 16 MHz, 预分频是 8, 所以我们的定时器每秒跳 2,000,000 次.
+我们想要 20ms 的周期 (50 Hz). `0.020 seconds * 2,000,000 ticks/sec = 40,000 ticks`.
+于是我们把 `40,000` (十六进制是 `0x9C40`) 装进 `ICR1` 寄存器. 现在定时器每 20ms 就精确地重置一次!
+
+### 2. 向上扫
+```assembly
+  ADIW   R24, 10                       ; 给 R25:R24 加 10 (增大脉冲宽度)
+  STS    OCR1AH, R25                   ; 写入 OCR1AH
+  STS    OCR1AL, R24                   ; 写入 OCR1AL
+  RCALL  delay_5ms                     ; 等 5ms 让动作平滑
+```
+我们的角度脉冲宽度存放在 16 位寄存器对 `R25:R24` 里. 我们用 `ADIW` (Add Immediate to Word, 对字立即数加法) 直接给这个 16 位值加 10, 把脉冲宽度稍微加大一点!
+然后更新 `OCR1A` (记住: 先写高字节, 再写低字节!).
 
 ```assembly
-  LDI    R16, 0xC0                     ; Low byte of 4800 (0x12C0)
-  CP     R24, R16                      ; Compare low bytes
-  LDI    R16, 0x12                     ; High byte of 4800
-  CPC    R25, R16                      ; Compare high bytes with carry
-  BRLO   .sweep_up                     ; Branch if less than 4800 (keep going up)
+  LDI    R16, 0xC0                     ; 4800 的低字节 (0x12C0)
+  CP     R24, R16                      ; 比较低字节
+  LDI    R16, 0x12                     ; 4800 的高字节
+  CPC    R25, R16                      ; 带进位比较高字节
+  BRLO   .sweep_up                     ; 若小于 4800 就分支 (继续往上扫)
 ```
-180 degrees corresponds to a pulse width of about 2.4 milliseconds. At our timer's speed, that is `4800` ticks (`0x12C0` in hex). We use `CP` (Compare) and `CPC` (Compare with Carry) to compare our 16-bit number to 4800. If we are still lower (`BRLO`), we loop back and keep sweeping up!
+180 度对应的脉冲宽度大约是 2.4 毫秒. 按我们定时器的速度算, 就是 `4800` 次 (`0x12C0`). 我们用 `CP` (比较) 和 `CPC` (带进位比较) 把这个 16 位数和 4800 比一比. 如果还更小 (`BRLO`), 我们就绕回去继续往上扫!
 
-### 3. Sweeping Down
+### 3. 向下扫
 ```assembly
-.sweep_down:                           
-  SBIW   R24, 10                       ; Subtract 10 from R25:R24
+.sweep_down:
+  SBIW   R24, 10                       ; 从 R25:R24 减 10
 ```
-Once we hit 180 degrees, we fall into the `.sweep_down` loop where we use `SBIW` (Subtract Immediate from Word) to slowly decrease the angle back down to 1000 ticks (about 0 degrees).
+一旦到了 180 度, 我们就掉进 `.sweep_down` 循环, 用 `SBIW` (Subtract Immediate from Word, 对字立即数减法) 把角度慢慢减回 1000 次 (大约 0 度).
 
 ---
 
-Congratulations! You have successfully implemented precise mechanical motion control using pure mathematical timer configurations in assembly!
+恭喜! 你已经用汇编里纯粹的数学定时器配置, 实现了精确的机械运动控制!

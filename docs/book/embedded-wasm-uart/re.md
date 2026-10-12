@@ -1,48 +1,48 @@
-# Reverse Engineering: embedded-wasm-uart
+# 逆向工程: embedded-wasm-uart
 
-## Table of Contents
+## 目录
 
-1. [Binary Overview](#1-binary-overview)
-2. [ELF Header](#2-elf-header)
-3. [Section Layout](#3-section-layout)
-4. [Memory Map & Segments](#4-memory-map--segments)
-5. [Boot Sequence](#5-boot-sequence)
-6. [Vector Table](#6-vector-table)
-7. [Firmware Function Map](#7-firmware-function-map)
-8. [Hardware Register Access](#8-hardware-register-access)
-9. [Pulley Interpreter Deep Dive](#9-pulley-interpreter-deep-dive)
-10. [Embedded cwasm Blob](#10-embedded-cwasm-blob)
-11. [Host-Guest Call Flow](#11-host-guest-call-flow)
-12. [RE Observations](#12-re-observations)
-13. [Pulley Instruction Set Architecture](#13-pulley-instruction-set-architecture)
-14. [Pulley Bytecode Disassembly](#14-pulley-bytecode-disassembly)
-15. [Ghidra Analysis Walkthrough](#15-ghidra-analysis-walkthrough)
-
----
-
-## 1. Binary Overview
-
-| Property       | Value                                    |
-| -------------- | ---------------------------------------- |
-| File           | `embedded-wasm-uart`                     |
-| Size on disk   | 1,168,560 bytes (1.11 MiB)               |
-| Format         | ELF32 ARM little-endian                  |
-| ABI            | EABI5, hard-float                        |
-| Target         | ARMv8-M Mainline (Cortex-M33)            |
-| MCU            | RP2350 (Raspberry Pi Pico 2)             |
-| Stripped       | No (symbol table + string table present) |
-| Text functions | 2,375                                    |
-
-The binary is a bare-metal `no_std` Rust firmware that hosts a Wasmtime
-Component Model runtime with the Pulley bytecode interpreter. A
-precompiled Wasm component reads characters from UART0 and echoes them
-back with line editing (backspace handling and newline echo). The only
-WIT interface is `embedded:platform/uart` with `read-byte` and
-`write-byte` — no GPIO is used.
+1. [二进制概览](#1-二进制概览)
+2. [ELF 头](#2-elf-头)
+3. [节布局](#3-节布局)
+4. [内存映射与段](#4-内存映射与段)
+5. [启动流程](#5-启动流程)
+6. [向量表](#6-向量表)
+7. [固件函数地图](#7-固件函数地图)
+8. [硬件寄存器访问](#8-硬件寄存器访问)
+9. [Pulley 解释器深入剖析](#9-pulley-解释器深入剖析)
+10. [内嵌的 cwasm 数据块](#10-内嵌的-cwasm-数据块)
+11. [宿主-客体调用流程](#11-宿主-客体调用流程)
+12. [逆向观察](#12-逆向观察)
+13. [Pulley 指令集架构](#13-pulley-指令集架构)
+14. [Pulley 字节码反汇编](#14-pulley-字节码反汇编)
+15. [Ghidra 分析流程](#15-ghidra-分析流程)
 
 ---
 
-## 2. ELF Header
+## 1. 二进制概览
+
+| 属性       | 值                                       |
+| ---------- | ---------------------------------------- |
+| 文件       | `embedded-wasm-uart`                     |
+| 磁盘大小   | 1,168,560 字节 (1.11 MiB)                |
+| 格式       | ELF32 ARM 小端                           |
+| ABI        | EABI5, 硬浮点                            |
+| 目标       | ARMv8-M Mainline (Cortex-M33)            |
+| MCU        | RP2350 (Raspberry Pi Pico 2)             |
+| 是否去符号 | 否 (符号表与字符串表都在)                |
+| 代码函数数 | 2,375                                    |
+
+这是一个裸机 `no_std` 的 Rust 固件, 里面装着 Wasmtime 组件模型
+运行时以及 Pulley 字节码解释器. 一个预编译的 Wasm 组件会从
+UART0 读取字符, 再把它们回显出去, 并带有行编辑能力 (退格处理
+与换行回显). 它唯一的 WIT 接口是 `embedded:platform/uart`,
+提供 `read-byte` 和
+`write-byte` - 完全不涉及 GPIO.
+
+---
+
+## 2. ELF 头
 
 ```
 Magic:   7f 45 4c 46 01 01 01 03 00 00 00 00 00 00 00 00
@@ -58,13 +58,13 @@ Program headers:                   6 (at offset 52)
 Section headers:                   16 (at offset 1,167,920)
 ```
 
-**Entry Point**: `0x1000010d` — the `Reset` handler in `.text`. The LSB is
-set (0x0D vs 0x0C) to indicate Thumb mode, required by ARMv8-M. The actual
-code starts at `0x1000010c`.
+**入口点**: `0x1000010d` - `.text` 里的 `Reset` 处理函数. 最低位被
+置 1 (0x0D 而非 0x0C) 是为了标明 Thumb 模式, 这是 ARMv8-M 的要求.
+真正的代码从 `0x1000010c` 开始.
 
 ---
 
-## 3. Section Layout
+## 3. 节布局
 
 ```
 Nr  Name            Type        Addr        Size      Flags  Description
@@ -82,32 +82,32 @@ Nr  Name            Type        Addr        Size      Flags  Description
 15  .strtab         STRTAB      file only   0x5fb3c          String table (385 KiB)
 ```
 
-### Size Breakdown
+### 体积细分
 
-| Region         | Section         | Size          | % of 4 MiB Flash     |
-| -------------- | --------------- | ------------- | -------------------- |
-| Code           | `.text`         | 539,176 B     | 12.9%                |
-| Constants      | `.rodata`       | 121,656 B     | 2.9%                 |
-| Vectors        | `.vector_table` | 248 B         | <0.1%                |
-| Boot meta      | `.start_block`  | 20 B          | <0.1%                |
-| Init data      | `.data`         | 40 B          | <0.1%                |
-| **Flash used** |                 | **661,140 B** | **15.8%**            |
-| **Flash free** |                 | 3,533,164 B   | 84.2%                |
-| BSS (RAM)      | `.bss`          | 262,292 B     | 51.2% of 512 KiB RAM |
+| 区域           | 节              | 大小          | 占 4 MiB Flash 的比例 |
+| -------------- | --------------- | ------------- | --------------------- |
+| 代码           | `.text`         | 539,176 B     | 12.9%                 |
+| 常量           | `.rodata`       | 121,656 B     | 2.9%                  |
+| 向量           | `.vector_table` | 248 B         | <0.1%                 |
+| 启动元数据     | `.start_block`  | 20 B          | <0.1%                 |
+| 初始化数据     | `.data`         | 40 B          | <0.1%                 |
+| **已用 Flash** |                 | **661,140 B** | **15.8%**             |
+| **剩余 Flash** |                 | 3,533,164 B   | 84.2%                 |
+| BSS (RAM)      | `.bss`          | 262,292 B     | 占 512 KiB RAM 的 51.2% |
 
-This is the smallest of the four embedded-wasm variants because it has
-no GPIO module — only UART read/write host bindings.
+这是四个 embedded-wasm 变体里最小的一个, 因为它没有 GPIO 模块 -
+只有 UART 读写的宿主绑定.
 
-### .data Section Note
+### .data 节说明
 
-The UART variant has 40 bytes of `.data` (vs 36 bytes for blinky/button/c2).
-The extra 4 bytes are due to the UART peripheral handle being stored in
-`.data` with an 8-byte representation (Mutex + RefCell overhead) rather than
-a simpler 4-byte BSS slot.
+UART 变体有 40 字节的 `.data` (blinky/button/c2 都是 36 字节).
+多出来的 4 字节是因为 UART 外设句柄存放在 `.data` 里, 用的是
+8 字节的表示 (Mutex 加 RefCell 的开销), 而不是一个更简单的
+4 字节 BSS 槽位.
 
 ---
 
-## 4. Memory Map & Segments
+## 4. 内存映射与段
 
 ```
 Segment  VirtAddr     PhysAddr     MemSiz   Flags  Contents
@@ -119,7 +119,7 @@ Segment  VirtAddr     PhysAddr     MemSiz   Flags  Contents
   5      0x00000000   0x00000000   0x00000  RW     GNU_STACK (zero-size)
 ```
 
-### Physical Address Space
+### 物理地址空间
 
 ```
 Flash (XIP):  0x10000000 - 0x100a168f  (661 KiB used of 4 MiB)
@@ -141,35 +141,35 @@ Stack:        0x20080000  Initial SP (top of 512 KiB SRAM, grows down)
 
 ---
 
-## 5. Boot Sequence
+## 5. 启动流程
 
-### 5.1 RP2350 Boot ROM -> IMAGE_DEF
+### 5.1 RP2350 启动 ROM 到 IMAGE_DEF
 
-The RP2350 Boot ROM scans flash for a valid image definition block. Our
-`.start_block` section at `0x100000f8` contains:
+RP2350 的启动 ROM 会扫描 Flash, 寻找合法的映像定义块. 我们在
+`0x100000f8` 的 `.start_block` 节里放着:
 
 ```
 d3deffff 42012110 ff010000 00000000 793512ab
 ```
 
-This is `hal::block::ImageDef::secure_exe()` — it tells the Boot ROM
-this is a secure ARM executable.
+这就是 `hal::block::ImageDef::secure_exe()` - 它告诉启动 ROM
+这是一个安全的 ARM 可执行文件.
 
-### 5.2 Vector Table -> Reset Handler
+### 5.2 向量表到复位处理函数
 
 ```
 Word 0: 0x20080000  <- Initial Stack Pointer
 Word 1: 0x1000010d  <- Reset vector (Thumb-mode)
 ```
 
-### 5.3 Reset Handler (0x1000010c)
+### 5.3 复位处理函数 (0x1000010c)
 
 ```armasm
 Reset:
-    bl      DefaultPreInit          ; No-op
-    ; --- Zero .bss (0x20000028 -> 0x200400bc) ---
-    ; --- Copy .data from flash (0x100a1668) to RAM (0x20000000) ---
-    ; --- Enable FPU ---
+    bl      DefaultPreInit          ; 空操作
+    ; --- 清零 .bss (0x20000028 -> 0x200400bc) ---
+    ; --- 把 .data 从 flash (0x100a1668) 复制到 RAM (0x20000000) ---
+    ; --- 启用 FPU ---
     bl      main
     udf     #0
 ```
@@ -178,7 +178,7 @@ Reset:
 
 ```armasm
 main:
-    bl      __cortex_m_rt_main      ; at 0x1000736c
+    bl      __cortex_m_rt_main      ; 位于 0x1000736c
 ```
 
 ### 5.5 `__cortex_m_rt_main` (0x1000736c)
@@ -190,106 +190,106 @@ main:
     bl      run_wasm                ; Run the Wasm UART echo component (never returns)
 ```
 
-Note: Unlike blinky/button which enable SIO GPIO outputs, this variant
-has no GPIO output setup — only UART0 is configured.
+注意: blinky/button 会启用 SIO 的 GPIO 输出, 而本变体
+没有任何 GPIO 输出的设置 - 只配置了 UART0.
 
 ---
 
-## 6. Vector Table
+## 6. 向量表
 
-The vector table at `0x10000000` is 248 bytes (62 entries):
+位于 `0x10000000` 的向量表长 248 字节 (62 个表项):
 
 ```
 Offset  Vector              Handler          Address
-0x0000  Initial SP          —                0x20080000
+0x0000  Initial SP          -                0x20080000
 0x0004  Reset               Reset            0x1000010d
 0x0008  NMI                 DefaultHandler   0x1007b5a5
 0x000c  HardFault           HardFault_       0x10083b2d
 0x0040+ IRQ0-IRQ51          DefaultHandler   0x1007b5a5
 ```
 
-All exception/IRQ vectors point to `DefaultHandler` (infinite loop)
-except HardFault (also infinite loop). No peripheral interrupts are used.
+除 HardFault (同样是死循环) 之外, 所有异常和 IRQ 向量都指向
+`DefaultHandler` (死循环). 没有任何外设中断被用到.
 
 ---
 
-## 7. Firmware Function Map
+## 7. 固件函数地图
 
-### 7.1 Application Functions
+### 7.1 应用函数
 
-| Address      | Size  | Symbol                          | Purpose                                     |
+| 地址         | 大小  | 符号                            | 用途                                        |
 | ------------ | ----- | ------------------------------- | ------------------------------------------- |
-| `0x1000010c` | 0x3e  | `Reset`                         | BSS zero, .data copy, FPU enable, call main |
-| `0x100071e8` | 0x184 | `init_hardware`                 | Clocks, UART0 (GPIO0 TX, GPIO1 RX)          |
+| `0x1000010c` | 0x3e  | `Reset`                         | 清零 BSS, 复制 .data, 启用 FPU, 调用 main   |
+| `0x100071e8` | 0x184 | `init_hardware`                 | 时钟, UART0 (GPIO0 TX, GPIO1 RX)            |
 | `0x1000736c` | 0x6c  | `__cortex_m_rt_main`            | FPU, init_heap, init_hardware, run_wasm     |
-| `0x100073d8` | 0x742 | `run_wasm`                      | Create engine, deserialize cwasm, run guest |
-| `0x10007b1c` | 0x20  | `init_heap`                     | Initialize 256 KiB linked-list heap         |
-| `0x1000801c` | 0xbc  | `platform::uart::add_to_linker` | Register read-byte/write-byte WIT bindings  |
-| `0x10008014` | 0x8   | `main`                          | Thin #[entry] wrapper                       |
-| `0x1007b5a4` | 0x6   | `DefaultHandler`                | Infinite loop (unhandled exception)         |
-| `0x1007b5ac` | 0x6   | `DefaultPreInit`                | No-op (returns immediately)                 |
-| `0x10083b2c` | 0x6   | `HardFault`                     | Infinite loop (hard fault)                  |
+| `0x100073d8` | 0x742 | `run_wasm`                      | 创建引擎, 反序列化 cwasm, 运行客体          |
+| `0x10007b1c` | 0x20  | `init_heap`                     | 初始化 256 KiB 的链表堆                     |
+| `0x1000801c` | 0xbc  | `platform::uart::add_to_linker` | 注册 read-byte/write-byte 的 WIT 绑定       |
+| `0x10008014` | 0x8   | `main`                          | 薄薄的 #[entry] 包装                        |
+| `0x1007b5a4` | 0x6   | `DefaultHandler`                | 死循环 (未处理的异常)                       |
+| `0x1007b5ac` | 0x6   | `DefaultPreInit`                | 空操作 (立即返回)                           |
+| `0x10083b2c` | 0x6   | `HardFault`                     | 死循环 (硬件错误)                           |
 
-### 7.2 UART Host Bindings
+### 7.2 UART 宿主绑定
 
-The UART variant has no separate `led.rs` or `button.rs` modules. All
-host bindings go through `platform::uart::add_to_linker` which registers
-two WIT imports:
+UART 变体没有单独的 `led.rs` 或 `button.rs` 模块. 所有
+宿主绑定都走 `platform::uart::add_to_linker`, 由它注册
+两个 WIT 导入:
 
-- **`read-byte`**: Calls `uart::read_byte()` — blocking read from UART0
-  RX FIFO. Implemented via `nb::block!` on the HAL `read_full` method.
+- **`read-byte`**: 调用 `uart::read_byte()` - 从 UART0
+  RX FIFO 阻塞读取. 通过 `nb::block!` 作用在 HAL 的 `read_full` 方法上实现.
 
-- **`write-byte`**: Calls `uart::write_byte(byte)` — blocking write to
-  UART0 TX FIFO. Implemented via `nb::block!` on the HAL `write_full`
-  method.
+- **`write-byte`**: 调用 `uart::write_byte(byte)` - 阻塞写入
+  UART0 TX FIFO. 通过 `nb::block!` 作用在 HAL 的 `write_full`
+  方法上实现.
 
-Note: `uart::read_byte`, `uart::write_byte`, and `uart::store_global`
-are inlined by the compiler into `run_wasm` and `init_hardware`. They
-do not appear as separate symbols in the binary.
+注意: `uart::read_byte`, `uart::write_byte` 和 `uart::store_global`
+都被编译器内联进了 `run_wasm` 和 `init_hardware`. 它们在二进制里
+不会作为独立符号出现.
 
-### 7.3 Wasmtime Runtime (Top by Size)
+### 7.3 Wasmtime 运行时 (按体积排序)
 
-| Address      | Size     | Demangled Name                     |
+| 地址         | 大小     | 还原后的名称                       |
 | ------------ | -------- | ---------------------------------- |
 | `0x10031a50` | 16,464 B | `OperatorCost::deserialize`        |
 | `0x10066fc8` | 16,456 B | `decode_one_extended`              |
-| `0x10063cac` | 12,518 B | `Interpreter::run` (dispatch loop) |
+| `0x10063cac` | 12,518 B | `Interpreter::run` (分发循环)      |
 | `0x1002d1f4` | 8,696 B  | `Metadata::check_cost`             |
 | `0x1000c570` | 2,304 B  | `InterpreterRef::call`             |
 
-### 7.4 BSS / Data Layout
+### 7.4 BSS 与数据布局
 
-| Address      | Size      | Section | Symbol       | Purpose                         |
+| 地址         | 大小      | 节      | 符号         | 用途                            |
 | ------------ | --------- | ------- | ------------ | ------------------------------- |
 | `0x20000000` | 8 B       | .data   | `uart::UART` | Mutex<RefCell<Option<Uart0>>>   |
-| `0x20000028` | 4 B       | .bss    | `TLS_VALUE`  | Wasmtime TLS shim (platform.rs) |
-| `0x2000002c` | 262,144 B | .bss    | `HEAP_MEM`   | Raw heap backing memory         |
-| `0x2004002c` | 32 B      | .bss    | `HEAP`       | Linked-list allocator state     |
+| `0x20000028` | 4 B       | .bss    | `TLS_VALUE`  | Wasmtime 的 TLS 垫片 (platform.rs) |
+| `0x2000002c` | 262,144 B | .bss    | `HEAP_MEM`   | 堆的原始后备内存                |
+| `0x2004002c` | 32 B      | .bss    | `HEAP`       | 链表分配器状态                  |
 
-Note: No `led::PINS` or `button::PINS` — this variant has no GPIO
-module.
+注意: 这里没有 `led::PINS` 或 `button::PINS` - 这个变体没有 GPIO
+模块.
 
 ---
 
-## 8. Hardware Register Access
+## 8. 硬件寄存器访问
 
-### 8.1 Peripheral Base Addresses
+### 8.1 外设基地址
 
-| Base Address | Peripheral | Usage in Firmware       |
+| 基地址       | 外设       | 固件中的用途            |
 | ------------ | ---------- | ----------------------- |
-| `0x40020000` | RESETS     | Subsystem reset control |
-| `0x40028000` | IO_BANK0   | GPIO function selection |
-| `0x40030000` | PADS_BANK0 | Pad configuration       |
-| `0x40040000` | XOSC       | Crystal oscillator      |
-| `0x40048000` | PLL_SYS    | System PLL (150 MHz)    |
+| `0x40020000` | RESETS     | 子系统复位控制          |
+| `0x40028000` | IO_BANK0   | GPIO 功能选择           |
+| `0x40030000` | PADS_BANK0 | 焊盘配置                |
+| `0x40040000` | XOSC       | 晶体振荡器              |
+| `0x40048000` | PLL_SYS    | 系统 PLL (150 MHz)      |
 | `0x4004c000` | PLL_USB    | USB PLL (48 MHz)        |
-| `0x40050000` | CLOCKS     | Clock generators        |
-| `0x40070000` | UART0      | Serial I/O (TX + RX)    |
-| `0xe000ed88` | CPACR      | FPU access control      |
+| `0x40050000` | CLOCKS     | 时钟发生器              |
+| `0x40070000` | UART0      | 串口 I/O (TX 加 RX)     |
+| `0xe000ed88` | CPACR      | FPU 访问控制            |
 
-### 8.2 UART0 Registers
+### 8.2 UART0 寄存器
 
-UART0 is the only peripheral actively used at runtime:
+UART0 是运行时唯一被真正使用的外设:
 
 ```
 0x40070000  UARTDR    Data register (TX/RX)
@@ -302,28 +302,28 @@ UART0 is the only peripheral actively used at runtime:
 0x40070030  UARTCR    Control register (enable)
 ```
 
-### 8.3 GPIO Usage
+### 8.3 GPIO 的使用
 
-Only two GPIO pins are configured, both for UART0:
+只配置了两个 GPIO 引脚, 都是给 UART0 用的:
 
-- **GPIO0**: UART0 TX (Function: UART)
-- **GPIO1**: UART0 RX (Function: UART)
+- **GPIO0**: UART0 TX (功能: UART)
+- **GPIO1**: UART0 RX (功能: UART)
 
-No SIO GPIO output/input registers are used at runtime (no `0xd0000014`
-SET or `0xd0000004` IN accesses). This is the only embedded-wasm variant
-with no SIO GPIO runtime access.
+运行时没有用到任何 SIO 的 GPIO 输出/输入寄存器 (没有访问
+`0xd0000014` 的 SET, 也没有访问 `0xd0000004` 的 IN). 这是唯一一个
+运行时完全不碰 SIO GPIO 的 embedded-wasm 变体.
 
 ---
 
-## 9. Pulley Interpreter Deep Dive
+## 9. Pulley 解释器深入剖析
 
-### 9.1 Interpreter Entry (`InterpreterRef::call`)
+### 9.1 解释器入口 (`InterpreterRef::call`)
 
 ```
 Location:  0x1000c570  (2,304 bytes)
 ```
 
-Call sequence:
+调用序列:
 
 ```
 run_wasm()
@@ -335,38 +335,38 @@ run_wasm()
           -> Interpreter::run()     ; Main dispatch loop
 ```
 
-### 9.2 Main Dispatch Loop
+### 9.2 主分发循环
 
 ```
 Location:  0x10063cac  (12,518 bytes)
 ```
 
-Same two-level dispatch scheme as all embedded-wasm repos: primary
-opcodes (0x00-0xDB) handled by a jump table in `Interpreter::run`,
-extended opcodes (0xDC prefix + 2-byte opcode) handled by
-`decode_one_extended`.
+所有 embedded-wasm 仓库用的都是同一套两级分发方案: 主操作码
+(0x00-0xDB) 由 `Interpreter::run` 里的一张跳转表处理, 扩展的
+操作码 (0xDC 前缀加 2 字节操作码) 由
+`decode_one_extended` 处理.
 
 ---
 
-## 10. Embedded cwasm Blob
+## 10. 内嵌的 cwasm 数据块
 
-### 10.1 Location and Format
+### 10.1 位置与格式
 
-The precompiled Pulley bytecode is embedded in `.rodata` at
-`0x10088578`. It is **24,456 bytes** (0x5f88).
+预编译的 Pulley 字节码嵌在 `.rodata` 里的
+`0x10088578` 处. 它**长 24,456 字节** (0x5f88).
 
-| Field  | Value                          |
+| 字段   | 值                             |
 | ------ | ------------------------------ |
 | Magic  | `\x7fELF`                      |
-| Class  | ELF64 (byte `02` at offset 4)  |
-| Data   | Little-endian                  |
+| Class  | ELF64 (偏移 4 处的字节为 `02`) |
+| Data   | 小端                           |
 | Target | `pulley32-unknown-unknown-elf` |
 
-This is the smallest cwasm among the four embedded-wasm variants because
-the guest only has two host imports (`read-byte`, `write-byte`) and simple
-sequential logic without branching.
+这是四个 embedded-wasm 变体里最小的 cwasm, 因为客体只有两个
+宿主导入 (`read-byte`, `write-byte`), 逻辑是简单的顺序执行,
+没有分支.
 
-### 10.2 Guest Code Logic
+### 10.2 客体代码逻辑
 
 ```
 fn run() {
@@ -390,14 +390,14 @@ fn run() {
 }
 ```
 
-The guest implements a simple terminal echo with destructive backspace
-(overwriting the character with a space) and CR-to-CRLF translation.
+客体实现的是一套简单的终端回显, 带破坏性退格 (用一个空格把字符
+覆盖掉) 和 CR 到 CRLF 的转换.
 
 ---
 
-## 11. Host-Guest Call Flow
+## 11. 宿主-客体调用流程
 
-### 11.1 Character Echo
+### 11.1 字符回显
 
 ```
 [Pulley VM]  Bytecode: call_indirect_host -> read_byte()
@@ -420,7 +420,7 @@ The guest implements a simple terminal echo with destructive backspace
 [Hardware]  UART0 UARTDR @ 0x40070000 -> write byte to TX FIFO
 ```
 
-### 11.2 Backspace Handling
+### 11.2 退格的处理
 
 ```
 [Pulley VM]  read_byte() returns 0x08 (BS) or 0x7f (DEL)
@@ -438,101 +438,101 @@ The guest implements a simple terminal echo with destructive backspace
 
 ---
 
-## 12. RE Observations
+## 12. 逆向观察
 
-### 12.1 Binary Composition
+### 12.1 二进制构成
 
-| Component                 | Approx Size | % of .text |
-| ------------------------- | ----------- | ---------- |
-| Wasmtime runtime          | ~533 KiB    | 98.9%      |
-| Pulley interpreter (run)  | 12.2 KiB    | 2.3%       |
-| Pulley decoder (extended) | 16.1 KiB    | 3.0%       |
-| Application (uart+main)   | ~6 KiB      | 1.1%       |
+| 组成                      | 大致大小 | 占 .text 的比例 |
+| ------------------------- | -------- | --------------- |
+| Wasmtime 运行时           | 约 533 KiB | 98.9%         |
+| Pulley 解释器 (run)       | 12.2 KiB | 2.3%            |
+| Pulley 解码器 (扩展)      | 16.1 KiB | 3.0%            |
+| 应用部分 (uart+main)      | 约 6 KiB | 1.1%            |
 
-This is the leanest embedded-wasm variant. The application code is
-minimal because `uart::read_byte` and `uart::write_byte` are inlined
-into `run_wasm`, and no GPIO module is linked.
+这是最精简的 embedded-wasm 变体. 应用代码极少, 因为
+`uart::read_byte` 和 `uart::write_byte` 都被内联进了 `run_wasm`,
+而且没有链接任何 GPIO 模块.
 
-### 12.2 Comparison Across Variants
+### 12.2 各变体的对比
 
-| Aspect          | Blinky      | Button      | UART      | C2          |
+| 方面            | Blinky      | Button      | UART      | C2          |
 | --------------- | ----------- | ----------- | --------- | ----------- |
-| .text size      | 544,880 B   | 548,680 B   | 539,176 B | 556,712 B   |
-| .data size      | 36 B        | 36 B        | 40 B      | 36 B        |
-| .bss size       | 262,308 B   | 262,324 B   | 262,292 B | 262,316 B   |
-| cwasm size      | 24,680 B    | 25,384 B    | 24,456 B  | 24,704 B    |
-| Functions       | 2,375       | 2,392       | 2,375     | 2,501       |
-| WIT interfaces  | gpio,timing | gpio,btn,tm | uart      | gpio,timing |
-| GPIO pins used  | 1 output    | 1 in, 1 out | 0 (UART)  | 27 outputs  |
-| SIO GPIO access | Yes         | Yes         | **No**    | Yes         |
+| .text 大小      | 544,880 B   | 548,680 B   | 539,176 B | 556,712 B   |
+| .data 大小      | 36 B        | 36 B        | 40 B      | 36 B        |
+| .bss 大小       | 262,308 B   | 262,324 B   | 262,292 B | 262,316 B   |
+| cwasm 大小      | 24,680 B    | 25,384 B    | 24,456 B  | 24,704 B    |
+| 函数数          | 2,375       | 2,392       | 2,375     | 2,501       |
+| WIT 接口        | gpio,timing | gpio,btn,tm | uart      | gpio,timing |
+| 使用的 GPIO 引脚 | 1 个输出   | 1 入 1 出   | 0 (UART)  | 27 个输出   |
+| SIO GPIO 访问   | 有          | 有          | **无**    | 有          |
 
-### 12.3 Key Addresses Quick Reference
+### 12.3 关键地址速查
 
-| Address      | What                                          |
+| 地址         | 说明                                          |
 | ------------ | --------------------------------------------- |
-| `0x10000000` | Vector table (initial SP + exception vectors) |
-| `0x100000f8` | RP2350 IMAGE_DEF boot block                   |
-| `0x1000010c` | Reset handler (entry point)                   |
+| `0x10000000` | 向量表 (初始 SP 加异常向量)                   |
+| `0x100000f8` | RP2350 IMAGE_DEF 启动块                       |
+| `0x1000010c` | 复位处理函数 (入口点)                         |
 | `0x100071e8` | init_hardware                                 |
 | `0x1000736c` | __cortex_m_rt_main                            |
 | `0x100073d8` | run_wasm                                      |
 | `0x10007b1c` | init_heap                                     |
 | `0x1000801c` | platform::uart::add_to_linker                 |
-| `0x10008014` | main (thin wrapper)                           |
-| `0x10063cac` | Pulley Interpreter::run (dispatch loop)       |
+| `0x10008014` | main (薄包装)                                 |
+| `0x10063cac` | Pulley Interpreter::run (分发循环)            |
 | `0x10066fc8` | Pulley decode_one_extended                    |
-| `0x1000c570` | InterpreterRef::call (native->Pulley bridge)  |
-| `0x10088578` | Embedded cwasm blob (Pulley ELF)              |
-| `0x1007b5a4` | DefaultHandler (infinite loop)                |
-| `0x10083b2c` | HardFault (infinite loop)                     |
-| `0x40070000` | UART0 base (UARTDR data register)             |
-| `0x40070018` | UART0 UARTFR (flags register)                 |
-| `0x20000000` | uart::UART handle (.data, 8 B)                |
+| `0x1000c570` | InterpreterRef::call (原生到 Pulley 的桥接)   |
+| `0x10088578` | 内嵌的 cwasm 数据块 (Pulley ELF)              |
+| `0x1007b5a4` | DefaultHandler (死循环)                       |
+| `0x10083b2c` | HardFault (死循环)                            |
+| `0x40070000` | UART0 基地址 (UARTDR 数据寄存器)              |
+| `0x40070018` | UART0 UARTFR (标志寄存器)                     |
+| `0x20000000` | uart::UART 句柄 (.data, 8 B)                  |
 | `0x2000002c` | HEAP_MEM (256 KiB)                            |
-| `0x20080000` | Initial stack pointer                         |
+| `0x20080000` | 初始栈指针                                    |
 
 ---
 
-## 13. Pulley Instruction Set Architecture
+## 13. Pulley 指令集架构
 
-### 13.1 Overview
+### 13.1 概览
 
-Pulley is Wasmtime's portable bytecode interpreter (wasmtime 43.0.0,
-`pulley-interpreter` crate v43.0.0). It defines a register-based ISA
-with variable-length instructions, designed for efficient interpretation
-rather than native execution.
+Pulley 是 Wasmtime 的可移植字节码解释器 (wasmtime 43.0.0,
+`pulley-interpreter` crate v43.0.0). 它定义了一套基于寄存器的
+ISA, 指令长度可变, 设计目标是高效解释, 而不是走原生执行
+那条路.
 
-### 13.2 Encoding Format
+### 13.2 编码格式
 
-**Primary opcodes** use a 1-byte opcode followed by operands:
+**主操作码**用一个字节的操作码加操作数表示:
 
 ```
 [opcode:1] [operands:0-9]
 ```
 
-There are **220 primary opcodes** (0x00-0xDB). Opcode `0xDC` is the
-**ExtendedOp** sentinel — when the interpreter encounters it, it reads
-a 2-byte extended opcode:
+一共有 **220 个主操作码** (0x00-0xDB). 操作码 `0xDC` 是
+**ExtendedOp** 哨兵 - 解释器遇到它时, 会再读一个 2 字节的
+扩展操作码:
 
 ```
 [0xDC] [ext_opcode:2] [operands:0-N]
 ```
 
-There are **310 extended opcodes** (0x0000-0x0135) for SIMD, float
-conversions, and complex operations.
+还有 **310 个扩展操作码** (0x0000-0x0135), 用于 SIMD, 浮点
+转换以及复杂操作.
 
-### 13.3 Key Instructions
+### 13.3 关键指令
 
-See the [embedded-wasm-servo-rp2350 RE.md](https://github.com/mytechnotalent/embedded-wasm-servo-rp2350)
-§13 for the complete Pulley ISA reference. The UART guest uses the same
-instruction subset as the base blinky with the addition of comparison
-and conditional branch instructions for the `match` statement.
+完整的 Pulley ISA 参考见 [embedded-wasm-servo-rp2350 RE.md](https://github.com/mytechnotalent/embedded-wasm-servo-rp2350)
+第 13 节. UART 客体使用的指令子集与基础版 blinky
+相同, 只是为 `match` 语句额外增加了比较
+和条件分支指令.
 
 ---
 
-## 14. Pulley Bytecode Disassembly
+## 14. Pulley 字节码反汇编
 
-### 14.1 Guest::run() — UART Echo Loop
+### 14.1 Guest::run() - UART 回显循环
 
 ```
 ; function[N]: Guest::run()
@@ -592,19 +592,19 @@ xconst8 x_space, 0x20                 ; Space
 
 ---
 
-## 15. Ghidra Analysis Walkthrough
+## 15. Ghidra 分析流程
 
-### 15.1 Import and Initial Analysis
+### 15.1 导入与初始分析
 
-1. **File -> Import File**: Select the ELF. Ghidra auto-detects
-   `ARM:LE:32:v8T` (ARMv8 Thumb). Accept the defaults.
+1. **File -> Import File**: 选中那个 ELF. Ghidra 会自动识别出
+   `ARM:LE:32:v8T` (ARMv8 Thumb). 接受默认选项即可.
 
-2. **Auto-analysis**: Ghidra identifies 2,375 functions from the symbol
-   table.
+2. **自动分析**: Ghidra 会从符号表里识别出 2,375
+   个函数.
 
-3. **Analysis time**: ~30 seconds for this 1.11 MiB binary.
+3. **分析耗时**: 处理这个 1.11 MiB 的二进制大约需要 30 秒.
 
-### 15.2 Symbol Tree Navigation
+### 15.2 符号树导航
 
 ```
 Functions/ (2,375 total)
@@ -620,53 +620,53 @@ Functions/ (2,375 total)
 +-- ... (2,366 more)
 ```
 
-### 15.3 Finding and Extracting the cwasm Blob
+### 15.3 找到并提取 cwasm 数据块
 
-1. Navigate to `0x10088578` in the Listing view
-2. Ghidra shows the `7f 45 4c 46` (ELF magic) bytes
-3. Right-click -> **Select Bytes** -> enter length 24456 (0x5f88)
-4. **File -> Export Selection** -> Binary format -> save as `uart-echo.cwasm`
+1. 在 Listing 视图里跳到 `0x10088578`
+2. Ghidra 会显示 `7f 45 4c 46` (ELF 魔数) 那几个字节
+3. 右键 -> **Select Bytes** -> 输入长度 24456 (0x5f88)
+4. **File -> Export Selection** -> 选 Binary 格式 -> 存成 `uart-echo.cwasm`
 
-### 15.4 Ghidra + G-Pulley: Full-Stack Analysis
+### 15.4 Ghidra 加 G-Pulley: 全栈分析
 
-With the [G-Pulley](https://github.com/mytechnotalent/G-Pulley) extension
-installed, Ghidra can analyze **both** the ARM host firmware and the
-Pulley guest bytecode:
+装上 [G-Pulley](https://github.com/mytechnotalent/G-Pulley) 扩展
+之后, Ghidra 可以同时分析 ARM 宿主固件和
+Pulley 客体字节码:
 
-| Aspect                  | ARM Host Code             | Pulley Guest Code (G-Pulley)        |
-| ----------------------- | ------------------------- | ----------------------------------- |
-| Disassembly             | Full ARM Thumb-2          | Full Pulley ISA mnemonics           |
-| Function identification | Automatic from symbols    | Automatic (cwasm loader + analyzer) |
-| Cross-references        | Full xref graph           | Function calls and branches         |
-| Control flow            | CFG with switch detection | Branch and jump targets resolved    |
-| Host call boundary      | `InterpreterRef::call`    | `call_indirect_host` instructions   |
+| 方面         | ARM 宿主代码               | Pulley 客体代码 (G-Pulley)           |
+| ------------ | -------------------------- | ------------------------------------ |
+| 反汇编       | 完整 ARM Thumb-2           | 完整 Pulley ISA 助记符               |
+| 函数识别     | 依据符号自动识别           | 自动识别 (cwasm 加载器加分析器)      |
+| 交叉引用     | 完整的引用图               | 函数调用与分支                       |
+| 控制流       | 带 switch 识别的 CFG       | 分支与跳转目标已解析                 |
+| 宿主调用边界 | `InterpreterRef::call`     | `call_indirect_host` 指令            |
 
-**G-Pulley provides**:
+**G-Pulley 提供**:
 
-- Custom ELF loader that extracts the `.cwasm` blob from the firmware
-- SLEIGH processor spec for Pulley 32-bit and 64-bit ISA (Wasmtime v43.0.0)
-- Post-load analyzer that discovers functions, trampolines, and host calls
-- Full opcode decoding for all 220 primary + 310 extended Pulley opcodes
+- 自定义 ELF 加载器, 从固件中提取 `.cwasm` 数据块
+- Pulley 32 位与 64 位 ISA 的 SLEIGH 处理器描述 (Wasmtime v43.0.0)
+- 加载后分析器, 用于发现函数, 跳板代码和宿主调用
+- 对全部 220 个主操作码加 310 个扩展 Pulley 操作码的完整解码
 
-### 15.5 Recommended Ghidra Workflow
+### 15.5 推荐的 Ghidra 工作流
 
-1. **Install G-Pulley**: Download from
-   [G-Pulley releases](https://github.com/mytechnotalent/G-Pulley/releases).
-   In Ghidra: **File -> Install Extensions -> + -> select zip**. Restart.
+1. **安装 G-Pulley**: 从
+   [G-Pulley releases](https://github.com/mytechnotalent/G-Pulley/releases) 下载.
+   在 Ghidra 里: **File -> Install Extensions -> + -> 选择 zip**. 重启.
 
-2. **Analyze the ARM firmware**: Import the ELF. Run auto-analysis.
-   Follow Reset -> main -> `__cortex_m_rt_main` -> `run_wasm`.
+2. **分析 ARM 固件**: 导入 ELF. 运行自动分析.
+   顺着 Reset -> main -> `__cortex_m_rt_main` -> `run_wasm` 一路看下去.
 
-3. **Examine UART bindings**: Navigate to `platform::uart::add_to_linker`
-   (0x1000801c) to see how `read-byte` and `write-byte` are registered.
-   The actual UART I/O is inlined into `run_wasm` (0x100073d8).
+3. **考察 UART 绑定**: 跳到 `platform::uart::add_to_linker`
+   (0x1000801c), 看 `read-byte` 和 `write-byte` 是怎么注册的.
+   真正的 UART I/O 被内联进了 `run_wasm` (0x100073d8).
 
-4. **Trace the interpreter**: Start at `InterpreterRef::call` (0x1000c570),
-   follow into `Interpreter::run` (0x10063cac) to see the Pulley dispatch
-   loop.
+4. **跟踪解释器**: 从 `InterpreterRef::call` (0x1000c570) 出发,
+   跟进 `Interpreter::run` (0x10063cac), 看 Pulley 的分发
+   循环.
 
-5. **Analyze the Pulley bytecode**: Import the firmware ELF again using
-   G-Pulley's cwasm loader (select "Pulley cwasm" format). G-Pulley
-   extracts the embedded cwasm blob, disassembles all Pulley opcodes,
-   and identifies guest functions including the echo loop with its
-   backspace and newline handling branches.
+5. **分析 Pulley 字节码**: 用 G-Pulley 的 cwasm 加载器再次导入
+   固件 ELF (选择 "Pulley cwasm" 格式). G-Pulley
+   会提取内嵌的 cwasm 数据块, 反汇编所有 Pulley 操作码,
+   并识别出客体函数, 包括那个带回显循环, 以及
+   退格和换行处理分支.

@@ -1,18 +1,18 @@
-# Chapter 28: Interrupts and DMA — Interrupt-Driven UART
+# Chapter 28: 中断与 DMA - 中断驱动的 UART
 
-## Introduction
+## 引言
 
-UART `read(...).await` looks like magic: bytes land, the future completes, no
-inputs wasted — because the hardware does not touch the CPU. Two RP2350
-mechanisms make that possible: interrupts, which route "a byte arrived" into
-the executor, and DMA, which moves bytes itself. This chapter connects
-`bind_interrupts!`, `InterruptHandler`, and the two DMA channels in
-`main.rs` to the `await` calls the driver makes.
+UART 的 `read(...).await` 看起来像魔法: 字节落下来, future 就完成了,
+没有浪费任何输入 - 因为硬件根本没有打扰 CPU. 让这一切成为可能的
+是 RP2350 的两套机制: 中断, 它把 "来了一个字节" 送进
+执行器; 以及 DMA, 它自己搬运字节. 本章把
+`bind_interrupts!`, `InterruptHandler` 和 `main.rs` 里的两个 DMA 通道,
+与驱动发出的那些 `await` 调用对应起来.
 
-## The CPU Would Waste Its Whole Loop
+## CPU 会把整个循环浪费掉
 
-A **polling** receiver busy-loops sampling status bits waiting for a byte,
-burning a hundred percent of the CPU:
+**轮询**式的接收端会忙等, 不断采样状态位等一个字节到来,
+把 CPU 百分之百地烧掉:
 
 ```
 CPU:        [read status] [no] [read status] [no] [read status] [no] ...
@@ -20,20 +20,20 @@ UART RX:    ..... ......... came! ............................. (missed or
                                                               polled late)
 ```
 
-The driver never does that. It wires the UART peripheral's own signaling so the
-CPU is interrupted *by the hardware* only when there is real work:
+这个驱动从不这么干. 它接好 UART 外设自己的信号, 这样只有当
+确实有活干的时候, CPU 才会*被硬件*打断:
 
 ```
 CPU:        [await]  ... [wakeup] echo [await] ... [wakeup] echo
 UART RX:    ...... byte!   ...................  byte!  .........
 ```
 
-Interrupts let the CPU sleep (or run other tasks) between bytes; this is the
-interrupt-driven half of the design.
+中断让 CPU 可以在字节之间睡觉 (或者去跑别的任务); 这就是本设计中
+中断驱动的那一半.
 
 ## bind_interrupts!
 
-The driver only tells Embassy which peripheral owns which IRQ line once:
+驱动只在一处告诉 Embassy, 哪个外设拥有哪条 IRQ 线:
 
 ```rust
 use embassy_rp::{bind_interrupts, peripherals::UART0, uart::InterruptHandler};
@@ -43,20 +43,20 @@ bind_interrupts!(struct Irqs {
 });
 ```
 
-Reading the macro block: "RP2350's `UART0_IRQ` vector fires `InterruptHandler`
-with the `UART0` peripheral token." The macro-generates a struct `Irqs` that
-statically registers the handler in the vector table and holds up to
-`embassy_rp::init`. `InterruptHandler` wakes the executor's `Uart` future when
-the FIFO signals a byte has been received or a transmission completes —
-the exact moment the future's readiness flips from pending to ready.
+把这个宏块读出来: "RP2350 的 `UART0_IRQ` 向量会触发 `InterruptHandler`,
+并把 `UART0` 外设令牌交给它." 这个宏会生成一个结构体 `Irqs`,
+它把处理函数静态注册到向量表里, 并一直持有到
+`embassy_rp::init` 为止. 当 FIFO 表示收到一个字节, 或者一次发送完成时,
+`InterruptHandler` 会唤醒执行器里的 `Uart` future -
+那正是这个 future 的就绪状态从 pending 翻到 ready 的确切时刻.
 
-Because the binding is called on the macro line (not at runtime) and `Irqs` is
-consumed by `Uart::new`, the linkage is checked at compile time: a typo in the
-IRQ name simply refuses to build.
+因为绑定是在宏那一行完成的 (不是运行时), 而且 `Irqs` 会被
+`Uart::new` 消费掉, 这种连接关系在编译期就会被检查: IRQ 名字写错一个字母,
+直接就无法构建.
 
-## The Two DMA Channels
+## 两个 DMA 通道
 
-`Uart::new` takes two more peripherals after the pins:
+`Uart::new` 在引脚之后还要两个外设:
 
 ```rust
 let mut uart = Uart::new(
@@ -64,46 +64,46 @@ let mut uart = Uart::new(
 );
 ```
 
-`p.DMA_CH0` and `p.DMA_CH1` are the RP2350's two DMA controllers. Embassy
-assigns one to reception and one to transmission, and once configured the DMA
-engine drives the data bus on its own:
+`p.DMA_CH0` 和 `p.DMA_CH1` 是 RP2350 的两个 DMA 控制器. Embassy
+把其中一个分给接收, 另一个分给发送, 一旦配置完成, DMA
+引擎就自己驱动数据总线:
 
 ```
                 in / out                           CPU: off doing math
 Host <-> UART FIFO <--DMA0--< RAM (buf)   or   RAM (echo_bytes) -->DMA1--> UART FIFO
 ```
 
-The result is a **DMA UART**: the peripheral hands bytes to a memory buffer
-without the CPU ever copying them. That is the DMA half of the design.
+结果就是一个 **DMA UART**: 外设把字节交给内存缓冲区,
+CPU 从头到尾都没复制过它们. 这就是本设计中 DMA 的那一半.
 
-## Interrupts + DMA + Async = The Whole Story
+## 中断 + DMA + 异步 = 完整的故事
 
-Both halves land in one `await`:
+两半都落在同一个 `await` 里:
 
 ```rust
 if uart.read(&mut buf).await.is_ok() { ... }
 ```
 
-Step by step:
+一步一步看:
 
-1. Embassy configures `DMA_CH0` to move the next RX byte into `buf[0]`, and
-   takes the "wait" branch — the future registers interest.
-2. The DMA engine fills `buf[0]` with no CPU help (when exactly one byte is
-   requested).
-3. The UART raises `UART0_IRQ`; the registered `InterruptHandler` marks the
-   waiter ready.
-4. The executor resumes the future; `.await` returns `Ok`.
+1. Embassy 配置 `DMA_CH0`, 让它把下一个 RX 字节搬进 `buf[0]`, 然后
+   走 "等待" 分支 - future 登记了自己的关注点.
+2. DMA 引擎在没有 CPU 帮忙的情况下填好 `buf[0]` (在只请求
+   一个字节的时候).
+3. UART 触发 `UART0_IRQ`; 已注册的 `InterruptHandler` 把
+   等待者标记为就绪.
+4. 执行器恢复这个 future; `.await` 返回 `Ok`.
 
-`write` is the mirror: Embassy configures `DMA_CH1` to move `echo_bytes` to the
-UART FIFO, the DMA drains it with the CPU watching no registers, and the write
-future completes when the FIFO empties.
+`write` 是对称的另一面: Embassy 配置 `DMA_CH1`, 让它把 `echo_bytes` 搬到
+UART FIFO, DMA 把它抽干, 期间 CPU 一个寄存器都不用看, 而当 FIFO
+排空时写 future 就完成了.
 
-Nothing blocked, nothing polled, nothing hand-copied — and the whole arrangement
-is expressed as ordinary-looking async code.
+没有阻塞, 没有轮询, 没有手工复制 - 而这一整套安排
+都是用看起来普普通通的 async 代码表达出来的.
 
-## Error Paths
+## 错误路径
 
-`read` returns a `Result`, and the driver discards nothing silently:
+`read` 返回 `Result`, 而驱动不会悄悄丢弃任何东西:
 
 ```rust
 if uart.read(&mut buf).await.is_ok() {
@@ -112,20 +112,20 @@ if uart.read(&mut buf).await.is_ok() {
 }
 ```
 
-On read errors the byte is skipped — safer than echoing garbage. The write's
-`let _ = ...` acknowledges we do not recover if the wire is pulled; a future
-driver could log the error. Embassy's error type (overrun, break, framing, or
-parity conditions) is available whenever the code decides to care.
+读出错时这个字节就被跳过 - 这比回显一堆垃圾要安全. 写操作里的
+`let _ = ...` 是在承认: 如果线被拔了, 我们并不做恢复. 将来的
+驱动可以把这个错误记下来. Embassy 的错误类型 (溢出, break, 帧错误或
+校验错误) 随时可用, 只要代码决定去关心它.
 
-## Summary
+## 小结
 
-- Waiting on UART by polling wastes the CPU; interrupts wake it only when a
-  byte matters.
-- `bind_interrupts!` statically routes `UART0_IRQ` to
-  `InterruptHandler<UART0>`, compile time-checked.
-- `DMA_CH0`/`DMA_CH1` move bytes between RAM and the FIFO without CPU copies.
-- Asynchronous `read`/`write` are the fusion: await, DMA fills, IRQ wakes,
-  future completes.
-- Result-typed reads keep runaway errors from becoming silent garbage.
+- 用轮询的方式等 UART 会浪费 CPU; 中断只在某个字节
+  真正重要时才唤醒它.
+- `bind_interrupts!` 静态地把 `UART0_IRQ` 路由到
+  `InterruptHandler<UART0>`, 并且有编译期检查.
+- `DMA_CH0`/`DMA_CH1` 在 RAM 和 FIFO 之间搬运字节, 不需要 CPU 复制.
+- 异步的 `read`/`write` 是这一切的融合: await, DMA 填充, IRQ 唤醒,
+  future 完成.
+- 返回 Result 的读操作, 让失控的错误不会变成无声的垃圾.
 
-The finale of the UART driver is wiring all of it in `main.rs`.
+UART 驱动的收尾, 就是把这些全部接进 `main.rs`.

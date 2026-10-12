@@ -1,78 +1,78 @@
-# Chapter 14: Assembler Directives
+# Chapter 14: 汇编器指示符
 
-## Introduction
+## 引言
 
-Assembler directives are commands to the assembler itself — they do not produce machine instructions.  Instead, they control how the assembler organizes code, allocates data, defines symbols, and structures the output object file.  Our blink driver relies on directives to set up sections, export symbols, align data, and include shared constants.  This chapter catalogs every directive used in our firmware and explains its purpose.
+汇编器指示符 (directive) 是给汇编器本身的命令 - 它们不会产生机器指令. 它们控制的是汇编器如何组织代码, 分配数据, 定义符号, 以及如何构造输出的目标文件. 我们的闪烁驱动靠指示符来建立段, 导出符号, 对齐数据, 以及引入共享常量. 本章逐一列出固件里用到的每一条指示符, 并说明它的作用.
 
-## Section Directives
+## 段指示符
 
 ### `.section`
 
 ```asm
-.section .text                                   # code section
-.section .rodata                                 # read-only data section
-.section .data                                   # data section
-.section .bss                                    # BSS section
+.section .text                                   # 代码段
+.section .rodata                                 # 只读数据段
+.section .data                                   # 数据段
+.section .bss                                    # BSS 段
 ```
 
-`.section` places subsequent code or data into a named section.  Sections can have flags:
+`.section` 把后面跟着的代码或数据放进一个具名的段里. 段可以带标志:
 
 ```asm
-.section .vectors, "ax"                          # vector table section
-.section .picobin_block, "a"                     # allocatable, non-executable
+.section .vectors, "ax"                          # 向量表段
+.section .picobin_block, "a"                     # 可分配, 不可执行
 ```
 
-| Flag | Meaning |
+| 标志 | 含义 |
 |------|---------|
-| `a` | Allocatable (occupies memory) |
-| `x` | Executable |
-| `w` | Writable |
+| `a` | 可分配 (会占用内存) |
+| `x` | 可执行 |
+| `w` | 可写 |
 
-Our firmware uses several sections:
+我们的固件用到好几个段:
 
-| Section | Purpose | Used In |
+| 段 | 作用 | 用在哪里 |
 |---------|---------|---------|
-| `.text` | Executable code | All .s files |
-| `.rodata` | Read-only constants | main.s |
-| `.data` | Initialized variables | main.s |
-| `.bss` | Uninitialized variables | main.s |
-| `.picobin_block` | Boot image metadata | image_def.s |
-| `.vectors` | Vector table | vector_table.s |
+| `.text` | 可执行代码 | 所有 .s 文件 |
+| `.rodata` | 只读常量 | main.s |
+| `.data` | 已初始化变量 | main.s |
+| `.bss` | 未初始化变量 | main.s |
+| `.picobin_block` | 启动镜像元数据 | image_def.s |
+| `.vectors` | 向量表 | vector_table.s |
 
 ### `.align`
 
 ```asm
-.align 2                                         # align to 4-byte boundary
+.align 2                                         # 对齐到 4 字节边界
 ```
 
-`.align N` pads with zeros until the current address is a multiple of 2^N bytes.  `.align 2` means 4-byte alignment (2^2 = 4).
+`.align N` 用零填充, 直到当前地址是 2^N 字节的整数倍. `.align 2` 就是 4 字节对齐 (2^2 = 4).
 
-Every source file uses `.align 2` after the `.section .text` directive to ensure instructions start on a word boundary.  In vector_table.s:
+每个源文件都在 `.section .text` 之后用 `.align 2`, 确保指令从字边界开始. 在 vector_table.s 里:
 
 ```asm
-.section .vectors, "ax"                          # vector table section
-.align 2                                         # 4-byte aligned
+.section .vectors, "ax"                          # 向量表段
+.align 2                                         # 4 字节对齐
 ```
 
-The vector table must be aligned because the hardware reads it as 32-bit words.
+向量表必须对齐, 因为硬件是按 32 位字来读它的.
 
-## Symbol Directives
+## 符号指示符
 
 ### `.global`
 
 ```asm
-.global GPIO_Config                              # export symbol
-.global GPIO_Set                                 # export symbol
-.global GPIO_Clear                               # export symbol
+.global GPIO_Config                              # 导出符号
+.global GPIO_Set                                 # 导出符号
+.global GPIO_Clear                               # 导出符号
 ```
 
-`.global` makes a symbol visible to the linker.  Without it, the symbol exists only within that assembly file.  Every function called from another file must be exported:
+`.global` 让符号对链接器可见. 没有它, 符号就只存在于当前这个汇编文件里. 凡是要被别的文件调用的函数都必须导出:
 
-| Symbol | Defined In | Called From |
+| 符号 | 定义在 | 被谁调用 |
 |--------|-----------|------------|
 | `Reset_Handler` | reset_handler.s | vector_table.s, image_def.s |
 | `Default_Trap_Handler` | reset_handler.s | vector_table.s |
-| `Init_Trap_Vector` | reset_handler.s | (internal) |
+| `Init_Trap_Vector` | reset_handler.s | (文件内部) |
 | `Init_Stack` | stack.s | reset_handler.s |
 | `Init_XOSC` | xosc.s | reset_handler.s |
 | `Enable_XOSC_Peri_Clock` | xosc.s | reset_handler.s |
@@ -87,154 +87,154 @@ The vector table must be aligned because the hardware reads it as 32-bit words.
 ### `.type`
 
 ```asm
-.type GPIO_Config, @function                     # mark as function symbol
+.type GPIO_Config, @function                     # 标记为函数符号
 ```
 
-`.type` tells the linker that the symbol is a function (not data).  On RISC-V, the syntax uses `@function` (not ARM's `%function`).  This metadata helps debuggers and disassemblers display the code correctly.
+`.type` 告诉链接器这个符号是函数 (而不是数据). 在 RISC-V 上语法用 `@function` (不是 ARM 的 `%function`). 这些元数据能让调试器和反汇编器把代码显示正确.
 
 ### `.size`
 
 ```asm
-.size Reset_Handler, . - Reset_Handler           # record function size
+.size Reset_Handler, . - Reset_Handler           # 记录函数大小
 ```
 
-`.size` records the function's byte size in the symbol table.  The expression `. - Reset_Handler` calculates the distance from the current position to the function's start.  Our firmware uses this for Reset_Handler.
+`.size` 把函数的字节大小记录到符号表里. 表达式 `. - Reset_Handler` 算的是当前位置到函数起始处的距离. 固件里只对 Reset_Handler 用了它.
 
 ### `.equ`
 
 ```asm
-.equ STACK_TOP, 0x20082000                       # define constant
-.equ XOSC_BASE, 0x40048000                       # define constant
+.equ STACK_TOP, 0x20082000                       # 定义常量
+.equ XOSC_BASE, 0x40048000                       # 定义常量
 ```
 
-`.equ` defines a named constant.  It produces no code or data — the symbol is replaced by its value wherever it appears.  Our constants.s file is entirely `.equ` directives:
+`.equ` 定义一个具名常量. 它既不产生代码也不产生数据 - 符号在出现的地方直接被它的值替换掉. 我们的 constants.s 文件整个都是 `.equ` 指示符:
 
 ```asm
-.equ IO_BANK0_BASE, 0x40028000                   # GPIO control base
-.equ PADS_BANK0_BASE, 0x40038000                 # GPIO pad base
-.equ SIO_BASE, 0xd0000000                        # SIO GPIO base
-.equ SIO_GPIO_OUT_SET, SIO_BASE + 0x018          # GPIO output set
-.equ SIO_GPIO_OUT_CLR, SIO_BASE + 0x020          # GPIO output clear
-.equ SIO_GPIO_OE_SET, SIO_BASE + 0x038           # GPIO output enable set
+.equ IO_BANK0_BASE, 0x40028000                   # GPIO 控制基地址
+.equ PADS_BANK0_BASE, 0x40038000                 # GPIO pad 基地址
+.equ SIO_BASE, 0xd0000000                        # SIO GPIO 基地址
+.equ SIO_GPIO_OUT_SET, SIO_BASE + 0x018          # GPIO 输出置位
+.equ SIO_GPIO_OUT_CLR, SIO_BASE + 0x020          # GPIO 输出清零
+.equ SIO_GPIO_OE_SET, SIO_BASE + 0x038           # GPIO 输出使能置位
 ```
 
-## Data Directives
+## 数据指示符
 
 ### `.word`
 
 ```asm
-.word Reset_Handler                              # emit 32-bit value
-.word STACK_TOP                                  # emit 32-bit value
+.word Reset_Handler                              # 发出 32 位值
+.word STACK_TOP                                  # 发出 32 位值
 ```
 
-`.word` emits a 32-bit value into the current section.  The vector table uses `.word` to store handler addresses and the PICOBIN block uses it for the entry point:
+`.word` 往当前段里放一个 32 位值. 向量表用 `.word` 存放处理程序地址, PICOBIN 块则用它放入口点:
 
 ```asm
 _vectors:
-  .word Reset_Handler                            # reset handler address
-  .word Default_Trap_Handler                     # default trap handler
+  .word Reset_Handler                            # 复位处理程序地址
+  .word Default_Trap_Handler                     # 默认陷阱处理程序
 ```
 
-Note: Unlike ARM, RISC-V vector entries do not need a +1 Thumb bit.  RISC-V addresses are used directly.
+注意: 和 ARM 不同, RISC-V 的向量表项不需要加 1 那个 Thumb 位. RISC-V 的地址是直接使用的.
 
 ### `.byte`
 
 ```asm
-.byte 0x42                                       # emit 8-bit value
+.byte 0x42                                       # 发出 8 位值
 ```
 
-Used in image_def.s for byte-level fields in the PICOBIN block structure.
+用在 image_def.s 里, 表示 PICOBIN 块结构中的字节级字段.
 
 ### `.hword`
 
 ```asm
-.hword 0x1101                                    # emit 16-bit value
+.hword 0x1101                                    # 发出 16 位值
 ```
 
-Used in image_def.s for the image type field: `0x1101` = EXE + RISCV + RP2350.
+用在 image_def.s 里表示镜像类型字段: `0x1101` = EXE + RISCV + RP2350.
 
-## Include Directive
+## 包含指示符
 
 ### `.include`
 
 ```asm
-.include "constants.s"                           # include shared constants
+.include "constants.s"                           # 引入共享常量
 ```
 
-`.include` textually inserts another file at the current position.  Every source file includes constants.s to access shared `.equ` definitions.  This is the RISC-V equivalent of C's `#include` — the file is pasted in verbatim.
+`.include` 把另一个文件按文本原样插入到当前位置. 每个源文件都包含 constants.s, 以便使用共享的 `.equ` 定义. 这相当于 C 的 `#include` - 文件被逐字粘贴进来.
 
-## Labels
+## 标签
 
-Labels assign names to addresses.  A label is any identifier followed by a colon:
+标签给地址起名字. 标签就是任意标识符后面跟一个冒号:
 
 ```asm
-main:                                            # function entry point
-GPIO_Config:                                     # function entry point
-.Loop:                                           # local branch target
-.Delay_MS_Loop:                                  # local loop target
+main:                                            # 函数入口点
+GPIO_Config:                                     # 函数入口点
+.Loop:                                           # 局部跳转目标
+.Delay_MS_Loop:                                  # 局部循环目标
 ```
 
-### Global vs. Local Labels
+### 全局标签与局部标签
 
-**Global labels** are visible across all object files after linking (when paired with `.global`):
+**全局标签**在链接之后对所有目标文件都可见 (需要搭配 `.global`):
 
 ```asm
-.global main                                     # visible to linker
-main:                                            # address recorded globally
+.global main                                     # 对链接器可见
+main:                                            # 地址被记录为全局
 ```
 
-**Local labels** (prefixed with `.`) are file-private — invisible outside the object file:
+**局部标签** (以 `.` 开头) 是文件私有的 - 在目标文件外面看不见:
 
 ```asm
-.Loop:                                           # local to this file
+.Loop:                                           # 只属于本文件
   li    a0, 16
   call  GPIO_Set
   ...
-  j     .Loop                                    # branch within file
+  j     .Loop                                    # 文件内部跳转
 ```
 
-## The Symbol Table
+## 符号表
 
-The assembler creates a symbol table in each object file.  Each entry contains:
+汇编器会为每个目标文件建一张符号表. 每个表项包含:
 
-| Field | Description |
+| 字段 | 说明 |
 |-------|-------------|
-| Name | The label string |
-| Value | Address or constant value |
-| Section | Which section contains it |
-| Binding | Local or global |
-| Type | Function, object, or notype |
+| Name | 标签字符串 |
+| Value | 地址或常量值 |
+| Section | 它位于哪个段 |
+| Binding | 局部还是全局 |
+| Type | 函数, 对象, 或 notype |
 
-The linker merges symbol tables from all object files, resolves cross-file references, and patches instructions with final addresses.
+链接器把所有目标文件的符号表合并起来, 解决跨文件引用, 并把最终地址回填到指令里.
 
-## Cross-File Resolution
+## 跨文件解析
 
-When main.s references `GPIO_Set`:
+当 main.s 引用 `GPIO_Set` 时:
 
 ```asm
-  call  GPIO_Set                                 # reference to external symbol
+  call  GPIO_Set                                 # 引用外部符号
 ```
 
-The assembler creates a relocation entry.  The linker reads both main.o and gpio.o, finds `GPIO_Set` in gpio.o's symbol table, computes the final address, and patches the `auipc`+`jalr` sequence with the correct offsets.
+汇编器会生成一条重定位记录. 链接器读取 main.o 和 gpio.o, 在 gpio.o 的符号表里找到 `GPIO_Set`, 算出最终地址, 然后用正确的偏移回填 `auipc`+`jalr` 这一对指令.
 
-## Contrast with ARM
+## 与 ARM 对照
 
-| Feature | ARM | RISC-V |
+| 特性 | ARM | RISC-V |
 |---------|-----|--------|
-| Instruction set directive | `.syntax unified` + `.thumb` | None needed |
-| Function marker | `.thumb_func` | `.type name, @function` |
-| Function type syntax | `%function` | `@function` |
-| Vector table addresses | Need +1 Thumb bit | Direct addresses |
-| Comment character in code | `//` | `#` |
+| 指令集指示符 | `.syntax unified` + `.thumb` | 不需要 |
+| 函数标记 | `.thumb_func` | `.type name, @function` |
+| 函数类型语法 | `%function` | `@function` |
+| 向量表地址 | 需要加 1 那个 Thumb 位 | 直接用地址 |
+| 代码里的注释符 | `//` | `#` |
 
-RISC-V requires fewer directives because the ISA does not have Thumb/ARM mode switching.
+RISC-V 需要的指示符更少, 因为它的 ISA 没有 Thumb/ARM 模式切换这回事.
 
-## Summary
+## 小结
 
-- `.section` organizes code and data into named regions for the linker.
-- `.align 2` ensures 4-byte alignment for instructions and data.
-- `.global` and `.type` control symbol visibility and metadata.
-- `.equ` defines named constants without emitting code.
-- `.word`, `.byte`, and `.hword` emit raw data values.
-- `.include` shares constants across all source files.
-- Labels name addresses; global labels are linker-visible, local labels are file-private.
+- `.section` 把代码和数据组织成链接器能识别的具名区域.
+- `.align 2` 保证指令和数据 4 字节对齐.
+- `.global` 和 `.type` 控制符号的可见性与元数据.
+- `.equ` 定义具名常量, 但不产生代码.
+- `.word`, `.byte` 和 `.hword` 发出原始数据值.
+- `.include` 让所有源文件共享常量.
+- 标签给地址起名; 全局标签对链接器可见, 局部标签是文件私有的.

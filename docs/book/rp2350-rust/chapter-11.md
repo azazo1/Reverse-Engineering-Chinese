@@ -1,17 +1,17 @@
-# Chapter 11: Memory-Mapped I/O
+# Chapter 11: 内存映射 I/O
 
-## Introduction
+## 引言
 
-How does software drive a physical pin high? The answer is simpler than it
-sounds: the RP2350 exposes every peripheral as a block of **registers**, and
-registers are just memory locations. A store to `SIO_OUT`, a load from
-`UART_RDR` — these are ordinary loads and stores from the CPU's point of view.
-This chapter explains memory-mapped I/O, why it needs care in Rust, and how
-Embassy's types protect us from its dangers.
+软件是怎么把一个物理引脚拉高的? 答案比听起来简单:
+RP2350 把每个外设都暴露成一块 **寄存器** 区域, 而
+寄存器就是内存位置. 往 `SIO_OUT` 写一次, 从
+`UART_RDR` 读一次 - 在 CPU 看来, 这就是普通的 load 和 store.
+本章讲清楚内存映射 I/O 是什么, 为什么在 Rust 里要小心对待它, 以及
+Embassy 的类型如何保护我们免受它的危害.
 
-## Registers as Addresses
+## 寄存器就是地址
 
-Peripheral registers live in the region of the address map we met in Chapter 2:
+外设寄存器住在我们在第 2 章见过的地址映射区域里:
 
 ```
 0x40000000 ... Peripherals ...
@@ -21,45 +21,45 @@ Peripheral registers live in the region of the address map we met in Chapter 2:
    DMA            0x50000000 ...
 ```
 
-A register like "GPIO output level" has a number, an offset, and a bit layout.
-In C, code touches these with a raw pointer cast. In Rust we refuse to do that
-directly — which is precisely the difference Embassy makes.
+像 "GPIO output level" 这样的寄存器, 有一个编号, 一个偏移量和一个位布局.
+在 C 里, 代码用裸指针强转就能碰它们. 在 Rust 里我们拒绝直接这么做,
+而这恰恰是 Embassy 造成的差别.
 
-## Why Volatile Matters
+## 为什么 volatile 很重要
 
-The optimizer can destroy naive register access. Consider this loop that reads a
-status bit until it becomes 1:
+优化器能把幼稚的寄存器访问彻底破坏掉. 看这个循环, 它一直读一个
+状态位, 直到它变成 1:
 
 ```rust
 fn wait(reg: *mut u32) {
-    while *reg == 0 { /* spin */ }   // compiler may read once and fast-forward!
+    while *reg == 0 { /* spin */ }   // 编译器可能只读一次, 然后就直接快进!
 }
 ```
 
-Because nothing in the loop observes `*reg` changing, the compiler is free to
-hoist the load out of the loop. The hardware famously *does* change the value;
-the resulting code spins forever. Writes can suffer the same fate — a store no
-one reads back may be optimized away entirely.
+因为循环里没有任何东西会观察到 `*reg` 的变化, 编译器就可以自由地
+把这次加载提到循环外面. 而硬件偏偏 *真的* 会改变这个值;
+结果生成的代码就永远空转下去. 写操作也会遭遇同样的命运 - 一次没有人
+再读回来的存储, 可能被整个优化掉.
 
-The `volatile` qualifier tells the compiler: this read/write has **side
-effects**, do not cache, combine, reorder, or remove it. Every register access
-in firmware must be volatile:
+`volatile` 限定符告诉编译器: 这次读/写带有 **副
+作用**, 不要缓存它, 不要合并它, 不要重排它, 也不要删掉它. 固件里的
+每一次寄存器访问都必须是 volatile:
 
 ```rust
 let reg = 0x40014000u32 as *mut volatile u32;
-reg.write_volatile(0xFF);   // goes to the bus, always
-let v = reg.read_volatile(); // comes from the bus, always
+reg.write_volatile(0xFF);   // 总会写到总线上
+let v = reg.read_volatile(); // 总会从总线上读回来
 ```
 
-Embassy wraps every peripheral in a register API generated from the chip's
-vector table; "volatile" is baked in. By the time we write application code with
-`set_high()`, the volatile machinery is already there — we never type
-`unsafe` or know an address.
+Embassy 把每个外设都包进一层由芯片的
+向量表生成的寄存器 API; "volatile" 已经烘焙在里面了. 等到我们用
+`set_high()` 写应用代码时, volatile 那一套机制早已就位 - 我们从来不用敲
+`unsafe`, 也不用知道任何地址.
 
-## Read-Modify-Write
+## 读-改-写
 
-Controlling individual bits of a status register without disturbing neighbors
-requires the classic sequence:
+想单独控制状态寄存器里的某一位, 又不打扰旁边的位,
+就需要那套经典的步骤:
 
 ```
 +--------+     +----------+     +--------+
@@ -69,25 +69,25 @@ requires the classic sequence:
 +--------+     +----------+     +--------+
 ```
 
-To turn on bit 2 while leaving everything else intact:
+要把第 2 位打开, 同时保持其它位不变:
 
 ```rust
 let mut v = reg.read_volatile();
-v |= 1 << 2;            // set bit 2
+v |= 1 << 2;            // 置位第 2 位
 reg.write_volatile(v);
 ```
 
-The hardware designers ship **atomic set/clear** registers on many peripherals
-to avoid torn updates between two tasks. The RP2350's GPIO SIO block is the
-famous example: one register sets bits, another clears them, and a single store
-cannot lose a racing neighbor's update. Embassy exposes these unfriendly regions
-as safe, high-level calls so application code never hand-folds bits — but this
-pattern is *why* those calls exist.
+硬件设计者在很多外设上都提供 **原子置位/清零** 寄存器,
+以避免两个任务之间出现撕裂的更新. RP2350 的 GPIO SIO 模块就是
+著名的例子: 一个寄存器负责置位, 另一个负责清零, 这样单独一次存储
+就不会丢掉旁边那个正在竞争的任务所做的更新. Embassy 把这些不友好的区域
+包装成安全的高层调用, 应用代码永远不用手工拼位 - 但正是这个
+模式, *才* 让那些调用存在.
 
-## Layering Through the HAL
+## 通过 HAL 分层
 
-We never want application code touching registers directly. The layers look
-like this:
+我们绝不希望应用代码直接去碰寄存器. 各层看起来
+是这样:
 
 ```
 +-----------------+   Application logic (LedController, main loop)
@@ -96,16 +96,16 @@ like this:
 +-----------------+   Raw hardware registers
 ```
 
-Each layer sits between us and the bare register. The **PAC (Peripheral Access
-Crate)** — `embassy-rp`'s register layer — gives every register a type-safe,
-volatile accessor. The **HAL** builds higher behavior on top: "a GPIO pin" is a
-handle to the right banks and registers. The **application** only ever says
-"I want an output pin on GPIO16."
+每一层都挡在我们和裸寄存器之间. **PAC (Peripheral Access
+Crate)** - 也就是 `embassy-rp` 的寄存器层 - 给每个寄存器都配了一个类型安全,
+volatile 的访问器. **HAL** 在它之上搭建更高层的行为: "一个 GPIO 引脚" 就是
+指向正确 bank 和寄存器的句柄. 而 **应用** 只需要说一句
+"我要 GPIO16 上的一根输出引脚."
 
-## GPIO Pads on the RP2350
+## RP2350 上的 GPIO pad
 
-Before a pin can be used as an output, the silicon must configure the pad — the
-electrical interface to the outside world. The RP2350 has two register blocks:
+在把一个引脚用作输出之前, 芯片必须先配置好 pad -
+也就是通往外部世界的电气接口. RP2350 有两个寄存器模块:
 
 ```
 +----------------+     +----------------+     +----------------+
@@ -115,28 +115,28 @@ electrical interface to the outside world. The RP2350 has two register blocks:
 +----------------+     +----------------+     +----------------+
 ```
 
-1. **PADS_BANK0** — Electrical properties: pull-up/pull-down, drive strength,
-   Schmitt trigger, output enable.
-2. **IO_BANK0** — Function select (GPIO, UART, SPI, ...) and input enable.
-3. **SIO** — The atomic output/input registers we actually set high/low.
+1. **PADS_BANK0** - 电气属性: 上拉/下拉, 驱动强度,
+   施密特触发器, 输出使能.
+2. **IO_BANK0** - 功能选择 (GPIO, UART, SPI, ...) 和输入使能.
+3. **SIO** - 真正让我们拉高/拉低的那些原子输出/输入寄存器.
 
-The ASM tutorials program these three layers by hand, register by register. In
-Rust, `embassy_rp::gpio::Output::new(p.PIN_16, Level::Low)` configures all of
-them for us at construction. Chapter 17 dissects that call from the other side —
-what construction configures, and what reading/writing afterwards does.
+汇编教程是一个寄存器一个寄存器地手工配置这三层的. 在
+Rust 里, `embassy_rp::gpio::Output::new(p.PIN_16, Level::Low)` 在构造时就替我们
+配好了全部三层. 第 17 章会从另一侧拆解这个调用 -
+构造时配置了什么, 以及之后读/写会做什么.
 
-## Summary
+## 小结
 
-- Peripherals are memory: registers sit at fixed addresses in a peripheral
-  region and react to ordinary loads and stores.
-- Register access must be `volatile` so the optimizer respects hardware side
-  effects.
-- Read-modify-write is the fundamental bit-twiddling pattern; hardware atomic
-  set/clear registers avoid races.
-- Embassy layers application code over the HAL over PAC registers over raw
-  silicon, so firmware never touches an unsafe address.
-- Configuring a GP I/O pin means configuring the pad, the function select, and
-  the SIO output stage — all folded into `Output::new`.
+- 外设就是内存: 寄存器固定在某个外设区域的地址上,
+  对普通的 load 和 store 作出反应.
+- 寄存器访问必须是 `volatile`, 这样优化器才会尊重硬件的
+  副作用.
+- 读-改-写是最基本的位操作模式; 硬件提供的原子
+  置位/清零寄存器可以避免竞争.
+- Embassy 把应用代码叠在 HAL 之上, HAL 又叠在 PAC 寄存器之上, 再往下才是裸
+  硅, 所以固件永远不会碰到不安全的地址.
+- 配置一个 GP I/O 引脚, 意味着配置 pad, 功能选择以及
+  SIO 输出级 - 这些全都被 `Output::new` 收拢在一起了.
 
-Bare-metal foundations are done. Now we learn the programming model that makes
-Embassy special: async Rust on a single core.
+裸机基础到此结束. 接下来我们学习那套让
+Embassy 与众不同的编程模型: 单核上的 async Rust.

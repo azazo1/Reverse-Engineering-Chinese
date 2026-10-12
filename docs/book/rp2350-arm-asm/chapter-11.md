@@ -1,166 +1,166 @@
-# Chapter 11: ARM Branch Instructions
+# Chapter 11: ARM 分支指令
 
-## Introduction
+## 引言
 
-Branch instructions alter the flow of execution.  Without branches, the processor would execute instructions sequentially from the reset vector to the end of flash — never looping, never calling a function, never making a decision.  Our blink driver relies on branches for its infinite blink loop, function calls, hardware polling, and input validation.  This chapter covers every branch instruction in our firmware.
+分支指令改变执行流程. 没有分支, 处理器就会从复位向量开始一路顺序执行到 flash 末尾 - 永远不会循环, 永远不会调用函数, 也永远不会做判断. 我们的闪烁驱动依赖分支来实现无限闪烁循环, 函数调用, 硬件轮询和输入校验. 本章覆盖固件里用到的每一条分支指令.
 
-## Unconditional Branches
+## 无条件分支
 
-### `b` — Branch
+### `b` - 分支
 
 ```asm
-  b     .Loop                                    // jump to .Loop forever
+  b     .Loop                                    // 永远跳转到 .Loop
 ```
 
-`b` changes the program counter (PC) to the target address.  Execution continues at the new location.  The target is encoded as a signed offset from the current PC.
+`b` 把程序计数器 (PC) 改成目标地址. 执行从新位置继续. 目标地址被编码成相对于当前 PC 的有符号偏移.
 
-In our main.s, the infinite blink loop uses `b`:
+在我们的 main.s 里, 无限闪烁循环用到了 `b`:
 
 ```asm
 .Loop:
   mov   r0, #16                                  // GPIO 16
-  bl    GPIO_Set                                 // LED on
+  bl    GPIO_Set                                 // 点亮 LED
   ldr   r0, =500                                 // 500 ms
-  bl    Delay_MS                                 // wait
+  bl    Delay_MS                                 // 等待
   mov   r0, #16                                  // GPIO 16
-  bl    GPIO_Clear                               // LED off
+  bl    GPIO_Clear                               // 熄灭 LED
   ldr   r0, =500                                 // 500 ms
-  bl    Delay_MS                                 // wait
-  b     .Loop                                    // repeat forever
+  bl    Delay_MS                                 // 等待
+  b     .Loop                                    // 永远重复
 ```
 
-The `b .Loop` at the end creates an infinite cycle — the LED blinks until power is removed.
+末尾的 `b .Loop` 构成一个无限循环 - 只要不断电, LED 就一直闪.
 
-### `bl` — Branch with Link
+### `bl` - 带链接的分支
 
 ```asm
-  bl    GPIO_Config                              // call GPIO_Config
+  bl    GPIO_Config                              // 调用 GPIO_Config
 ```
 
-`bl` performs two operations atomically:
+`bl` 原子地完成两件事:
 
-1. Saves the return address (next instruction) in the Link Register (LR / r14)
-2. Branches to the target
+1. 把返回地址 (下一条指令) 保存到链接寄存器 (LR / r14)
+2. 跳转到目标地址
 
-This is how function calls work on ARM.  The caller executes `bl`, and the callee returns with `bx lr`.
+ARM 上的函数调用就是这么实现的. 调用方执行 `bl`, 被调用方用 `bx lr` 返回.
 
-### `bx` — Branch Exchange
+### `bx` - 分支并交换指令集
 
 ```asm
-  bx    lr                                       // return to caller
+  bx    lr                                       // 返回调用方
 ```
 
-`bx` branches to the address in a register.  The lowest bit of the address determines the instruction set state (1 = Thumb, 0 = ARM).  On the Cortex-M33, which only supports Thumb, bit 0 must always be 1.
+`bx` 跳转到寄存器里的地址. 地址的最低位决定指令集状态 (1 = Thumb, 0 = ARM). Cortex-M33 只支持 Thumb, 所以 bit 0 必须始终为 1.
 
-Every function in our firmware ends with:
+固件里每个函数都以这两条指令收尾:
 
 ```asm
-  pop   {r4-r12, lr}                             // restore saved registers
-  bx    lr                                       // return
+  pop   {r4-r12, lr}                             // 恢复保存的寄存器
+  bx    lr                                       // 返回
 ```
 
-Or equivalently, some functions pop directly into PC:
+或者等价地, 有些函数直接弹回 PC:
 
 ```asm
-  pop   {r4-r12, pc}                             // restore and return
+  pop   {r4-r12, pc}                             // 恢复并返回
 ```
 
-## Conditional Branches
+## 条件分支
 
-### `beq` — Branch if Equal (Z=1)
+### `beq` - 相等时分支 (Z=1)
 
 ```asm
-  beq   .Wait_XOSC                              // loop if bit not set
+  beq   .Wait_XOSC                              // 该位未置位就继续循环
 ```
 
-`beq` branches only if the Zero flag is set.  In xosc.s, this polls the XOSC_STATUS register:
+`beq` 只在零标志置位时跳转. 在 xosc.s 里, 它用来轮询 XOSC_STATUS 寄存器:
 
 ```asm
 .Wait_XOSC:
-  ldr   r1, [r0]                                 // read XOSC_STATUS
-  tst   r1, #(1<<31)                             // test STABLE bit
-  beq   .Wait_XOSC                              // Z=1 means bit is 0: not stable
+  ldr   r1, [r0]                                 // 读取 XOSC_STATUS
+  tst   r1, #(1<<31)                             // 测试 STABLE 位
+  beq   .Wait_XOSC                              // Z=1 表示该位为 0: 还没稳定
 ```
 
-The `tst` instruction ANDs r1 with the mask.  If bit 31 is zero, the result is zero, Z=1, and `beq` loops back.
+`tst` 指令把 r1 与掩码做 AND. 如果 bit 31 是 0, 结果就是 0, Z=1, `beq` 就跳回去.
 
-### `bne` — Branch if Not Equal (Z=0)
+### `bne` - 不相等时分支 (Z=0)
 
 ```asm
-  bne   .Delay_Loop                              // loop until counter reaches 0
+  bne   .Delay_Loop                              // 循环直到计数器归零
 ```
 
-`bne` branches if the Zero flag is clear.  The delay loop uses this:
+`bne` 在零标志清零时跳转. 延时循环就用它:
 
 ```asm
 .Delay_Loop:
-  subs  r5, r5, #1                               // decrement counter
-  bne   .Delay_Loop                              // non-zero: continue
+  subs  r5, r5, #1                               // 计数器减一
+  bne   .Delay_Loop                              // 非零: 继续
 ```
 
-When `r5` reaches zero, `subs` sets Z=1, `bne` falls through, and the delay is complete.
+当 `r5` 减到 0 时, `subs` 把 Z 置 1, `bne` 不再跳转, 延时结束.
 
-### `ble` — Branch if Less or Equal (Z=1 or N!=V)
+### `ble` - 小于等于时分支 (Z=1 或 N!=V)
 
 ```asm
-  ble   .Delay_Done                              // skip if r0 <= 0
+  ble   .Delay_Done                              // r0 <= 0 就跳过
 ```
 
-`ble` is a signed comparison branch.  In delay.s, it validates the input parameter:
+`ble` 是有符号比较分支. 在 delay.s 里, 它用来校验输入参数:
 
 ```asm
-  cmp   r0, #0                                   // compare ms value to 0
-  ble   .Delay_Done                              // if <= 0, do nothing
+  cmp   r0, #0                                   // 把 ms 值与 0 比较
+  ble   .Delay_Done                              // 小于等于 0 就什么都不做
 ```
 
-This guards against zero or negative delay values that would produce incorrect behavior.
+这样可以挡住 0 或负数的延时值, 它们会让行为出错.
 
-## Branch Encoding and Range
+## 分支的编码与范围
 
-| Instruction | Encoding | Range |
+| 指令 | 编码 | 范围 |
 |-------------|----------|-------|
-| `b` (narrow) | 16-bit | ±2 KB |
-| `b` (wide) | 32-bit | ±16 MB |
-| `bl` | 32-bit | ±16 MB |
-| `bx Rn` | 16-bit | Any address in register |
-| `beq`/`bne` (narrow) | 16-bit | ±256 bytes |
-| `beq`/`bne` (wide) | 32-bit | ±1 MB |
+| `b` (窄) | 16 位 | ±2 KB |
+| `b` (宽) | 32 位 | ±16 MB |
+| `bl` | 32 位 | ±16 MB |
+| `bx Rn` | 16 位 | 寄存器里的任意地址 |
+| `beq`/`bne` (窄) | 16 位 | ±256 字节 |
+| `beq`/`bne` (宽) | 32 位 | ±1 MB |
 
-The assembler automatically selects the appropriate encoding based on the distance to the target.
+汇编器会根据到目标的距离, 自动选择合适的编码.
 
-## Condition Codes
+## 条件码
 
-The ARM architecture defines 15 condition codes, though our firmware uses only a few:
+ARM 架构定义了 15 个条件码, 不过我们的固件只用到其中几个:
 
-| Code | Meaning | Flags | Used In |
+| 条件码 | 含义 | 标志 | 使用位置 |
 |------|---------|-------|---------|
-| EQ | Equal / zero | Z=1 | xosc.s, reset.s |
-| NE | Not equal / non-zero | Z=0 | delay.s |
-| LE | Signed less or equal | Z=1 or N!=V | delay.s |
-| AL | Always (default) | — | `b`, `bl` |
+| EQ | 相等 / 为零 | Z=1 | xosc.s, reset.s |
+| NE | 不相等 / 非零 | Z=0 | delay.s |
+| LE | 有符号小于等于 | Z=1 或 N!=V | delay.s |
+| AL | 总是 (默认) | - | `b`, `bl` |
 
-## Polling Loops
+## 轮询循环
 
-Our firmware contains two hardware-polling loops:
+固件里有两个硬件轮询循环:
 
-**XOSC Stabilization (xosc.s):**
-
-```
-  tst  → beq → tst → beq → ... → tst (bit set) → fall through
-```
-
-**Reset Completion (reset.s):**
+**XOSC 稳定等待 (xosc.s):**
 
 ```
   tst  → beq → tst → beq → ... → tst (bit set) → fall through
 ```
 
-Both poll a status register bit until hardware signals readiness.  This is "busy waiting" — appropriate for bare-metal firmware where no operating system scheduler exists.
+**复位完成等待 (reset.s):**
 
-## Summary
+```
+  tst  → beq → tst → beq → ... → tst (bit set) → fall through
+```
 
-- `b` provides unconditional jumps and creates our infinite blink loop.
-- `bl` calls functions by saving the return address in LR.
-- `bx lr` returns from functions by branching to the saved address.
-- Conditional branches (`beq`, `bne`, `ble`) enable polling loops, delay counting, and input validation.
-- The condition codes test APSR flags set by prior arithmetic or logic instructions.
+两者都轮询状态寄存器的某一位, 直到硬件报告就绪. 这就是 "忙等待" - 在没有操作系统调度器的裸机固件里, 这样做是合适的.
+
+## 小结
+
+- `b` 提供无条件跳转, 也是无限闪烁循环的骨架.
+- `bl` 通过把返回地址保存到 LR 来调用函数.
+- `bx lr` 跳回保存的地址, 从函数返回.
+- 条件分支 (`beq`, `bne`, `ble`) 支撑起轮询循环, 延时计数和输入校验.
+- 条件码检测的是之前算术或逻辑指令设置的 APSR 标志.

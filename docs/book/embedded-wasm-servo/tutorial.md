@@ -1,28 +1,28 @@
-# Tutorial: Embedded Wasm Servo — A Complete Code Walkthrough
+# 教程: 嵌入式 Wasm 舵机 - 完整代码讲解
 
-This tutorial is a line-by-line, function-by-function guide through every Rust source file in the **embedded-wasm-servo-rp2350** project. By the end, you will understand how a WebAssembly component is compiled, deployed, and executed on an RP2350 microcontroller to control an SG90 servo — entirely in bare-metal Rust with no operating system.
+本教程逐行, 逐函数地讲解 **embedded-wasm-servo-rp2350** 项目里的每一个 Rust 源文件. 读完你就能明白, 一个 WebAssembly 组件是怎样被编译, 部署, 并在 RP2350 微控制器上执行, 从而控制一个 SG90 舵机的 - 全程都是裸机 Rust, 没有操作系统.
 
-The walkthrough follows this order:
+讲解按下面的顺序展开:
 
-1. [WIT Interface Definition](#1-wit-interface-definition-witworldwit) — the contract between guest and host
-2. [Platform Glue](#2-platform-glue-srcplatformrs) — thread-local storage stubs for Wasmtime
-3. [UART Driver](#3-uart-driver-srcuartrs) — serial output for diagnostics
-4. [Servo Driver](#4-servo-driver-srcservors) — SG90 pulse generation and pin management
-5. [Firmware Entry Point](#5-firmware-entry-point-srcmainrs) — hardware init, Wasm runtime, panic handler
-6. [Build Script](#6-build-script-buildrs) — AOT compilation pipeline
-7. [Wasm Guest Application](#7-wasm-guest-application-wasm-appsrclibrs) — the SG90 sweep component itself
+1. [WIT 接口定义](#1-wit-接口定义-witworldwit) - 客体与宿主之间的契约
+2. [平台胶水层](#2-平台胶水层-srcplatformrs) - 给 Wasmtime 用的线程局部存储桩
+3. [UART 驱动](#3-uart-驱动-srcuartrs) - 用于诊断的串口输出
+4. [舵机驱动](#4-led-驱动-srcservors) - SG90 脉冲生成与引脚管理
+5. [固件入口](#5-固件入口-srcmainrs) - 硬件初始化, Wasm 运行时, panic 处理器
+6. [构建脚本](#6-构建脚本-buildrs) - AOT 编译流水线
+7. [Wasm 客体应用](#7-wasm-客体应用-wasm-appsrclibrs) - SG90 扫动组件本身
 
 ---
 
-## 1. WIT Interface Definition (`wit/world.wit`)
+## 1. WIT 接口定义 (`wit/world.wit`)
 
-Before any Rust code, the project defines a **WIT (WebAssembly Interface Type)** file. WIT is a language-neutral interface description that the WebAssembly Component Model uses to type-check function calls between a host (the firmware) and a guest (the Wasm module).
+在写任何 Rust 代码之前, 项目先定义一个 **WIT (WebAssembly Interface Type)** 文件. WIT 是一种与语言无关的接口描述, WebAssembly 组件模型用它来对宿主 (固件) 与客体 (Wasm 模块) 之间的函数调用做类型检查.
 
 ```wit
 package embedded:platform;
 ```
 
-This declares a WIT package named `embedded:platform`. Package names use a namespace:name convention. This one lives in the `embedded` namespace and provides `platform`-level hardware abstractions.
+这一行声明了一个名为 `embedded:platform` 的 WIT 包. 包名采用 namespace:name 的约定. 这个包位于 `embedded` 命名空间下, 提供 `platform` 这一层的硬件抽象.
 
 ```wit
 interface servo {
@@ -30,7 +30,7 @@ interface servo {
 }
 ```
 
-The `gpio` interface defines two functions. The `set-high` takes a pin number and turns it on. The `set-low` takes a pin number and turns it off. The pin number is a `u32` because WIT's type system maps cleanly to Wasm's 32-bit integer type. These are **imports** — the guest calls them, and the host provides the implementations.
+`gpio` 接口定义了两个函数. `set-high` 接收引脚编号并把它打开. `set-low` 接收引脚编号并把它关掉. 引脚编号是 `u32`, 因为 WIT 的类型系统能干净地映射到 Wasm 的 32 位整数类型. 这两个函数是**导入项** - 客体调用它们, 宿主提供实现.
 
 ```wit
 interface timing {
@@ -38,7 +38,7 @@ interface timing {
 }
 ```
 
-The `timing` interface provides a single blocking delay function. The guest calls `delay-ms` with a number of milliseconds, and the host blocks for that duration using CPU cycle counting.
+`timing` 接口提供一个阻塞式延时函数. 客体用毫秒数调用 `delay-ms`, 宿主就用 CPU 周期计数阻塞那么久.
 
 ```wit
 world servo {
@@ -48,30 +48,30 @@ world servo {
 }
 ```
 
-A **world** is a complete contract. The `servo` world says: "I need `gpio` and `timing` from the host, and I will provide a `run` function." The host instantiates the component, calls `run`, and the Wasm code takes over — calling back into `gpio` and `timing` as needed. This is the entire interface between hardware and application logic.
+**world** 是一份完整的契约. `servo` 这个 world 的意思是: "我需要宿主提供 `gpio` 和 `timing`, 而我会提供一个 `run` 函数." 宿主实例化组件, 调用 `run`, 之后 Wasm 代码就接管了 - 需要时再回调 `gpio` 和 `timing`. 硬件与应用逻辑之间的接口, 全部就在这里.
 
 ---
 
-## 2. Platform Glue (`src/platform.rs`)
+## 2. 平台胶水层 (`src/platform.rs`)
 
-Wasmtime was originally built for desktop operating systems that provide thread-local storage (TLS) through the OS. On a bare-metal microcontroller, there is no OS, so we must provide TLS ourselves. This file is the simplest in the project — two functions and one static variable.
+Wasmtime 最初是为桌面操作系统构建的, 那些系统由 OS 提供线程局部存储 (TLS). 在裸机微控制器上没有 OS, 所以我们必须自己提供 TLS. 这个文件是项目里最简单的 - 两个函数加一个静态变量.
 
-### Imports
+### 导入
 
 ```rust
 use core::ptr;
 use core::sync::atomic::{AtomicPtr, Ordering};
 ```
 
-The `ptr` provides `null_mut()` for initializing the TLS value. `AtomicPtr` is an atomic pointer type that can be read and written from any context without data races. On a single-core Cortex-M33, atomics are not strictly necessary, but they satisfy Rust's type system and make the code correct by construction.
+`ptr` 提供 `null_mut()`, 用来初始化 TLS 的值. `AtomicPtr` 是一种原子指针类型, 可以在任何上下文中读写而不会产生数据竞争. 在单核 Cortex-M33 上, 原子操作并不是严格必需的, 但它们能满足 Rust 的类型系统, 让代码在构造上就是正确的.
 
-### The TLS Variable
+### TLS 变量
 
 ```rust
 static TLS_VALUE: AtomicPtr<u8> = AtomicPtr::new(ptr::null_mut());
 ```
 
-This is the entire TLS implementation. Wasmtime's runtime stores a single pointer per thread. Since the RP2350 runs a single thread, one global atomic pointer is sufficient. It starts as null and gets set by Wasmtime during component execution.
+这就是 TLS 实现的全部. Wasmtime 的运行时为每个线程保存一个指针. 由于 RP2350 只跑一个线程, 一个全局原子指针就够了. 它初始为 null, 在组件执行期间由 Wasmtime 设置.
 
 ### `wasmtime_tls_get`
 
@@ -82,7 +82,7 @@ pub extern "C" fn wasmtime_tls_get() -> *mut u8 {
 }
 ```
 
-Wasmtime calls this symbol by name to retrieve the current thread's TLS pointer. The `#[unsafe(no_mangle)]` attribute (Rust 2024 syntax) prevents the compiler from mangling the function name, so Wasmtime's linker can find it. The `extern "C"` uses the C calling convention. `Ordering::Relaxed` is sufficient because there is only one thread — no ordering guarantees are needed relative to other threads.
+Wasmtime 按名字调用这个符号, 以取回当前线程的 TLS 指针. `#[unsafe(no_mangle)]` 属性 (Rust 2024 语法) 阻止编译器改写函数名, 这样 Wasmtime 的链接器就能找到它. `extern "C"` 表示使用 C 调用约定. `Ordering::Relaxed` 就够了, 因为只有一个线程 - 不需要相对其他线程的顺序保证.
 
 ### `wasmtime_tls_set`
 
@@ -93,23 +93,23 @@ pub extern "C" fn wasmtime_tls_set(ptr: *mut u8) {
 }
 ```
 
-This is the setter counterpart. Wasmtime calls it to store its runtime context pointer before executing Wasm code, and clears it (stores null) when execution completes. Together, these two functions are the minimum platform glue that Wasmtime requires to run on bare metal.
+这是对应的 setter. Wasmtime 在执行 Wasm 代码之前调用它, 存入自己的运行时上下文指针; 执行结束时再清空 (存 null). 这两个函数合起来, 就是 Wasmtime 在裸机上运行所需的最小平台胶水层.
 
 ---
 
-## 3. UART Driver (`src/uart.rs`)
+## 3. UART 驱动 (`src/uart.rs`)
 
-The UART driver provides serial output over GPIO0 (TX) and GPIO1 (RX) at 115200 baud. It exists for two reasons: diagnostic logging during normal operation, and panic messages when the firmware crashes. The module is designed as a **shared plug-and-play** driver — it can be dropped into any RP2350 project without modification.
+UART 驱动通过 GPIO0 (TX) 和 GPIO1 (RX) 以 115200 波特率提供串口输出. 它存在的理由有两个: 正常运行时打诊断日志, 以及固件崩溃时输出 panic 信息. 这个模块被设计成一个**可共享, 即插即用**的驱动 - 不做任何修改就能放进任何 RP2350 项目.
 
-### Module Header
+### 模块头部
 
 ```rust
 #![allow(dead_code)]
 ```
 
-Because this module is shared across multiple projects, not every project uses every function. For example, the servo project never calls `read_byte`. This attribute suppresses warnings for unused functions.
+因为这个模块要在多个项目之间共享, 并不是每个项目都会用到每个函数. 比如舵机项目从来不调用 `read_byte`. 这个属性用来抑制未使用函数的警告.
 
-### Imports
+### 导入
 
 ```rust
 use core::cell::RefCell;
@@ -120,17 +120,17 @@ use nb::block;
 use rp235x_hal as hal;
 ```
 
-`RefCell` provides interior mutability — the ability to borrow the UART peripheral mutably at runtime even though it lives in a static. `Mutex` from the `critical_section` crate is a bare-metal mutex that disables interrupts to prevent data races. `HertzU32` is a typed frequency value that prevents unit confusion. `Clock` is a trait for reading peripheral clock frequencies. The `nb::block` import brings the `block!` macro into scope, which converts non-blocking operations into blocking ones by spinning. The `hal` alias maps to the RP2350 hardware abstraction layer.
+`RefCell` 提供内部可变性 - 让 UART 外设虽然住在静态变量里, 却能在运行时被可变借用. `critical_section` crate 的 `Mutex` 是裸机互斥锁, 靠关中断来防止数据竞争. `HertzU32` 是带类型的频率值, 避免单位混淆. `Clock` 是用来读取外设时钟频率的 trait. 导入 `nb::block` 把 `block!` 宏引入作用域, 它通过自旋把非阻塞操作变成阻塞操作. `hal` 这个别名指向 RP2350 的硬件抽象层.
 
-### Constants
+### 常量
 
 ```rust
 const UART0_BASE: u32 = 0x4007_0000;
 ```
 
-The UART0 peripheral's base address in the RP2350's memory map. This is used only by the panic handler's raw register access functions — the normal HAL-based functions do not need it.
+UART0 外设在 RP2350 内存映射中的基地址. 只有 panic 处理器的裸寄存器访问函数会用到它 - 正常的基于 HAL 的函数不需要.
 
-### The UART Type Alias
+### UART 类型别名
 
 ```rust
 pub type Uart0 = hal::uart::UartPeripheral<
@@ -143,15 +143,15 @@ pub type Uart0 = hal::uart::UartPeripheral<
 >;
 ```
 
-This type alias captures the fully configured UART peripheral type. The HAL uses Rust's type system to encode the peripheral's state: it is `Enabled`, it is `UART0` (not UART1), and its TX/RX pins are GPIO0 and GPIO1 configured for the UART function with no pull resistors. This type-level encoding prevents runtime errors — you cannot accidentally pass an unconfigured UART to a function that expects a configured one.
+这个类型别名完整刻画了配置好的 UART 外设类型. HAL 用 Rust 的类型系统把外设状态编码进去: 它是 `Enabled` 的, 它是 `UART0` (不是 UART1), 它的 TX/RX 引脚是配成 UART 功能且不带上下拉电阻的 GPIO0 和 GPIO1. 这种类型层面的编码能防住运行时错误 - 你不可能把一个没配置的 UART 误传给期望已配置 UART 的函数.
 
-### Global UART Storage
+### UART 全局存储
 
 ```rust
 static UART: Mutex<RefCell<Option<Uart0>>> = Mutex::new(RefCell::new(None));
 ```
 
-The UART peripheral is stored in a global static behind a critical-section mutex. The `Option` starts as `None` and is set to `Some(uart)` during initialization. This pattern — `Mutex<RefCell<Option<T>>>` — is the standard safe way to store peripherals globally in embedded Rust, avoiding all `unsafe` and raw pointers.
+UART 外设被存放在一个全局静态变量里, 外面套着 critical-section 互斥锁. `Option` 一开始是 `None`, 初始化时被设成 `Some(uart)`. 这个 `Mutex<RefCell<Option<T>>>` 模式是嵌入式 Rust 里全局存放外设的标准安全写法, 完全避开了 `unsafe` 和裸指针.
 
 ### `init`
 
@@ -165,9 +165,9 @@ pub fn init(
 ) -> Uart0 {
 ```
 
-This function accepts the raw UART0 peripheral, the resets controller, the clocks manager, and **only** the two GPIO pins it needs. This is a deliberate design decision: the function does not accept the entire `Pins` struct. The caller (`main.rs`) owns all the pins and passes only GPIO0 and GPIO1 to the UART. This means adding a new GPIO pin to the project never requires changing this module.
+这个函数接收原始 UART0 外设, 复位控制器, 时钟管理器, 以及**只**是它需要的那两个 GPIO 引脚. 这是刻意的设计决定: 函数不接收整个 `Pins` 结构体. 调用方 (`main.rs`) 拥有所有引脚, 只把 GPIO0 和 GPIO1 交给 UART. 这意味着项目里新增一个 GPIO 引脚时, 永远不需要改动这个模块.
 
-The pins arrive in their default state (`FunctionNull`, `PullDown`) and are reconfigured inside:
+引脚进来时是默认状态 (`FunctionNull`, `PullDown`), 在函数内部被重新配置:
 
 ```rust
     let uart_pins = (
@@ -176,7 +176,7 @@ The pins arrive in their default state (`FunctionNull`, `PullDown`) and are reco
     );
 ```
 
-The `reconfigure` is a zero-cost type-level state transition. It configures the hardware registers and returns a new type that proves the pin is now in UART mode.
+`reconfigure` 是一次零成本的类型层面状态转换. 它配置硬件寄存器, 并返回一个新类型, 证明这个引脚现在处于 UART 模式.
 
 ```rust
     hal::uart::UartPeripheral::new(uart0, uart_pins, resets)
@@ -193,7 +193,7 @@ The `reconfigure` is a zero-cost type-level state transition. It configures the 
 }
 ```
 
-The UART peripheral is created, configured for 115200 baud with 8N1 framing (8 data bits, no parity, 1 stop bit), and enabled. The `.expect()` call panics with a descriptive message if configuration fails — which would only happen if the hardware is in an unexpected state.
+UART 外设在这里被创建, 配置成 115200 波特率, 8N1 帧格式 (8 位数据位, 无校验, 1 位停止位), 然后使能. 如果配置失败, `.expect()` 会带着说明性信息 panic - 而这种失败只可能发生在硬件处于异常状态时.
 
 ### `store_global`
 
@@ -205,7 +205,7 @@ pub fn store_global(uart: Uart0) {
 }
 ```
 
-After `init` returns the configured UART, the caller stores it in the global mutex so that any code (including the GPIO state logger) can write to UART0. The `critical_section::with` disables interrupts for the duration of the closure, acquires the mutex, and calls `replace(Some(uart))` to store the peripheral.
+`init` 返回配置好的 UART 之后, 调用方把它存进全局互斥锁, 这样任何代码 (包括 GPIO 状态日志) 都能往 UART0 写数据. `critical_section::with` 在闭包执行期间关中断, 获取互斥锁, 然后调用 `replace(Some(uart))` 把外设存进去.
 
 ### `write_msg`
 
@@ -225,7 +225,7 @@ pub fn write_msg(msg: &[u8]) {
 }
 ```
 
-This function writes a byte slice to UART0 using the HAL. It acquires the global mutex, borrows the UART peripheral, and writes each byte. The `\n` to `\r\n` conversion ensures proper line endings on serial terminals, which expect a carriage return before each line feed.
+这个函数用 HAL 把一段字节切片写进 UART0. 它先获取全局互斥锁, 借用 UART 外设, 然后逐字节写出. 把 `\n` 转成 `\r\n` 是为了让串口终端上的换行正确 - 这类终端期望每个换行符之前都有一个回车符.
 
 ### `read_byte`
 
@@ -242,7 +242,7 @@ pub fn read_byte() -> u8 {
 }
 ```
 
-This function blocks until a byte arrives on the UART RX line. The `block!` macro from the `nb` crate spins on the non-blocking `read_raw` call until it returns `Ok`. This function is not used in the servo project but is included because the module is shared across projects — the UART echo project uses it.
+这个函数会一直阻塞, 直到 UART 的 RX 线上来一个字节. `nb` crate 的 `block!` 宏会在非阻塞的 `read_raw` 调用上自旋, 直到它返回 `Ok`. 舵机项目里用不到这个函数, 但因为模块要在多个项目间共享, 所以还是保留着 - UART 回显项目会用到它.
 
 ### `write_byte`
 
@@ -256,7 +256,7 @@ pub fn write_byte(byte: u8) {
 }
 ```
 
-Writes a single byte to UART0. Like `read_byte`, this is primarily used by other projects in the shared module family.
+往 UART0 写一个字节. 和 `read_byte` 一样, 它主要是给这个共享模块家族里的其他项目用的.
 
 ### `panic_init`
 
@@ -274,9 +274,9 @@ pub fn panic_init() {
     const UARTCR: *mut u32 = (UART0_BASE + 0x030) as *mut u32;
 ```
 
-This function re-initializes UART0 from scratch using **raw register writes** — no HAL. Why? During a panic, the HAL may be in an unknown state. The UART global might never have been initialized. The allocator might be corrupted. The only safe thing to do is talk directly to the hardware.
+这个函数用**裸寄存器写**从头重新初始化 UART0 - 不走 HAL. 为什么? 因为在 panic 期间, HAL 可能处于未知状态. UART 全局变量可能压根没初始化过. 分配器可能已经损坏. 唯一安全的做法就是直接和硬件对话.
 
-Each constant is a pointer to a specific hardware register. `RESET_CLR` deasserts peripheral resets. `RESET_DONE` reports when a peripheral is out of reset. `GPIO0_CTRL` and `GPIO1_CTRL` select the pin function (UART). The `UART*` registers configure baud rate, data format, and enable the peripheral.
+每个常量都是指向某个硬件寄存器的指针. `RESET_CLR` 用于解除外设复位. `RESET_DONE` 报告外设是否已脱离复位. `GPIO0_CTRL` 和 `GPIO1_CTRL` 用来选择引脚功能 (UART). `UART*` 系列寄存器配置波特率, 数据格式, 并使能外设.
 
 ```rust
     unsafe {
@@ -292,7 +292,7 @@ Each constant is a pointer to a specific hardware register. `RESET_CLR` deassert
     }
 ```
 
-The sequence: first, deassert the resets for IO_BANK0 (bit 6) and UART0 (bit 26) by writing to the atomic-clear register. Then spin until both peripherals report they are out of reset. Next, set GPIO0 and GPIO1 to function 2 (UART). Finally, configure the UART for 115200 baud at the default 150 MHz peripheral clock. The integer baud rate divisor (81) and fractional divisor (24) are calculated from: `150_000_000 / (16 * 115200) = 81.380`, fractional part `0.380 * 64 = 24.3 ≈ 24`. The line control register sets 8 data bits and enables the FIFO. The control register enables the UART, transmitter, and receiver.
+执行顺序是: 先往 atomic-clear 寄存器写入, 解除 IO_BANK0 (第 6 位) 和 UART0 (第 26 位) 的复位. 然后自旋等待, 直到两个外设都报告已脱离复位. 接着把 GPIO0 和 GPIO1 设成功能 2 (UART). 最后在默认的 150 MHz 外设时钟下, 把 UART 配置成 115200 波特率. 整数波特率除数 (81) 和分数除数 (24) 由下式算出: `150_000_000 / (16 * 115200) = 81.380`, 小数部分 `0.380 * 64 = 24.3 ≈ 24`. 线路控制寄存器设置 8 位数据位并使能 FIFO. 控制寄存器使能 UART, 发送器和接收器.
 
 ### `panic_write_byte`
 
@@ -307,7 +307,7 @@ pub fn panic_write_byte(byte: u8) {
 }
 ```
 
-Writes a single byte by spinning until the TX FIFO has space (flag register bit 5 is the "TX FIFO full" flag), then writing to the data register. This is the panic handler's equivalent of `write_byte`, using raw registers instead of the HAL.
+写一个字节: 先自旋等到 TX FIFO 有空位 (标志寄存器第 5 位是 "TX FIFO 满" 标志), 然后写数据寄存器. 这是 panic 处理器版的 `write_byte`, 用裸寄存器代替 HAL.
 
 ### `panic_write`
 
@@ -322,15 +322,15 @@ pub fn panic_write(msg: &[u8]) {
 }
 ```
 
-Iterates over a byte slice, writing each byte with `\n` to `\r\n` conversion, using the raw register path. This is what the panic handler calls to output the panic message.
+遍历一段字节切片, 逐字节写出, 同时做 `\n` 到 `\r\n` 的转换, 走的是裸寄存器路径. panic 处理器就是调用它来输出 panic 信息.
 
 ---
 
-## 4. LED Driver (`src/servo.rs`)
+## 4. LED 驱动 (`src/servo.rs`)
 
-The LED driver manages GPIO output pins by their hardware pin number. It is designed for the Component Model architecture: the Wasm guest says "set pin 25 high" and the host firmware looks up pin 25 in this module and drives it high.
+LED 驱动按硬件引脚编号来管理 GPIO 输出引脚. 它是为组件模型架构设计的: Wasm 客体说 "把 25 号引脚拉高", 宿主固件就在这个模块里查出 25 号引脚并把它拉高.
 
-### Imports and Type Alias
+### 导入与类型别名
 
 ```rust
 extern crate alloc;
@@ -343,21 +343,21 @@ use critical_section::Mutex;
 use embedded_hal::digital::OutputPin;
 ```
 
-The module uses heap allocation (`Box`, `BTreeMap`) to store pins as trait objects. `OutputPin` is the embedded-hal trait that all GPIO output pins implement. `Infallible` is the error type for GPIO operations that cannot fail (the RP2350's GPIO always succeeds).
+这个模块用堆分配 (`Box`, `BTreeMap`) 把引脚存成 trait 对象. `OutputPin` 是所有 GPIO 输出引脚都实现的 embedded-hal trait. `Infallible` 是不会失败的 GPIO 操作的错误类型 (RP2350 的 GPIO 总是成功).
 
 ```rust
 type PinBox = Box<dyn OutputPin<Error = Infallible> + Send>;
 ```
 
-This type alias defines a heap-allocated, type-erased GPIO pin. By boxing the pin behind a trait object, the module can store any GPIO pin (GPIO0, GPIO6, etc.) in the same collection without knowing the concrete type. The `Send` bound is required because the static is accessed from interrupt-safe critical sections.
+这个类型别名定义了一个堆分配的, 类型擦除的 GPIO 引脚. 把引脚装进 trait 对象之后, 模块就能在不知道具体类型的情况下, 把任意 GPIO 引脚 (GPIO0, GPIO6 等等) 存进同一个集合. `Send` 约束是必需的, 因为这个静态变量会从中断安全的 critical section 里访问.
 
-### Global Pin Storage
+### 全局引脚存储
 
 ```rust
 static PINS: Mutex<RefCell<BTreeMap<u8, PinBox>>> = Mutex::new(RefCell::new(BTreeMap::new()));
 ```
 
-A `BTreeMap` maps pin numbers (e.g., `25`) to their boxed trait objects. This is the same `Mutex<RefCell<...>>` pattern used in the UART module. `BTreeMap` is used instead of `HashMap` because `HashMap` requires a random number generator, which is unavailable in `no_std`.
+`BTreeMap` 把引脚编号 (例如 `25`) 映射到装箱后的 trait 对象. 这和 UART 模块用的是同一个 `Mutex<RefCell<...>>` 模式. 这里用 `BTreeMap` 而不是 `HashMap`, 是因为 `HashMap` 需要一个随机数生成器, 而 `no_std` 里没有.
 
 ### `store_pin`
 
@@ -369,7 +369,7 @@ pub fn store_pin(gpio_num: u8, pin: impl OutputPin<Error = Infallible> + Send + 
 }
 ```
 
-Registers a GPIO pin by its hardware number. The `impl OutputPin` parameter accepts any concrete pin type — the caller does not need to box it manually. Inside the critical section, the pin is boxed and inserted into the map. The `'static` bound is required because the map lives in a static variable.
+按硬件编号注册一个 GPIO 引脚. `impl OutputPin` 参数接受任意具体引脚类型 - 调用方不需要手动装箱. 在 critical section 内部, 引脚被装箱并插入映射表. `'static` 约束是必需的, 因为这张表住在静态变量里.
 
 ### `set_high`
 
@@ -384,7 +384,7 @@ pub fn set_high(gpio_num: u8) {
 }
 ```
 
-Looks up the pin by number, calls `set_high()` on the trait object, and ignores the `Result` (which is `Infallible` — it cannot fail). The `.expect("pin not registered")` panic message provides clear diagnostics if a Wasm guest tries to control a pin that was never registered by the host.
+按编号查出引脚, 在 trait 对象上调用 `set_high()`, 并忽略 `Result` (它是 `Infallible` - 不可能失败). 如果有 Wasm 客体试图控制一个宿主从未注册过的引脚, `.expect("pin not registered")` 的 panic 信息能给出清晰的诊断.
 
 ### `set_low`
 
@@ -399,28 +399,28 @@ pub fn set_low(gpio_num: u8) {
 }
 ```
 
-Identical to `set_high` but drives the pin low. Together, `set_high` and `set_low` are the host-side implementations of the WIT `gpio` interface.
+和 `set_high` 一样, 只是把引脚拉低. `set_high` 和 `set_low` 合起来, 就是 WIT `gpio` 接口在宿主一侧的实现.
 
 ---
 
-## 5. Firmware Entry Point (`src/main.rs`)
+## 5. 固件入口 (`src/main.rs`)
 
-This is the largest file and the heart of the firmware. It initializes hardware, sets up the Wasm runtime, and bridges the WIT interfaces to real hardware.
+这是最大的一个文件, 也是固件的心脏. 它初始化硬件, 搭起 Wasm 运行时, 并把 WIT 接口接到真实硬件上.
 
-### Crate Attributes and Module Declarations
+### crate 属性与模块声明
 
 ```rust
 #![no_std]
 #![no_main]
 ```
 
-The `no_std` means no standard library — only `core` and `alloc`. The `no_main` means there is no standard `fn main()` — the entry point is provided by `cortex-m-rt` via the `#[hal::entry]` attribute.
+`no_std` 表示不用标准库 - 只有 `core` 和 `alloc`. `no_main` 表示没有标准的 `fn main()` - 入口由 `cortex-m-rt` 通过 `#[hal::entry]` 属性提供.
 
 ```rust
 extern crate alloc;
 ```
 
-Enables the `alloc` crate, which provides `Vec`, `Box`, `String`, and other heap types. The heap is backed by the `embedded-alloc` allocator initialized in `init_heap`.
+启用 `alloc` crate, 它提供 `Vec`, `Box`, `String` 等堆类型. 堆由 `init_heap` 里初始化的 `embedded-alloc` 分配器支撑.
 
 ```rust
 mod servo;
@@ -428,9 +428,9 @@ mod platform;
 mod uart;
 ```
 
-These declarations bring the three modules into scope. Each module lives in its own file (`src/servo.rs`, `src/platform.rs`, `src/uart.rs`).
+这几行声明把三个模块引入作用域. 每个模块各占一个文件 (`src/servo.rs`, `src/platform.rs`, `src/uart.rs`).
 
-### Imports
+### 导入
 
 ```rust
 use core::panic::PanicInfo;
@@ -440,9 +440,9 @@ use wasmtime::component::{Component, HasSelf};
 use wasmtime::{Config, Engine, Store};
 ```
 
-`PanicInfo` is the type passed to the panic handler. `LlffHeap` is a linked-list first-fit heap allocator designed for embedded systems. The `hal` is the RP2350 hardware abstraction layer. The Wasmtime imports bring in the Component Model's core types: `Component` (a precompiled Wasm module), `Engine` (the execution environment), `Store` (per-instance state), and `HasSelf` (a marker type used for linker registration).
+`PanicInfo` 是传给 panic 处理器的类型. `LlffHeap` 是为嵌入式系统设计的链表式首次适配堆分配器. `hal` 是 RP2350 的硬件抽象层. Wasmtime 的导入带来组件模型的核心类型: `Component` (预编译好的 Wasm 模块), `Engine` (执行环境), `Store` (每个实例的状态), 以及 `HasSelf` (链接器注册用的标记类型).
 
-### WIT Bindings Generation
+### 生成 WIT 绑定
 
 ```rust
 wasmtime::component::bindgen!({
@@ -451,21 +451,21 @@ wasmtime::component::bindgen!({
 });
 ```
 
-This macro reads the WIT file at compile time and generates Rust types and traits for the `servo` world. It produces:
-- A `Servo` struct with methods to instantiate the component and call exports
-- `embedded::platform::gpio::Host` and `embedded::platform::timing::Host` traits that the firmware must implement
-- A `Guest` interface representing the component's exports
+这个宏在编译期读取 WIT 文件, 为 `servo` 这个 world 生成 Rust 类型和 trait. 它会产出:
+- 一个 `Servo` 结构体, 带有实例化组件和调用导出函数的方法
+- `embedded::platform::gpio::Host` 和 `embedded::platform::timing::Host` 两个 trait, 固件必须实现它们
+- 一个 `Guest` 接口, 表示组件导出的内容
 
-### Global Allocator
+### 全局分配器
 
 ```rust
 #[global_allocator]
 static HEAP: Heap = Heap::empty();
 ```
 
-Declares the heap allocator as a global static. It starts empty and is initialized by `init_heap` with a 256 KiB memory region. Wasmtime uses the heap extensively — for the `Store`, `Component` metadata, and Wasm linear memory.
+把堆分配器声明为全局静态变量. 它初始为空, 由 `init_heap` 用一块 256 KiB 的内存区域初始化. Wasmtime 大量使用堆 - 用于 `Store`, `Component` 元数据以及 Wasm 线性内存.
 
-### Constants
+### 常量
 
 ```rust
 const XOSC_CRYSTAL_FREQ: u32 = 12_000_000;
@@ -473,9 +473,9 @@ const HEAP_SIZE: usize = 262_144;
 const WASM_BINARY: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/servo.cwasm"));
 ```
 
-`XOSC_CRYSTAL_FREQ` is the external crystal frequency (12 MHz) used to configure the PLL. `HEAP_SIZE` is 256 KiB — half of the RP2350's 512 KiB RAM, leaving the other half for the stack and Wasmtime's internal structures. `WASM_BINARY` embeds the precompiled Pulley bytecode directly into the firmware binary at compile time using `include_bytes!`. The `.cwasm` file is produced by `build.rs`.
+`XOSC_CRYSTAL_FREQ` 是外部晶振频率 (12 MHz), 用于配置 PLL. `HEAP_SIZE` 是 256 KiB - RP2350 那 512 KiB RAM 的一半, 另一半留给栈和 Wasmtime 的内部结构. `WASM_BINARY` 用 `include_bytes!` 在编译期把预编译好的 Pulley 字节码直接嵌进固件二进制. 那个 `.cwasm` 文件由 `build.rs` 生成.
 
-### Boot Metadata
+### 引导元数据
 
 ```rust
 #[unsafe(link_section = ".start_block")]
@@ -483,15 +483,15 @@ const WASM_BINARY: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/servo.cwasm
 pub static IMAGE_DEF: hal::block::ImageDef = hal::block::ImageDef::secure_exe();
 ```
 
-The RP2350's boot ROM looks for metadata in a special `.start_block` section to determine how to boot. The `secure_exe()` tells the boot ROM this is a secure ARM executable. The `#[used]` attribute prevents the linker from stripping this symbol even though nothing references it in code. `#[unsafe(link_section)]` is the Rust 2024 syntax for placing data in a specific linker section.
+RP2350 的 启动 ROM 会在一个特殊的 `.start_block` 段里找元数据, 以决定怎么启动. `secure_exe()` 告诉 启动 ROM 这是一个安全的 ARM 可执行文件. `#[used]` 属性阻止链接器丢弃这个符号, 即使代码里没有任何地方引用它. `#[unsafe(link_section)]` 是 Rust 2024 里把数据放进指定链接器段的语法.
 
-### Host State and WIT Implementations
+### 宿主状态与 WIT 实现
 
 ```rust
 struct HostState;
 ```
 
-The host state is the Rust type that Wasmtime's `Store` carries. WIT host trait implementations are defined on this struct. In this project it has no fields because all hardware access goes through global statics (`servo::PINS`, `uart::UART`).
+宿主状态就是 Wasmtime 的 `Store` 所携带的那个 Rust 类型. WIT 的宿主 trait 实现都定义在这个结构体上. 在本项目里它没有字段, 因为所有硬件访问都走全局静态变量 (`servo::PINS`, `uart::UART`).
 
 ```rust
 impl embedded::platform::gpio::Host for HostState {
@@ -507,7 +507,7 @@ impl embedded::platform::gpio::Host for HostState {
 }
 ```
 
-These are the host-side implementations of the WIT `gpio` interface. When the Wasm guest calls `gpio::set_high(25)`, Wasmtime routes it here. The function delegates to `servo::set_high` to drive the physical GPIO pin, then calls `write_gpio_msg` to log the state change over UART.
+这是 WIT `gpio` 接口在宿主一侧的实现. 当 Wasm 客体调用 `gpio::set_high(25)` 时, Wasmtime 会把调用转到这里. 函数转交给 `servo::set_high` 去驱动物理 GPIO 引脚, 然后调用 `write_gpio_msg` 把状态变化通过 UART 记下来.
 
 ```rust
 impl embedded::platform::timing::Host for HostState {
@@ -517,9 +517,9 @@ impl embedded::platform::timing::Host for HostState {
 }
 ```
 
-The WIT `timing` interface implementation. The `cortex_m::asm::delay` is a tight loop that counts CPU cycles. At 150 MHz (the RP2350's default PLL frequency), `150_000` cycles equals 1 millisecond. This is more reliable than timer-based delays on bare metal because it has no dependencies on timer peripheral configuration.
+这是 WIT `timing` 接口的实现. `cortex_m::asm::delay` 是一个数 CPU 周期的紧循环. 在 150 MHz (RP2350 默认的 PLL 频率) 下, `150_000` 个周期正好是 1 毫秒. 在裸机上, 这比基于定时器的延时更可靠, 因为它不依赖定时器外设的配置.
 
-### Panic Handler
+### panic 处理器
 
 ```rust
 #[panic_handler]
@@ -542,7 +542,7 @@ fn panic(info: &PanicInfo) -> ! {
 }
 ```
 
-When any code panics (via `.unwrap()`, `.expect()`, `panic!`, etc.), this handler runs. It re-initializes UART0 from scratch using raw register writes (the HAL might be in an unknown state), then outputs the panic location and message. Finally, it enters an infinite loop using `wfe` (Wait For Event), which puts the CPU into a low-power state. This is critical for debugging — without a visible panic output, crashes on embedded targets are invisible.
+当任何代码 panic 时 (通过 `.unwrap()`, `.expect()`, `panic!` 等等), 这个处理器就会运行. 它先用裸寄存器写从头重新初始化 UART0 (HAL 可能处于未知状态), 然后输出 panic 的位置和信息. 最后进入一个用 `wfe` (Wait For Event) 的无限循环, 让 CPU 进入低功耗状态. 这对调试至关重要 - 没有可见的 panic 输出, 嵌入式目标上的崩溃就是隐形的.
 
 ### `init_heap`
 
@@ -554,7 +554,7 @@ fn init_heap() {
 }
 ```
 
-Allocates a 256 KiB region of uninitialized memory and passes it to the heap allocator. `MaybeUninit` tells the compiler this memory does not need to be zeroed — saving boot time. The `unsafe` block is required because `HEAP.init` takes a raw pointer; this is one of the few unavoidable uses of `unsafe` in the project.
+分配一块 256 KiB 的未初始化内存区域, 交给堆分配器. `MaybeUninit` 告诉编译器这块内存不需要清零 - 省下启动时间. `unsafe` 块是必需的, 因为 `HEAP.init` 接收裸指针; 这是项目里少数几处无法避免的 `unsafe`.
 
 ### `init_clocks`
 
@@ -575,7 +575,7 @@ fn init_clocks(
 }
 ```
 
-Initializes the RP2350's clock tree. The external 12 MHz crystal drives two PLLs: the system PLL (configured to 150 MHz for the CPU) and the USB PLL (48 MHz for USB peripherals, though USB is not used here). The function returns a `ClocksManager` that provides clock frequency information to other peripherals (like the UART's baud rate calculation).
+初始化 RP2350 的时钟树. 外部 12 MHz 晶振驱动两个 PLL: 系统 PLL (给 CPU 配到 150 MHz) 和 USB PLL (给 USB 外设的 48 MHz, 不过这里没用到 USB). 函数返回一个 `ClocksManager`, 它向其他外设提供时钟频率信息 (比如 UART 的波特率计算就要用到).
 
 ### `write_gpio_msg`
 
@@ -593,7 +593,7 @@ fn write_gpio_msg(pin: u8, high: bool) {
 }
 ```
 
-Formats and sends a message like `GPIO6 On\n` over UART. This is called from the WIT `gpio` host implementation so every LED state change is visible on the serial console. The function avoids `format!` or any string formatting that would require `std` — instead it uses `fmt_u8` to convert the pin number to ASCII digits manually.
+拼出并发送类似 `GPIO6 On\n` 的消息. 它由 WIT `gpio` 的宿主实现调用, 这样每次 LED 状态变化都能在串口终端上看到. 函数刻意避开 `format!` 或任何需要 `std` 的字符串格式化 - 它改用 `fmt_u8` 手工把引脚编号转成 ASCII 数字.
 
 ### `fmt_u8`
 
@@ -617,7 +617,7 @@ fn fmt_u8(mut n: u8, buf: &mut [u8; 3]) -> usize {
 }
 ```
 
-Converts a `u8` to its decimal ASCII representation without any allocator or formatting machinery. It extracts digits from right to left using modulo and division, stores them in a temporary buffer, then reverses them into the output buffer. Returns the number of digits written. For pin 25, it writes `b"25"` and returns `2`.
+把一个 `u8` 转成它的十进制 ASCII 表示, 不用任何分配器或格式化机制. 它用取模和除法从右往左取出各位数字, 存进临时缓冲区, 再倒序写进输出缓冲区. 返回写出的数字个数. 对引脚 25 来说, 它写入 `b"25"` 并返回 `2`.
 
 ### `init_hardware`
 
@@ -639,9 +639,9 @@ fn init_hardware() {
 }
 ```
 
-This function initializes all hardware. `Peripherals::take()` is a singleton — it can only be called once, preventing multiple drivers from accessing the same hardware. The function creates the watchdog (required by the clock init), configures clocks, initializes the SIO (Single-cycle IO) for GPIO access, and creates the pin struct.
+这个函数初始化所有硬件. `Peripherals::take()` 是单例 - 只能调用一次, 防止多个驱动同时访问同一份硬件. 函数创建看门狗 (时钟初始化需要它), 配置时钟, 初始化用于 GPIO 访问的 SIO (单周期 IO), 并创建引脚结构体.
 
-Pin allocation happens here and only here. GPIO0 and GPIO1 go to the UART. GPIO6 is configured as a push-pull output and registered with the LED driver under pin number 25. If you wanted to add another LED on GPIO16, you would add one line: `servo::store_pin(16, pins.gpio16.into_push_pull_output())`. No other file changes needed.
+引脚的分配只在这里发生. GPIO0 和 GPIO1 归 UART. GPIO6 被配成推挽输出, 并以 25 号引脚的名义注册到 LED 驱动. 如果你想在 GPIO16 上再加一个 LED, 只要加一行: `servo::store_pin(16, pins.gpio16.into_push_pull_output())`. 不需要改别的文件.
 
 ### `create_engine`
 
@@ -660,16 +660,16 @@ fn create_engine() -> Engine {
 }
 ```
 
-Creates the Wasmtime execution engine. Every setting here is critical and must match the build-time engine in `build.rs` exactly:
+创建 Wasmtime 执行引擎. 这里的每一项设置都很关键, 必须和 `build.rs` 里构建期的引擎完全一致:
 
-- `target("pulley32")` — targets the Pulley 32-bit software interpreter instead of native code generation. Pulley is Wasmtime's portable bytecode interpreter that runs on any architecture.
-- `signals_based_traps(false)` — disables OS signal handlers for traps. There is no OS to send signals.
-- `memory_init_cow(false)` — disables copy-on-write memory initialization. There is no virtual memory system.
-- `memory_reservation(0)` — disables virtual memory reservation. The RP2350 has only physical memory.
-- `memory_guard_size(0)` — disables guard pages. No virtual memory means no guard pages.
-- `memory_reservation_for_growth(0)` — no pre-reserved growth space.
-- `guard_before_linear_memory(false)` — no guard page before linear memory.
-- `max_wasm_stack(16384)` — limits the Wasm stack to 16 KiB to fit in the constrained RAM.
+- `target("pulley32")` - 目标是 Pulley 32 位软件解释器, 而不是生成本机代码. Pulley 是 Wasmtime 的可移植字节码解释器, 能在任何架构上运行.
+- `signals_based_traps(false)` - 关闭基于 OS 信号的陷入处理. 没有 OS 来发信号.
+- `memory_init_cow(false)` - 关闭写时复制的内存初始化. 这里没有虚拟内存系统.
+- `memory_reservation(0)` - 关闭虚拟内存预留. RP2350 只有物理内存.
+- `memory_guard_size(0)` - 关闭保护页. 没有虚拟内存就没有保护页.
+- `memory_reservation_for_growth(0)` - 不预留增长空间.
+- `guard_before_linear_memory(false)` - 线性内存之前不放保护页.
+- `max_wasm_stack(16384)` - 把 Wasm 栈限制在 16 KiB, 以适应紧张的 RAM.
 
 ### `create_component`
 
@@ -679,7 +679,7 @@ fn create_component(engine: &Engine) -> Component {
 }
 ```
 
-Deserializes the precompiled Pulley bytecode that was embedded by `include_bytes!`. The `unsafe` is required because `Component::deserialize` trusts that the bytes are a valid Wasmtime serialized component — this is guaranteed because our `build.rs` produced them.
+反序列化由 `include_bytes!` 嵌入的预编译 Pulley 字节码. 这里需要 `unsafe`, 因为 `Component::deserialize` 信任这些字节是一份合法的 Wasmtime 序列化组件 - 这一点由我们的 `build.rs` 保证, 因为字节就是它生成的.
 
 ### `build_linker`
 
@@ -694,7 +694,7 @@ fn build_linker(engine: &Engine) -> wasmtime::component::Linker<HostState> {
 }
 ```
 
-Creates a component linker and registers all WIT interface implementations. `Servo::add_to_linker` was generated by `bindgen!` and connects the `gpio::Host` and `timing::Host` trait implementations on `HostState` to the linker. The `HasSelf<HostState>` type parameter is a phantom type used internally by Wasmtime — the closure simply returns `state` unchanged.
+创建组件链接器并注册所有 WIT 接口实现. `Servo::add_to_linker` 由 `bindgen!` 生成, 它把 `HostState` 上的 `gpio::Host` 和 `timing::Host` trait 实现接到链接器上. `HasSelf<HostState>` 类型参数是 Wasmtime 内部使用的幻影类型 - 那个闭包只是把 `state` 原样返回.
 
 ### `execute_wasm`
 
@@ -710,7 +710,7 @@ fn execute_wasm(
 }
 ```
 
-Instantiates the Wasm component and calls the exported `run` function. `Servo::instantiate` creates a live instance of the component with all imports resolved. The `call_run` invokes the guest's `run` function, which enters the infinite blink loop. This function only returns if the Wasm guest's `run` function returns — which in this project it never does.
+实例化 Wasm 组件并调用导出的 `run` 函数. `Servo::instantiate` 创建组件的一个活实例, 所有导入都已解析完毕. `call_run` 调用客体的 `run` 函数, 后者进入无限的闪烁循环. 只有当 Wasm 客体的 `run` 函数返回时, 这个函数才会返回 - 而在本项目里它永远不会返回.
 
 ### `run_wasm`
 
@@ -727,7 +727,7 @@ fn run_wasm() -> ! {
 }
 ```
 
-Orchestrates the Wasm runtime startup. Creates the engine, deserializes the component, creates a store with the host state, builds the linker, and executes the Wasm component. The trailing `loop` is a safety net — `execute_wasm` should never return because the guest's `run` function loops forever.
+编排 Wasm 运行时的启动过程. 创建引擎, 反序列化组件, 用宿主状态创建 store, 构建链接器, 然后执行 Wasm 组件. 末尾那个 `loop` 是一道保险 - `execute_wasm` 本不该返回, 因为客体的 `run` 函数会永远循环下去.
 
 ### `main`
 
@@ -740,15 +740,15 @@ fn main() -> ! {
 }
 ```
 
-The firmware entry point. `#[hal::entry]` is the RP2350 HAL's entry point attribute (built on `cortex-m-rt`). It sets up the stack pointer and vector table, then calls this function. The boot sequence is: initialize the heap allocator, initialize all hardware peripherals, then start the Wasm runtime. The `-> !` return type means this function never returns — the Wasm guest's blink loop runs forever.
+固件入口. `#[hal::entry]` 是 RP2350 HAL 的入口点属性 (构建在 `cortex-m-rt` 之上). 它负责设置栈指针和向量表, 然后调用这个函数. 启动顺序是: 初始化堆分配器, 初始化所有硬件外设, 然后启动 Wasm 运行时. `-> !` 返回类型表示这个函数永不返回 - Wasm 客体的闪烁循环会一直跑下去.
 
 ---
 
-## 6. Build Script (`build.rs`)
+## 6. 构建脚本 (`build.rs`)
 
-The build script runs on the **host machine** (your development computer) during `cargo build`. It compiles the Wasm guest application and AOT-compiles it to Pulley bytecode so the device does not need a Wasm compiler.
+构建脚本在 `cargo build` 期间运行于**宿主机器** (你的开发电脑) 上. 它编译 Wasm 客体应用, 并把它 AOT 编译成 Pulley 字节码, 这样设备端就不需要 Wasm 编译器了.
 
-### Imports
+### 导入
 
 ```rust
 use std::fs::File;
@@ -759,7 +759,7 @@ use wasmtime::{Config, Engine};
 use wit_component::ComponentEncoder;
 ```
 
-Unlike the firmware code, the build script uses the full standard library (`std`). It needs file I/O, process spawning, and the host-side Wasmtime with Cranelift code generation.
+和固件代码不同, 构建脚本使用完整的标准库 (`std`). 它需要文件 IO, 创建子进程, 以及带 Cranelift 代码生成的宿主侧 Wasmtime.
 
 ### `setup_output_dir`
 
@@ -771,7 +771,7 @@ fn setup_output_dir() -> PathBuf {
 }
 ```
 
-Gets the build output directory from the `OUT_DIR` environment variable (set by cargo) and registers it as a linker search path. The linker script (`memory.x`) and the compiled Pulley bytecode (`servo.cwasm`) will be placed here.
+从 `OUT_DIR` 环境变量 (由 cargo 设置) 取出构建输出目录, 并把它注册为链接器搜索路径. 链接脚本 (`memory.x`) 和编译好的 Pulley 字节码 (`servo.cwasm`) 都会放在这里.
 
 ### `write_linker_script`
 
@@ -783,7 +783,7 @@ fn write_linker_script(out: &Path) {
 }
 ```
 
-Copies the RP2350 memory layout linker script (`rp2350.x`) into the output directory as `memory.x`. The linker script defines the Flash (2 MiB) and RAM (512 KiB) regions and tells the linker where to place code, data, and the stack. The `cortex-m-rt` crate's `link.x` script includes `memory.x` automatically.
+把描述 RP2350 内存布局的链接脚本 (`rp2350.x`) 复制到输出目录, 命名为 `memory.x`. 这个链接脚本定义 Flash (2 MiB) 和 RAM (512 KiB) 两个区域, 并告诉链接器把代码, 数据和栈放在哪里. `cortex-m-rt` crate 的 `link.x` 脚本会自动包含 `memory.x`.
 
 ### `compile_wasm_app`
 
@@ -799,13 +799,13 @@ fn compile_wasm_app() {
 }
 ```
 
-Spawns a child `cargo build` process to compile the Wasm guest application. Key details:
+派生一个子 `cargo build` 进程来编译 Wasm 客体应用. 几个关键点:
 
-- `--target wasm32-unknown-unknown` compiles to WebAssembly instead of the host architecture.
-- `.current_dir("wasm-app")` runs the build in the Wasm sub-crate's directory.
-- `.env_remove("CARGO_ENCODED_RUSTFLAGS")` is critical — without this, the parent build's RUSTFLAGS (which contain ARM linker flags like `--nmagic` and `-Tlink.x`) leak into the child build and cause Wasm linker errors.
+- `--target wasm32-unknown-unknown` 表示编译成 WebAssembly, 而不是宿主架构.
+- `.current_dir("wasm-app")` 让构建在 Wasm 子 crate 的目录里进行.
+- `.env_remove("CARGO_ENCODED_RUSTFLAGS")` 很关键 - 不这样做的话, 父构建的 RUSTFLAGS (里面有 `--nmagic` 和 `-Tlink.x` 这类 ARM 链接器参数) 会漏进子构建, 导致 Wasm 链接错误.
 
-The output is a core Wasm module at `wasm-app/target/wasm32-unknown-unknown/release/wasm_app.wasm`.
+产物是一个核心 Wasm 模块, 位于 `wasm-app/target/wasm32-unknown-unknown/release/wasm_app.wasm`.
 
 ### `create_pulley_engine`
 
@@ -824,7 +824,7 @@ fn create_pulley_engine() -> Engine {
 }
 ```
 
-Creates a Wasmtime engine for AOT cross-compilation. Every setting **must be identical** to `create_engine` in `src/main.rs`. When Wasmtime serializes a component, it embeds all configuration values in the `.cwasm` header. When the device deserializes it, it compares every value against the runtime engine. Any mismatch causes `Component::deserialize` to fail with a cryptic error.
+创建一个用于 AOT 交叉编译的 Wasmtime 引擎. 每一项设置都**必须和** `src/main.rs` 里的 `create_engine` **完全一致**. Wasmtime 序列化组件时, 会把所有配置值写进 `.cwasm` 的头部. 设备反序列化时, 会把每个值拿来和运行时的引擎比对. 只要有一处不匹配, `Component::deserialize` 就会以一个含义晦涩的错误失败.
 
 ### `compile_wasm_to_pulley`
 
@@ -846,13 +846,13 @@ fn compile_wasm_to_pulley(out: &Path) {
 }
 ```
 
-This is the core of the AOT compilation pipeline and the most important function in the build script. It performs three transformations:
+这是 AOT 编译流水线的核心, 也是构建脚本里最重要的函数. 它做三次转换:
 
-1. **Read the core Wasm module** — the raw `.wasm` file produced by `cargo build` in the previous step.
-2. **Encode as a component** — `ComponentEncoder` reads the type metadata that `wit-bindgen` embedded in the core module and wraps it as a proper Wasm component with typed imports and exports.
-3. **AOT-compile to Pulley bytecode** — `precompile_component` runs Cranelift (a code generator) targeting the `pulley32` architecture, producing serialized bytecode that the Pulley interpreter can execute without any compilation on the device.
+1. **读取核心 Wasm 模块** - 上一步里 `cargo build` 产出的原始 `.wasm` 文件.
+2. **编码成组件** - `ComponentEncoder` 读取 `wit-bindgen` 嵌在核心模块里的类型元数据, 把它包装成一个带类型化导入导出的正式 Wasm 组件.
+3. **AOT 编译成 Pulley 字节码** - `precompile_component` 以 `pulley32` 架构为目标运行 Cranelift (一个代码生成器), 产出序列化字节码, 让 Pulley 解释器在设备上无需任何编译就能执行.
 
-The result is written to `servo.cwasm`, which the firmware includes via `include_bytes!`.
+结果写到 `servo.cwasm`, 固件再用 `include_bytes!` 把它包含进来.
 
 ### `print_rerun_triggers`
 
@@ -866,7 +866,7 @@ fn print_rerun_triggers() {
 }
 ```
 
-Tells cargo which files should trigger a rebuild of the build script. Without these, cargo might cache the build script output and miss changes to the Wasm guest code or WIT definitions.
+告诉 cargo 哪些文件变化时应该重新运行构建脚本. 没有这几行, cargo 可能会缓存构建脚本的输出, 从而漏掉 Wasm 客体代码或 WIT 定义的改动.
 
 ### `main`
 
@@ -880,44 +880,44 @@ fn main() {
 }
 ```
 
-The build script entry point. The sequence is: set up the output directory, write the linker script, compile the Wasm guest to a core module, transform and AOT-compile it to Pulley bytecode, and register file change triggers.
+构建脚本的入口. 顺序是: 准备好输出目录, 写入链接脚本, 把 Wasm 客体编译成核心模块, 再转换并 AOT 编译成 Pulley 字节码, 最后登记文件变化触发条件.
 
 ---
 
-## 7. Wasm Guest Application (`wasm-app/src/lib.rs`)
+## 7. Wasm 客体应用 (`wasm-app/src/lib.rs`)
 
-This is the WebAssembly component that runs **inside** the Wasmtime runtime on the RP2350. It has no access to hardware — only to the WIT interfaces the host provides.
+这就是跑在 RP2350 上 Wasmtime 运行时**内部**的那个 WebAssembly 组件. 它碰不到硬件 - 只能通过宿主提供的 WIT 接口间接访问.
 
-### Crate Attributes
+### crate 属性
 
 ```rust
 #![no_std]
 ```
 
-The Wasm guest is `no_std` because the `wasm32-unknown-unknown` target has no operating system. It uses `core` for language primitives and `alloc` for the heap.
+Wasm 客体是 `no_std` 的, 因为 `wasm32-unknown-unknown` 目标没有操作系统. 它用 `core` 提供语言原语, 用 `alloc` 提供堆.
 
 ```rust
 extern crate alloc;
 ```
 
-Enables heap allocation. The canonical ABI (the calling convention between host and guest) requires a `cabi_realloc` function for the host to allocate memory in the guest's linear memory. The `wit-bindgen` crate generates this function, and it needs a working allocator to call.
+启用堆分配. 规范 ABI (宿主与客体之间的调用约定) 要求有一个 `cabi_realloc` 函数, 好让宿主在客体的线性内存里分配内存. `wit-bindgen` crate 会生成这个函数, 而它需要有一个能用的分配器可调.
 
-### Global Allocator
+### 全局分配器
 
 ```rust
 #[global_allocator]
 static ALLOC: dlmalloc::GlobalDlmalloc = dlmalloc::GlobalDlmalloc;
 ```
 
-The `dlmalloc` is a port of Doug Lea's malloc to Rust. It is the only allocator that works with `wasm32-unknown-unknown` in `no_std` because it implements its own `sbrk` by growing the Wasm linear memory. The `global` feature flag makes it a `#[global_allocator]`.
+`dlmalloc` 是 Doug Lea 的 malloc 到 Rust 的移植. 它是 `no_std` 下唯一能在 `wasm32-unknown-unknown` 上工作的分配器, 因为它通过扩展 Wasm 线性内存自己实现了 `sbrk`. `global` feature 标志让它能当 `#[global_allocator]`.
 
-### Imports and Bindings
+### 导入与绑定
 
 ```rust
 use embedded::platform::{gpio, timing};
 ```
 
-These imports come from the bindings generated by `wit_bindgen::generate!`. They provide `gpio::set_high`, `gpio::set_low`, and `timing::delay_ms` — the functions defined in `world.wit` and implemented by the host firmware.
+这些导入来自 `wit_bindgen::generate!` 生成的绑定. 它们提供 `gpio::set_high`, `gpio::set_low` 和 `timing::delay_ms` - 也就是 `world.wit` 里定义, 由宿主固件实现的那几个函数.
 
 ```rust
 wit_bindgen::generate!({
@@ -926,9 +926,9 @@ wit_bindgen::generate!({
 });
 ```
 
-This macro reads `wit/world.wit` at compile time and generates guest-side bindings. It creates the `embedded::platform::gpio` and `embedded::platform::timing` modules with functions that call into the host, and a `Guest` trait that the component must implement.
+这个宏在编译期读取 `wit/world.wit` 并生成客体侧的绑定. 它创建 `embedded::platform::gpio` 和 `embedded::platform::timing` 两个模块, 里面的函数会调到宿主去; 同时还生成一个 `Guest` trait, 组件必须实现它.
 
-### The Guest Implementation
+### 客体实现
 
 ```rust
 struct BlinkyApp;
@@ -936,7 +936,7 @@ struct BlinkyApp;
 export!(BlinkyApp);
 ```
 
-`BlinkyApp` is the struct that implements the guest side of the `servo` world. The `export!` macro (generated by `wit_bindgen`) registers it as the component's implementation, wiring up the exported `run` function.
+`BlinkyApp` 就是实现 `servo` world 客体侧的那个结构体. `export!` 宏 (由 `wit_bindgen` 生成) 把它注册为组件的实现, 并把导出的 `run` 函数接好线.
 
 ```rust
 impl Guest for BlinkyApp {
@@ -952,11 +952,11 @@ impl Guest for BlinkyApp {
 }
 ```
 
-This is the entire application logic. It blinks the LED on GPIO6 at 500ms intervals in an infinite loop. Each call to `gpio::set_high` crosses the Wasm boundary — the Pulley interpreter pauses, Wasmtime dispatches the call to `HostState::set_high`, which calls `servo::set_high(25)` to drive the physical pin, then returns control to the interpreter.
+这就是应用逻辑的全部. 它让 GPIO6 上的 LED 以 500ms 的间隔闪烁, 无限循环. 每一次 `gpio::set_high` 调用都要跨过 Wasm 边界 - Pulley 解释器暂停, Wasmtime 把调用分派给 `HostState::set_high`, 后者调用 `servo::set_high(25)` 去驱动物理引脚, 然后把控制权交回解释器.
 
-The pin number (`25`) is a **guest-side decision**. The WIT interface is hardware-agnostic — the guest chooses which pin to control, and the host maps it to real hardware. A different guest could blink a different pin without any firmware changes.
+引脚编号 (`25`) 是**客体侧的决定**. WIT 接口与硬件无关 - 客体自己选择控制哪个引脚, 宿主负责把它映射到真实硬件. 换一个客体去闪烁别的引脚, 固件完全不用改.
 
-### Panic Handler
+### panic 处理器
 
 ```rust
 #[panic_handler]
@@ -967,38 +967,38 @@ fn panic(_info: &PanicInfo) -> ! {
 }
 ```
 
-The Wasm guest's panic handler. Unlike the firmware's panic handler, it cannot write to a UART — it has no hardware access. It simply enters an infinite loop using `spin_loop()` (a hint to the CPU to reduce power consumption while spinning). In practice, a panic in the Wasm guest would cause Wasmtime to trap, which would be caught by the firmware's panic handler.
+Wasm 客体的 panic 处理器. 和固件的 panic 处理器不同, 它不能往 UART 写东西 - 它没有硬件访问权限. 它只是用一个 `spin_loop()` (提示 CPU 在自旋时降低功耗) 进入无限循环. 实际上, Wasm 客体里的 panic 会让 Wasmtime 陷入, 而这个陷入会被固件的 panic 处理器捕获.
 
 ---
 
-## Summary: The Complete Execution Flow
+## 小结: 完整的执行流程
 
-1. The RP2350 powers on and the boot ROM reads `IMAGE_DEF` from `.start_block`
-2. `main()` calls `init_heap()` to set up the 256 KiB heap
-3. `init_hardware()` configures clocks (150 MHz), UART0 (115200 baud), and GPIO6 (push-pull output)
-4. `run_wasm()` creates the Pulley engine and deserializes the precompiled Wasm component
-5. `execute_wasm()` instantiates the component and calls `run`
-6. The guest's `run()` enters an infinite loop: `set_high(25)` -> `delay_ms(500)` -> `set_low(25)` -> `delay_ms(500)`
-7. Each `set_high`/`set_low` call crosses the Wasm boundary into the host, drives the LED, and logs to UART
-8. Each `delay_ms` call crosses the boundary and spins for the specified number of CPU cycles
-9. The LED blinks. Forever.
+1. RP2350 上电, 启动 ROM 从 `.start_block` 读取 `IMAGE_DEF`
+2. `main()` 调用 `init_heap()` 建立 256 KiB 的堆
+3. `init_hardware()` 配置时钟 (150 MHz), UART0 (115200 波特率) 和 GPIO6 (推挽输出)
+4. `run_wasm()` 创建 Pulley 引擎, 并反序列化预编译好的 Wasm 组件
+5. `execute_wasm()` 实例化组件并调用 `run`
+6. 客体的 `run()` 进入无限循环: `set_high(25)` -> `delay_ms(500)` -> `set_low(25)` -> `delay_ms(500)`
+7. 每次 `set_high`/`set_low` 调用都跨过 Wasm 边界进入宿主, 驱动 LED, 并往 UART 记一条日志
+8. 每次 `delay_ms` 调用都跨过边界, 按指定的 CPU 周期数自旋
+9. LED 闪烁. 永远.
 
-## Documentation Links
+## 文档链接
 
-The following references cover every major crate and specification used in this project:
+下面这些参考资料覆盖了本项目用到的每一个主要 crate 和规范:
 
-- [rp235x-hal](https://docs.rs/rp235x-hal) — RP2350 hardware abstraction layer (GPIO, UART, clocks)
-- [Wasmtime](https://docs.wasmtime.dev) — WebAssembly runtime documentation ([API docs](https://docs.rs/wasmtime))
-- [WIT / Component Model](https://component-model.bytecodealliance.org) — the Component Model specification ([wit-bindgen API docs](https://docs.rs/wit-bindgen))
-- [cortex-m](https://docs.rs/cortex-m) — low-level Cortex-M access (interrupts, registers, intrinsics)
-- [cortex-m-rt](https://docs.rs/cortex-m-rt) — Cortex-M startup runtime (reset vector, memory init)
-- [embedded-hal](https://docs.rs/embedded-hal) — hardware abstraction traits (GPIO, UART, SPI, I2C)
-- [embedded-alloc](https://docs.rs/embedded-alloc) — heap allocator for `no_std` environments
-- [Cranelift](https://cranelift.dev) — compiler backend used for AOT Wasm compilation ([API docs](https://docs.rs/cranelift-codegen))
-- [Pulley](https://docs.rs/pulley-interpreter) — Wasmtime's portable interpreter bytecode format
-- [fugit](https://docs.rs/fugit) — type-safe time units for embedded (baud rates, clock frequencies)
-- [critical-section](https://docs.rs/critical-section) — cross-platform interrupt-safe mutual exclusion
+- [rp235x-hal](https://docs.rs/rp235x-hal) - RP2350 硬件抽象层 (GPIO, UART, 时钟)
+- [Wasmtime](https://docs.wasmtime.dev) - WebAssembly 运行时文档 ([API 文档](https://docs.rs/wasmtime))
+- [WIT / 组件模型](https://component-model.bytecodealliance.org) - 组件模型规范 ([wit-bindgen API 文档](https://docs.rs/wit-bindgen))
+- [cortex-m](https://docs.rs/cortex-m) - 底层 Cortex-M 访问 (中断, 寄存器, 内建函数)
+- [cortex-m-rt](https://docs.rs/cortex-m-rt) - Cortex-M 启动运行时 (复位向量, 内存初始化)
+- [embedded-hal](https://docs.rs/embedded-hal) - 硬件抽象 trait (GPIO, UART, SPI, I2C)
+- [embedded-alloc](https://docs.rs/embedded-alloc) - 面向 `no_std` 环境的堆分配器
+- [Cranelift](https://cranelift.dev) - 用于 AOT Wasm 编译的编译器后端 ([API 文档](https://docs.rs/cranelift-codegen))
+- [Pulley](https://docs.rs/pulley-interpreter) - Wasmtime 的可移植解释器字节码格式
+- [fugit](https://docs.rs/fugit) - 面向嵌入式的类型安全时间单位 (波特率, 时钟频率)
+- [critical-section](https://docs.rs/critical-section) - 跨平台的中断安全互斥
 
-## License
+## 许可证
 
 MIT

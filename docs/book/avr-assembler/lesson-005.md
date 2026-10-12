@@ -1,86 +1,86 @@
-# Lesson 005 - Digital Inputs (Buttons)
+# Lesson 005 - 数字输入 (按钮)
 
-## What Are We Building Today?
+## 今天我们要做什么?
 
-Welcome to Lesson 5! In previous lessons, our code ran automatically and didn't care about what was happening outside. Today, we are going to make our microcontroller **interactive**!
+欢迎来到第 5 课! 前面几课里, 我们的代码都是自己跑自己的, 完全不管外面发生了什么. 今天我们要让单片机**能互动**!
 
-We will wire up two push buttons (Button A and Button B) and use them to control the built-in LED on Arduino Pin 13.
-- Pressing **Button A** turns the LED **ON**.
-- Pressing **Button B** turns the LED **OFF**.
+我们会接上两个按钮 (按钮 A 和按钮 B), 用它们来控制 Arduino Pin 13 上的板载 LED.
+- 按下**按钮 A** 把 LED **点亮**.
+- 按下**按钮 B** 把 LED **熄灭**.
 
-By the end of this lesson, you'll know how to read electrical inputs and make decisions in your code using Assembly!
+学完这一课, 你就会用汇编读取电信号输入, 并在代码里做判断了!
 
 [CODE](https://github.com/mytechnotalent/Assembler/blob/main/lessons/005/lesson.s)
 
 ---
 
-## Hardware Check: Internal Pull-Up Resistors
+## 硬件检查: 内部上拉电阻
 
-To read a button, we connect one side of the button to an input pin, and the other side to **Ground (GND)**. When we press the button, the pin connects directly to GND (0 Volts).
+要读一个按钮, 我们把按钮的一边接到输入引脚, 另一边接到**地 (GND)**. 按下按钮时, 引脚就直接连到了 GND (0 伏).
 
-But wait! What happens when the button is *not* pressed? The pin isn't connected to anything at all! It's "floating" in the air like an antenna, picking up random electrical noise. It might read 0 Volts, or 5 Volts, randomly jumping back and forth. 
+但是等一下! 按钮*没*被按下的时候会发生什么? 引脚什么都没接! 它就像一根天线那样"悬空", 会捡到各种乱七八糟的电噪声. 它可能读到 0 伏, 也可能读到 5 伏, 毫无规律地乱跳.
 
-To fix this, we need a **Pull-Up Resistor**. This is a resistor connected to 5 Volts that "pulls" the pin up to a solid HIGH state when nothing else is connected. 
+要解决这个问题, 我们需要一个**上拉电阻**. 这是一个接到 5 伏的电阻, 当没有别的东西连上来时, 它会把引脚"拉"到一个稳稳的高电平.
 
-The brilliant engineers who designed the ATmega328P included a tiny, secret pull-up resistor *inside* the chip for every single pin! We just have to tell the microcontroller to turn it on.
+设计 ATmega328P 的工程师很聪明, 他们在芯片*内部*给每一个引脚都藏了一个小小的上拉电阻! 我们只要告诉单片机把它打开就行.
 
-## The Code Walkthrough
+## 代码讲解
 
-Let's look at how we set this up in Assembly.
+我们来看看在汇编里怎么设置.
 
-### 1. The Defines
+### 1. 定义部分
 ```assembly
-.equ DDRB,   0x04                      ; Data Direction Register for Port B
-.equ PORTB,  0x05                      ; Data Register for Port B
-.equ PB5,    5                         ; Pin 5 on Port B (Arduino Pin 13 LED)
-.equ PIND,   0x09                      ; Input Pins Register for Port D
-.equ DDRD,   0x0A                      ; Data Direction Register for Port D
-.equ PORTD,  0x0B                      ; Data Register for Port D
-.equ PD2,    2                         ; Pin 2 on Port D (Button A)
-.equ PD3,    3                         ; Pin 3 on Port D (Button B)
+.equ DDRB,   0x04                      ; Port B 的数据方向寄存器
+.equ PORTB,  0x05                      ; Port B 的数据寄存器
+.equ PB5,    5                         ; Port B 的第 5 脚 (Arduino Pin 13 LED)
+.equ PIND,   0x09                      ; Port D 的输入引脚寄存器
+.equ DDRD,   0x0A                      ; Port D 的数据方向寄存器
+.equ PORTD,  0x0B                      ; Port D 的数据寄存器
+.equ PD2,    2                         ; Port D 的第 2 脚 (按钮 A)
+.equ PD3,    3                         ; Port D 的第 3 脚 (按钮 B)
 ```
-We define our old friend `PB5` (Pin 13) for the LED. 
-For the buttons, we use a new Port: **Port D**.
-- `DDRD` is the gatekeeper for Port D.
-- `PORTD` is used to turn on those secret internal pull-up resistors!
-- `PIND` (Pin Input Register) is the sensor we use to **read** the electrical voltage on the pins.
+我们定义了老朋友 `PB5` (Pin 13) 给 LED 用.
+按钮这边我们用一个新端口: **Port D**.
+- `DDRD` 是 Port D 的看门人.
+- `PORTD` 用来打开那些藏在芯片里的内部上拉电阻!
+- `PIND` (引脚输入寄存器) 是我们用来**读取**引脚上电压的传感器.
 
-### 2. Setting Up the Inputs and Pull-Ups
+### 2. 设置输入和上拉
 ```assembly
-  SBI    DDRB, PB5                     ; Set PB5 (LED) as an output
+  SBI    DDRB, PB5                     ; 把 PB5 (LED) 设为输出
 
-  CBI    DDRD, PD2                     ; Set PD2 (Button A) as an input
-  SBI    PORTD, PD2                    ; Enable internal pull-up resistor on PD2
+  CBI    DDRD, PD2                     ; 把 PD2 (按钮 A) 设为输入
+  SBI    PORTD, PD2                    ; 使能 PD2 的内部上拉电阻
 
-  CBI    DDRD, PD3                     ; Set PD3 (Button B) as an input
-  SBI    PORTD, PD3                    ; Enable internal pull-up resistor on PD3
+  CBI    DDRD, PD3                     ; 把 PD3 (按钮 B) 设为输入
+  SBI    PORTD, PD3                    ; 使能 PD3 的内部上拉电阻
 ```
-To configure a pin as an input, we use `CBI` to tell the gatekeeper (`DDRD`) to block outgoing electricity.
-Then we use a cool trick: if a pin is an input, using `SBI` on `PORTD` turns on the internal pull-up resistor! Now our buttons will safely read HIGH (not pressed) until we physically push them to GND (LOW).
+要把一个引脚配成输入, 我们用 `CBI` 告诉看门人 (`DDRD`) 拦住往外的电流.
+然后我们用一个小技巧: 如果某个引脚是输入, 那么对 `PORTD` 用 `SBI` 就会打开它的内部上拉电阻! 这样一来, 按钮在我们真正把它按到 GND (低电平) 之前, 都会稳稳地读到高电平 (没按下).
 
-### 3. Reading the Buttons and Making Decisions
-Here is our infinite loop:
+### 3. 读按钮并做判断
+这是我们的无限循环:
 ```assembly
-.loop:                                 
-  SBIC   PIND, PD2                     ; Skip next if Button A is pressed (LOW)
-  RJMP   .check_b                      ; Jump to check Button B if not pressed
-  SBI    PORTB, PB5                    ; Turn LED ON
-  RJMP   .loop                         ; Restart loop
+.loop:
+  SBIC   PIND, PD2                     ; 若按钮 A 被按下 (低电平) 则跳过下一条
+  RJMP   .check_b                      ; 没按下就跳去检查按钮 B
+  SBI    PORTB, PB5                    ; 点亮 LED
+  RJMP   .loop                         ; 重新开始循环
 ```
-We use a very powerful new command called `SBIC` (Skip if Bit in I/O Register is Cleared).
-It looks at `PIND`, pin `PD2`. 
-- If the button is NOT pressed, it is HIGH (Set). `SBIC` does nothing, and the code runs the next line: `RJMP .check_b` which skips turning the LED on.
-- If the button IS pressed, it is LOW (Cleared). `SBIC` magically **skips** the `RJMP` instruction! The code falls right through to `SBI PORTB, PB5`, which turns the LED ON!
+我们用了一条非常厉害的新指令, 叫 `SBIC` (Skip if Bit in I/O Register is Cleared, 即 I/O 寄存器中这一位为 0 就跳过).
+它去看 `PIND` 的 `PD2` 位.
+- 如果按钮没被按下, 它是高电平 (置位). `SBIC` 什么也不做, 代码就执行下一行: `RJMP .check_b`, 于是跳过了点亮 LED.
+- 如果按钮被按下了, 它是低电平 (清零). `SBIC` 就会神奇地**跳过** `RJMP` 指令! 代码直接落到 `SBI PORTB, PB5`, 把 LED 点亮!
 
 ```assembly
-.check_b:                              
-  SBIC   PIND, PD3                     ; Skip next if Button B is pressed (LOW)
-  RJMP   .loop                         ; Jump to loop if not pressed
-  CBI    PORTB, PB5                    ; Turn LED OFF
-  RJMP   .loop                         ; Restart loop
+.check_b:
+  SBIC   PIND, PD3                     ; 若按钮 B 被按下 (低电平) 则跳过下一条
+  RJMP   .loop                         ; 没按下就跳回循环
+  CBI    PORTB, PB5                    ; 熄灭 LED
+  RJMP   .loop                         ; 重新开始循环
 ```
-We do the exact same check for Button B on pin `PD3`. If it's pressed (LOW), `SBIC` skips the jump, and we run `CBI PORTB, PB5` to turn the LED OFF!
+我们对 `PD3` 上的按钮 B 做完全一样的检查. 如果它被按下 (低电平), `SBIC` 就跳过那次跳转, 我们执行 `CBI PORTB, PB5` 把 LED 熄灭!
 
 ---
 
-Congratulations! You now know how to read digital inputs, use internal pull-up resistors, and write conditional logic (if/then statements) directly in Assembly!
+恭喜! 你现在已经会用汇编读取数字输入, 使用内部上拉电阻, 并直接写出条件逻辑 (也就是 if/then 语句) 了!

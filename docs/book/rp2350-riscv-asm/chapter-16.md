@@ -1,29 +1,29 @@
-# Chapter 16: Bitwise Operations for Hardware Programming
+# Chapter 16: 硬件编程中的位操作
 
-## Introduction
+## 引言
 
-Bare-metal firmware is fundamentally about controlling hardware, and hardware is controlled by setting, clearing, and testing individual bits in memory-mapped registers.  Every peripheral on the RP2350 exposes its functionality through bit fields — groups of bits with specific meanings.  This chapter catalogs the bit manipulation patterns used throughout our blink driver and builds your fluency in reading and writing them.
+裸机固件说到底就是在控制硬件, 而控制硬件的方式就是设置, 清除和测试内存映射寄存器里的某一位. RP2350 上的每个外设都通过位字段来暴露自己的功能 - 位字段就是一组有特定含义的位. 本章逐一列出闪烁驱动里用到的位操作模式, 帮你练到能熟练读写它们.
 
-## The Fundamental Operations
+## 基本操作
 
-There are four primitive bit operations in our firmware:
+固件里有四种基本的位操作:
 
-| Operation | Instruction | Pattern | Effect |
+| 操作 | 指令 | 模式 | 效果 |
 |-----------|-------------|---------|--------|
-| Set bit | `ori` | `ori rd, rs, (1<<N)` | Force bit N to 1 |
-| Clear bit | `and` + mask | `li mask, ~(1<<N)` then `and rd, rs, mask` | Force bit N to 0 |
-| Test bit | `andi` | `andi rd, rs, (1<<N)` | Isolate bit N (result 0 or non-zero) |
-| Invert | `not` | `not rd, rs` | Flip all bits |
+| 置位 | `ori` | `ori rd, rs, (1<<N)` | 把第 N 位强制设为 1 |
+| 清零 | `and` + 掩码 | 先 `li mask, ~(1<<N)`, 再 `and rd, rs, mask` | 把第 N 位强制设为 0 |
+| 测试 | `andi` | `andi rd, rs, (1<<N)` | 把第 N 位单独取出来 (结果为 0 或非零) |
+| 取反 | `not` | `not rd, rs` | 把所有位翻转 |
 
-## Set a Single Bit
+## 给单独一位置位
 
-To set bit N without affecting other bits, OR with a mask that has only bit N set:
+要在不影响其他位的前提下把第 N 位置位, 就与一个只有第 N 位为 1 的掩码做 OR:
 
 ```asm
-  ori   t1, t1, (1<<6)                           # set bit 6 (IE)
+  ori   t1, t1, (1<<6)                           # 置位第 6 位 (IE)
 ```
 
-Truth table for OR:
+OR 的真值表:
 
 ```
   Original bit:  0  1  0  1
@@ -31,49 +31,49 @@ Truth table for OR:
   Result:        1  1  0  1
 ```
 
-Bits where the mask is 0 are unchanged.  Bits where the mask is 1 are forced to 1.
+掩码为 0 的那些位保持不变. 掩码为 1 的那些位被强制设为 1.
 
-### In Our Firmware
+### 在固件里
 
-gpio.s sets the Input Enable bit in the pad register:
-
-```asm
-  ori   t1, t1, (1<<6)                           # set IE (input enable)
-```
-
-gpio.s sets the FUNCSEL value:
+gpio.s 给 pad 寄存器置位 Input Enable:
 
 ```asm
-  ori   t1, t1, 0x05                             # set FUNCSEL = 5 (SIO)
+  ori   t1, t1, (1<<6)                           # 置位 IE (输入使能)
 ```
 
-xosc.s enables the peripheral clock AUXSRC:
+gpio.s 设置 FUNCSEL 的值:
 
 ```asm
-  ori   t1, t1, 128                              # set AUXSRC: XOSC_CLKSRC bit
+  ori   t1, t1, 0x05                             # 置位 FUNCSEL = 5 (SIO)
 ```
 
-### `or` for Larger Masks
-
-When the mask exceeds the 12-bit immediate range of `ori`, use `or` with a register:
+xosc.s 使能外设时钟的 AUXSRC:
 
 ```asm
-  li    t2, (1<<11)                              # ENABLE bit mask
-  or    t1, t1, t2                               # set ENABLE bit
+  ori   t1, t1, 128                              # 置位 AUXSRC: XOSC_CLKSRC 位
 ```
 
-This two-instruction sequence handles any bit position.
+### 掩码较大时用 `or`
 
-## Clear a Single Bit
-
-RISC-V has no `bic` (bit clear) instruction like ARM.  Instead, we create an inverted mask and AND:
+当掩码超出 `ori` 的 12 位立即数范围时, 改用寄存器版的 `or`:
 
 ```asm
-  li    t2, ~(1<<7)                              # mask = 0xFFFFFF7F
-  and   t1, t1, t2                               # clear OD bit 7
+  li    t2, (1<<11)                              # ENABLE 位掩码
+  or    t1, t1, t2                               # 置位 ENABLE 位
 ```
 
-AND truth table:
+这两条指令的组合可以应付任意位的位置.
+
+## 给单独一位清零
+
+RISC-V 没有 ARM 那样的 `bic` (位清零) 指令. 我们的做法是先造一个取反的掩码, 再做 AND:
+
+```asm
+  li    t2, ~(1<<7)                              # 掩码 = 0xFFFFFF7F
+  and   t1, t1, t2                               # 清掉 OD 第 7 位
+```
+
+AND 的真值表:
 
 ```
   Original bit:  0  1  0  1
@@ -81,178 +81,178 @@ AND truth table:
   Result:        0  0  0  1
 ```
 
-Bits where the mask is 1 are unchanged.  Bits where the mask is 0 are forced to 0.
+掩码为 1 的那些位保持不变. 掩码为 0 的那些位被强制设为 0.
 
-### In Our Firmware
+### 在固件里
 
-gpio.s clears Output Disable and Isolation in the pad register:
-
-```asm
-  li    t2, ~(1<<7)                              # mask to clear OD bit
-  and   t1, t1, t2                               # clear OD bit
-  li    t2, ~(1<<8)                              # mask to clear ISO bit
-  and   t1, t1, t2                               # clear ISO bit
-```
-
-reset.s clears the IO_BANK0 reset bit:
+gpio.s 清掉 pad 寄存器里的 Output Disable 和 Isolation:
 
 ```asm
-  li    t2, (1<<6)                               # IO_BANK0 reset mask
-  not   t2, t2                                   # invert: 0xFFFFFFBF
-  and   t1, t1, t2                               # clear IO_BANK0 bit
+  li    t2, ~(1<<7)                              # 用于清 OD 位的掩码
+  and   t1, t1, t2                               # 清掉 OD 位
+  li    t2, ~(1<<8)                              # 用于清 ISO 位的掩码
+  and   t1, t1, t2                               # 清掉 ISO 位
 ```
 
-The `not` + `and` pattern is equivalent to ARM's `bic`.
-
-## Clear a Multi-Bit Field
-
-To clear several contiguous bits (a "field"), use `andi` with a mask:
+reset.s 清掉 IO_BANK0 的复位位:
 
 ```asm
-  andi  t1, t1, ~0x1f                            # clear bits [4:0]
+  li    t2, (1<<6)                               # IO_BANK0 复位掩码
+  not   t2, t2                                   # 取反: 0xFFFFFFBF
+  and   t1, t1, t2                               # 清掉 IO_BANK0 那一位
 ```
 
-The mask `~0x1f` = `0xFFFFFFE0` clears the lowest 5 bits.  Since `andi` sign-extends its 12-bit immediate, the assembler encodes this as -32 (which sign-extends to 0xFFFFFFE0).
+`not` 加 `and` 这个组合, 效果等同于 ARM 的 `bic`.
 
-This is used in gpio.s to clear the FUNCSEL field before writing a new value:
+## 清掉一个多位字段
+
+要清掉连续的若干位 (也就是一个 "字段"), 用带掩码的 `andi`:
 
 ```asm
-  andi  t1, t1, ~0x1f                            # clear FUNCSEL [4:0]
-  ori   t1, t1, 0x05                             # set FUNCSEL = 5 (SIO)
+  andi  t1, t1, ~0x1f                            # 清掉 [4:0] 位
 ```
 
-This two-step pattern — clear then set — is standard for writing a multi-bit field without affecting surrounding bits.
+掩码 `~0x1f` = `0xFFFFFFE0`, 它把最低 5 位清掉. 由于 `andi` 会对 12 位立即数做符号扩展, 汇编器把它编码成 -32 (符号扩展后正好是 0xFFFFFFE0).
 
-## Test a Bit
-
-To check whether a bit is set, AND with a mask and branch on the result:
+gpio.s 在写入新值之前, 就用它清掉 FUNCSEL 字段:
 
 ```asm
-  andi  t1, t1, (1<<6)                           # isolate bit 6
-  beqz  t1, .GPIO_Subsystem_Reset_Wait           # branch if bit is 0
+  andi  t1, t1, ~0x1f                            # 清掉 FUNCSEL [4:0]
+  ori   t1, t1, 0x05                             # 置位 FUNCSEL = 5 (SIO)
 ```
 
-Unlike ARM (which has `tst` that sets flags without storing a result), RISC-V `andi` stores the result in the destination register.  We then branch based on whether the result is zero.
+这个先清后设的两步模式, 是写多位字段而不影响周围位的标准做法.
 
-### Polling Loops
+## 测试某一位
 
-Both hardware polling loops use `andi` + `beqz` or `bgez`:
+要检查某一位是否置位, 就与掩码做 AND, 然后根据结果分支:
 
-**XOSC Stabilization (xosc.s):**
+```asm
+  andi  t1, t1, (1<<6)                           # 取出第 6 位
+  beqz  t1, .GPIO_Subsystem_Reset_Wait           # 该位为 0 就跳转
+```
+
+ARM 有 `tst`, 它只设置标志位而不保存结果; RISC-V 不一样, `andi` 会把结果存进目标寄存器. 然后我们根据结果是否为零来分支.
+
+### 轮询循环
+
+两个硬件轮询循环都用 `andi` 配 `beqz` 或 `bgez`:
+
+**XOSC 稳定等待 (xosc.s):**
 
 ```asm
 .Init_XOSC_Wait:
-  li    t0, XOSC_STATUS                          # load XOSC_STATUS address
-  lw    t1, 0(t0)                                # read XOSC_STATUS value
-  bgez  t1, .Init_XOSC_Wait                      # bit31 clear -> still unstable
+  li    t0, XOSC_STATUS                          # 加载 XOSC_STATUS 地址
+  lw    t1, 0(t0)                                # 读取 XOSC_STATUS 的值
+  bgez  t1, .Init_XOSC_Wait                      # 第 31 位为 0, 说明还没稳定
 ```
 
-This exploits signed interpretation: if bit 31 is clear, the value is >= 0.
+这里借用了有符号解释: 如果第 31 位为 0, 这个值就大于等于 0.
 
-**Reset Completion (reset.s):**
+**复位完成等待 (reset.s):**
 
 ```asm
 .GPIO_Subsystem_Reset_Wait:
-  li    t0, RESETS_RESET_DONE                    # load RESETS->RESET_DONE address
-  lw    t1, 0(t0)                                # read RESETS->RESET_DONE value
-  andi  t1, t1, (1<<6)                           # test IO_BANK0 reset done
-  beqz  t1, .GPIO_Subsystem_Reset_Wait           # wait until done
+  li    t0, RESETS_RESET_DONE                    # 加载 RESETS->RESET_DONE 地址
+  lw    t1, 0(t0)                                # 读取 RESETS->RESET_DONE 的值
+  andi  t1, t1, (1<<6)                           # 测试 IO_BANK0 复位是否完成
+  beqz  t1, .GPIO_Subsystem_Reset_Wait           # 一直等到完成为止
 ```
 
-## Shift Left for Dynamic Bit Position
+## 用左移处理动态位的位置
 
-When the bit position is in a register (not known at assembly time), use `sll`:
+当位的位置放在寄存器里 (汇编时还不知道具体是第几位) 时, 用 `sll`:
 
 ```asm
-  li    t1, 1                                    # bit value
-  sll   t1, t1, a2                               # shift to GPIO position
-  sw    t1, 0(t0)                                # write to SIO register
+  li    t1, 1                                    # 位的值
+  sll   t1, t1, a2                               # 移到对应 GPIO 的位置
+  sw    t1, 0(t0)                                # 写入 SIO 寄存器
 ```
 
-If `a2` = 16, the result is `0x00010000` — a mask with only bit 16 set.  This pattern appears in GPIO_Config, GPIO_Set, and GPIO_Clear.
+如果 `a2` = 16, 结果就是 `0x00010000` - 一个只有第 16 位为 1 的掩码. 这个模式在 GPIO_Config, GPIO_Set 和 GPIO_Clear 里都出现过.
 
-## Combined Patterns
+## 组合起来的模式
 
-### Read-Modify-Write (Single Bit)
+### 读-改-写 (单位)
 
 ```asm
-  li    t0, CLK_PERI_CTRL                        # compute address
+  li    t0, CLK_PERI_CTRL                        # 计算地址
   lw    t1, 0(t0)                                # READ
-  li    t2, (1<<11)                              # ENABLE bit mask
-  or    t1, t1, t2                               # MODIFY: set bit
+  li    t2, (1<<11)                              # ENABLE 位掩码
+  or    t1, t1, t2                               # MODIFY: 置位
   sw    t1, 0(t0)                                # WRITE
 ```
 
-### Read-Modify-Write (Multiple Bits)
+### 读-改-写 (多位)
 
 ```asm
   lw    t1, 0(t0)                                # READ
-  li    t2, ~(1<<7)                              # mask for OD
-  and   t1, t1, t2                               # MODIFY: clear OD
-  ori   t1, t1, (1<<6)                           # MODIFY: set IE
-  li    t2, ~(1<<8)                              # mask for ISO
-  and   t1, t1, t2                               # MODIFY: clear ISO
+  li    t2, ~(1<<7)                              # OD 的掩码
+  and   t1, t1, t2                               # MODIFY: 清掉 OD
+  ori   t1, t1, (1<<6)                           # MODIFY: 置位 IE
+  li    t2, ~(1<<8)                              # ISO 的掩码
+  and   t1, t1, t2                               # MODIFY: 清掉 ISO
   sw    t1, 0(t0)                                # WRITE
 ```
 
-### Clear Field Then Set Value
+### 先清字段再设值
 
 ```asm
   lw    t1, 0(t0)                                # READ
-  andi  t1, t1, ~0x1f                            # clear field [4:0]
-  ori   t1, t1, 0x05                             # set value 5
+  andi  t1, t1, ~0x1f                            # 清掉 [4:0] 字段
+  ori   t1, t1, 0x05                             # 设为值 5
   sw    t1, 0(t0)                                # WRITE
 ```
 
-## Bit Fields in Our Registers
+## 寄存器里的位字段
 
-### PADS_BANK0 Pad Register (GPIO16)
-
-```
-Bit 8: ISO  (Isolation)         — clear to 0
-Bit 7: OD   (Output Disable)    — clear to 0
-Bit 6: IE   (Input Enable)      — set to 1
-Bit 5: DRIVE[1]                  — unchanged
-Bit 4: DRIVE[0]                  — unchanged
-Bit 3: PUE  (Pull-Up Enable)    — unchanged
-Bit 2: PDE  (Pull-Down Enable)  — unchanged
-Bit 1: SCHMITT                   — unchanged
-Bit 0: SLEWFAST                  — unchanged
-```
-
-### IO_BANK0 Control Register (GPIO16)
+### PADS_BANK0 Pad 寄存器 (GPIO16)
 
 ```
-Bits [4:0]: FUNCSEL — cleared to 0, then set to 5 (SIO)
+Bit 8: ISO  (Isolation)         - clear to 0
+Bit 7: OD   (Output Disable)    - clear to 0
+Bit 6: IE   (Input Enable)      - set to 1
+Bit 5: DRIVE[1]                  - unchanged
+Bit 4: DRIVE[0]                  - unchanged
+Bit 3: PUE  (Pull-Up Enable)    - unchanged
+Bit 2: PDE  (Pull-Down Enable)  - unchanged
+Bit 1: SCHMITT                   - unchanged
+Bit 0: SLEWFAST                  - unchanged
+```
+
+### IO_BANK0 控制寄存器 (GPIO16)
+
+```
+Bits [4:0]: FUNCSEL - cleared to 0, then set to 5 (SIO)
 ```
 
 ### CLK_PERI_CTRL
 
 ```
-Bit 11:    ENABLE   — set to 1
-Bits [7:5]: AUXSRC  — set to 4 (XOSC), we write 128 to bit 7
+Bit 11:    ENABLE   - set to 1
+Bits [7:5]: AUXSRC  - set to 4 (XOSC), we write 128 to bit 7
 ```
 
-### SIO GPIO Registers
+### SIO GPIO 寄存器
 
-The SIO GPIO_OE_SET, GPIO_OUT_SET, and GPIO_OUT_CLR registers use **atomic set/clear semantics**: writing a 1-bit to these registers sets or clears the corresponding GPIO output or enable bit.  No read-modify-write is needed — a single `sw` with a bit mask is sufficient.
+SIO 的 GPIO_OE_SET, GPIO_OUT_SET 和 GPIO_OUT_CLR 寄存器使用**原子置位/清零语义**: 往这些寄存器写一个 1 位, 就会置位或清零对应的 GPIO 输出位或使能位. 不需要读-改-写 - 一条带位掩码的 `sw` 就够了.
 
-## Contrast with ARM
+## 与 ARM 对照
 
-| Operation | ARM | RISC-V |
+| 操作 | ARM | RISC-V |
 |-----------|-----|--------|
-| Set bit | `orr r, r, #(1<<N)` | `ori r, r, (1<<N)` or `or r, r, mask` |
-| Clear bit | `bic r, r, #(1<<N)` | `li mask, ~(1<<N)` + `and r, r, mask` |
-| Test bit | `tst r, #(1<<N)` + `beq` | `andi r, r, (1<<N)` + `beqz` |
-| Clear field | `bic r, r, #0x1f` | `andi r, r, ~0x1f` |
+| 置位 | `orr r, r, #(1<<N)` | `ori r, r, (1<<N)` 或 `or r, r, mask` |
+| 清零 | `bic r, r, #(1<<N)` | `li mask, ~(1<<N)` + `and r, r, mask` |
+| 测试位 | `tst r, #(1<<N)` + `beq` | `andi r, r, (1<<N)` + `beqz` |
+| 清字段 | `bic r, r, #0x1f` | `andi r, r, ~0x1f` |
 
-ARM's `bic` instruction clears bits in one instruction.  RISC-V requires two instructions (`li` mask + `and`), but the pattern is still straightforward.
+ARM 的 `bic` 一条指令就能清位. RISC-V 需要两条指令 (`li` 造掩码, 再 `and`), 但这个模式依然很直接.
 
-## Summary
+## 小结
 
-- `ori rd, rs, (1<<N)` sets bit N: the fundamental enable operation.
-- `li mask, ~(1<<N)` + `and rd, rs, mask` clears bit N: the fundamental disable operation.
-- `andi rd, rs, (1<<N)` tests bit N: used in all polling loops.
-- Multi-bit fields are written with a clear-then-set pattern: `andi` with the field mask, then `ori` with the value.
-- The read-modify-write pattern (li → lw → modify → sw) preserves bits we do not intend to change.
-- SIO set/clear registers use atomic semantics — no read-modify-write needed.
+- `ori rd, rs, (1<<N)` 给第 N 位置位: 最基础的使能操作.
+- `li mask, ~(1<<N)` + `and rd, rs, mask` 给第 N 位清零: 最基础的禁用操作.
+- `andi rd, rs, (1<<N)` 测试第 N 位: 所有轮询循环里都在用.
+- 多位字段用先清后设的模式来写: 先用字段掩码做 `andi`, 再用值做 `ori`.
+- 读-改-写模式 (li → lw → 修改 → sw) 能保住我们不想动的那些位.
+- SIO 的置位/清零寄存器使用原子语义 - 不需要读-改-写.

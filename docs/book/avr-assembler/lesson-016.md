@@ -1,71 +1,71 @@
-# Lesson 016 - 74HC595 Shift Register
+# Lesson 016 - 74HC595 移位寄存器
 
-## What Are We Building Today?
+## 今天我们要做什么?
 
-Our microcontroller only has a limited number of digital pins. What happens if we want to control 8 LEDs, but we don't have 8 pins to spare?
+我们的单片机数字引脚数量有限. 要是我们想控制 8 颗 LED, 可又没有 8 个引脚可腾, 那该怎么办?
 
-Enter the **74HC595 Shift Register**! This brilliant microchip acts like a pin-multiplier. It takes data in *Serially* (one bit at a time over a single wire) and outputs it *Parallelly* (all 8 bits at the exact same time over 8 physical pins). 
+有请 **74HC595 移位寄存器**! 这颗聪明的小芯片就像一个引脚倍增器. 它*串行*地收数据 (一根线, 一次一位), 然后*并行*地输出 (8 位同时从 8 个物理引脚上出去).
 
-Today we will write a software `shiftOut` driver from scratch to serially push an 8-bit number into the chip. We will program a bouncing "Knight Rider" LED chaser animation using logical bitwise shifting!
+今天我们要从零写一个软件版的 `shiftOut` 驱动, 把一个 8 位数串行推进芯片里. 我们还要用逻辑位移编出一个来回弹跳的 "霹雳游侠" LED 跑马灯动画!
 
 [CODE](https://github.com/mytechnotalent/Assembler/blob/main/lessons/016/lesson.s)
 
 ---
 
-## Hardware Check: The 74HC595 
+## 硬件检查: 74HC595
 
-To talk to the Shift Register, we use 3 pins:
-- **DS (Data Pin) on PB0**: This is the wire where we send our 1s and 0s.
-- **SH_CP (Clock Pin) on PB1**: Every time we flip this pin HIGH then LOW, the 595 grabs whatever is on the Data pin and pushes it into its internal memory buffer.
-- **ST_CP (Latch Pin) on PB2**: When we are completely done sending all 8 bits, we pulse this pin to command the chip to display the new data on its 8 output pins!
+要跟移位寄存器说话, 我们用 3 个引脚:
+- **DS (数据脚) 接在 PB0**: 这就是我们送 1 和 0 的那根线.
+- **SH_CP (时钟脚) 接在 PB1**: 每次我们把这个引脚拉高再拉低, 595 就抓住数据脚上现在的东西, 把它推进自己内部的存储缓冲里.
+- **ST_CP (锁存脚) 接在 PB2**: 8 位全部送完之后, 我们给这个引脚一个脉冲, 命令芯片把新数据摆到它的 8 个输出脚上!
 
-## The Code Walkthrough
+## 代码讲解
 
-### 1. The `shift_out` Subroutine
-How do we send 8 bits serially over one wire? We use a loop!
+### 1. `shift_out` 子程序
+我们怎么在一根线上串行送 8 位? 用一个循环!
 ```assembly
 shift_out:
-  LDI    R17, 8                        ; Loop 8 times for 8 bits
-.shift_loop:                           
-  SBRC   R16, 7                        ; Check bit 7 (MSB). Skip next if 0.
-  RJMP   .set_high                     ; If 1, jump to set HIGH
-  CBI    PORTB, PB0                    ; If 0, clear Data pin (LOW)
-  RJMP   .clock_pulse                  ; Jump to clocking
-.set_high:                             
-  SBI    PORTB, PB0                    ; Set Data pin HIGH
+  LDI    R17, 8                        ; 8 位就循环 8 次
+.shift_loop:
+  SBRC   R16, 7                        ; 检查第 7 位 (最高位). 为 0 就跳过下一条.
+  RJMP   .set_high                     ; 若为 1, 跳去拉高
+  CBI    PORTB, PB0                    ; 若为 0, 清掉数据脚 (低电平)
+  RJMP   .clock_pulse                  ; 跳去打时钟
+.set_high:
+  SBI    PORTB, PB0                    ; 把数据脚拉高
 ```
-We look exclusively at the Most Significant Bit (Bit 7). We use `SBRC` (Skip if Bit in Register is Cleared). If it's a `0`, we set the Data wire `LOW`. If it's a `1`, we set it `HIGH`.
+我们只看最高位 (第 7 位). 我们用 `SBRC` (寄存器中的这一位为 0 就跳过). 如果它是 `0`, 我们把数据线拉成 `LOW`. 如果它是 `1`, 我们把它拉成 `HIGH`.
 
 ```assembly
-.clock_pulse:                          
-  SBI    PORTB, PB1                    ; Clock pin HIGH (Rising Edge shifts bit)
-  NOP                                  ; Tiny wait
-  CBI    PORTB, PB1                    ; Clock pin LOW
-  
-  LSL    R16                           ; Shift the next bit into MSB position
-  DEC    R17                           ; Decrement loop counter
-  BRNE   .shift_loop                   ; Loop if not zero
-```
-Then, we pulse the Clock wire (`PB1`) by pulling it `HIGH` then `LOW`. This mathematically shoves the bit into the chip. 
-Finally, we use `LSL` (Logical Shift Left) to slide all the bits in `R16` to the left. The old Bit 6 is now the new Bit 7, ready for the next iteration of the loop!
+.clock_pulse:
+  SBI    PORTB, PB1                    ; 时钟脚拉高 (上升沿把位推进去)
+  NOP                                  ; 稍等一下
+  CBI    PORTB, PB1                    ; 时钟脚拉低
 
-### 2. Bouncing Animation (Knight Rider)
-We want a single LED to bounce back and forth from left to right.
+  LSL    R16                           ; 把下一位移到最高位的位置
+  DEC    R17                           ; 循环计数器减 1
+  BRNE   .shift_loop                   ; 不为零就继续循环
+```
+接着我们给时钟线 (`PB1`) 一个脉冲, 先拉 `HIGH` 再拉 `LOW`. 这就从数学上把这一位塞进了芯片.
+最后我们用 `LSL` (Logical Shift Left, 逻辑左移) 把 `R16` 里所有位往左挪一格. 原来的第 6 位现在成了新的第 7 位, 准备好下一轮循环了!
+
+### 2. 弹跳动画 (霹雳游侠)
+我们想让一颗 LED 从左到右来回弹.
 ```assembly
-  LDI    R18, 0x01                     ; Start with LED 0 ON
-  
-.shift_left:                           
+  LDI    R18, 0x01                     ; 从 LED 0 亮开始
+
+.shift_left:
   ... ; (shift_out, latch, delay)
-  LSL    R18                           ; Logical Shift Left
-  SBRC   R18, 7                        ; Skip next if bit 7 is clear 
-  RJMP   .shift_right                  ; If we hit bit 7, bounce and go right!
-  RJMP   .shift_left                   ; Otherwise, keep going left
+  LSL    R18                           ; 逻辑左移
+  SBRC   R18, 7                        ; 若第 7 位为 0 则跳过下一条
+  RJMP   .shift_right                  ; 撞到第 7 位就掉头往右!
+  RJMP   .shift_left                   ; 否则继续往左
 ```
-We start with the binary number `00000001`. 
-In our `.shift_left` loop, we send the number to the LEDs, delay so you can see it, and then execute an `LSL` (Logical Shift Left). 
-`00000001` becomes `00000010`. The LED physically moves!
-We use `SBRC` to check if the `1` has hit the very end (Bit 7). If it has, we dynamically branch into the `.shift_right` loop, which uses `LSR` (Logical Shift Right) to bounce the light back!
+我们从二进制数 `00000001` 开始.
+在 `.shift_left` 循环里, 我们把这个数送给 LED, 延时一下让你看得见, 然后执行 `LSL` (逻辑左移).
+`00000001` 变成 `00000010`. LED 真的动了!
+我们用 `SBRC` 检查那个 `1` 是不是撞到了最边上 (第 7 位). 如果撞到了, 我们就动态地分支进 `.shift_right` 循环, 那里用 `LSR` (Logical Shift Right, 逻辑右移) 把光弹回来!
 
 ---
 
-Congratulations! You have successfully implemented Serial Peripheral Communication (`SPI` bit-banging) and animated physical hardware arrays in pure assembly!
+恭喜! 你已经在纯汇编里实现了串行外设通信 (`SPI` 位操作模拟) 并让真实的硬件阵列动了起来!

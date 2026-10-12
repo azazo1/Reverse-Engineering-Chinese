@@ -1,10 +1,10 @@
-# Chapter 20: The Build Pipeline — From Assembly to Flashable Binary
+# Chapter 20: 构建流水线 - 从汇编到可烧录二进制
 
-## Introduction
+## 引言
 
-Our build system transforms human-readable assembly source files into a UF2 firmware image that the RP2350 can execute.  The process has four stages: assemble, link, extract binary, and convert to UF2.  This chapter walks through every command in build.bat and clean.bat, explaining what each tool does, what flags control, and how the output of one stage feeds the next.
+我们的构建系统把人类可读的汇编源文件, 变成 RP2350 能执行的 UF2 固件镜像. 整个过程分四个阶段: 汇编, 链接, 提取二进制, 转换成 UF2. 本章逐条讲解 build.bat 和 clean.bat 里的每一条命令, 说明每个工具做什么, 各个参数控制什么, 以及上一阶段的输出是怎样喂给下一阶段的.
 
-## The Build Pipeline
+## 构建流水线
 
 ```
 Source Files (.s)
@@ -34,25 +34,25 @@ Object Files (.o)
   blink.uf2
 ```
 
-## Toolchain Auto-Detection
+## 工具链自动检测
 
-build.bat begins by locating the RISC-V toolchain:
+build.bat 一上来先找 RISC-V 工具链:
 
 ```bat
 set TOOLCHAIN_PREFIX=riscv32-unknown-elf
 ```
 
-It then searches in order:
-1. System PATH
-2. `%RISCV_TOOLCHAIN_BIN%` environment variable
+然后按顺序搜索:
+1. 系统 PATH
+2. `%RISCV_TOOLCHAIN_BIN%` 环境变量
 3. `%USERPROFILE%\OneDrive\Documents\riscv-toolchain-14\bin`
 4. `%USERPROFILE%\Documents\riscv-toolchain-14\bin`
 
-If no toolchain is found, the build fails with instructions on where to install it.
+如果找不到任何工具链, 构建就会失败, 并提示应该把工具链装在哪里.
 
-## Stage 1: Assembly
+## 阶段 1: 汇编
 
-Each source file is assembled independently:
+每个源文件都单独汇编:
 
 ```bat
 riscv32-unknown-elf-as -g -march=rv32imac_zicsr -mabi=ilp32 vector_table.s -o vector_table.o
@@ -67,55 +67,55 @@ riscv32-unknown-elf-as -g -march=rv32imac_zicsr -mabi=ilp32 main.s -o main.o
 riscv32-unknown-elf-as -g -march=rv32imac_zicsr -mabi=ilp32 image_def.s -o image_def.o
 ```
 
-### Assembler Flags
+### 汇编器参数
 
-| Flag | Meaning |
+| 参数 | 含义 |
 |------|---------|
-| `-g` | Generate debug information (DWARF) |
-| `-march=rv32imac_zicsr` | Target RV32I + M + A + C + Zicsr extensions |
-| `-mabi=ilp32` | Use ILP32 ABI (32-bit int, long, pointer) |
+| `-g` | 生成调试信息 (DWARF) |
+| `-march=rv32imac_zicsr` | 目标为 RV32I + M + A + C + Zicsr 扩展 |
+| `-mabi=ilp32` | 使用 ILP32 ABI (int, long, 指针都是 32 位) |
 
-Each `.s` file produces a corresponding `.o` (object) file containing:
+每个 `.s` 文件都产出一个对应的 `.o` (目标) 文件, 里面装着:
 
-- Machine code with unresolved relocations
-- A symbol table (local and global symbols)
-- Section headers (.text, .data, .bss, etc.)
-- Debug information (source line mappings)
+- 机器码, 以及尚未解析的重定位信息
+- 符号表 (局部符号和全局符号)
+- 段头 (.text, .data, .bss 等)
+- 调试信息 (源码行号映射)
 
-### Assembler Flag Details
+### 汇编器参数细节
 
-**`-march=rv32imac_zicsr`** specifies the exact instruction set:
+**`-march=rv32imac_zicsr`** 指定了确切的指令集:
 
-| Component | Meaning |
+| 组成部分 | 含义 |
 |-----------|---------|
-| `rv32i` | Base 32-bit integer instructions |
-| `m` | Multiply/divide (mul, div, rem) |
-| `a` | Atomic operations |
-| `c` | Compressed (16-bit) instructions |
-| `_zicsr` | CSR read/write instructions |
+| `rv32i` | 基础 32 位整数指令 |
+| `m` | 乘除法 (mul, div, rem) |
+| `a` | 原子操作 |
+| `c` | 压缩 (16 位) 指令 |
+| `_zicsr` | CSR 读写指令 |
 
-**`-mabi=ilp32`** specifies the calling convention:
+**`-mabi=ilp32`** 指定了调用约定:
 
-| ABI | int | long | pointer |
+| ABI | int | long | 指针 |
 |-----|-----|------|---------|
-| ilp32 | 32-bit | 32-bit | 32-bit |
+| ilp32 | 32 位 | 32 位 | 32 位 |
 
-### Ten Source Files
+### 十个源文件
 
-| Source File | Purpose |
+| 源文件 | 作用 |
 |-------------|---------|
-| vector_table.s | Vector table (handler address placeholders) |
-| reset_handler.s | Boot sequence calling all init functions |
-| stack.s | Stack pointer initialization |
-| xosc.s | Crystal oscillator init and clock enable |
-| reset.s | Peripheral reset release |
-| coprocessor.s | No-op compatibility stub |
-| gpio.s | GPIO pad config, set, clear via SIO |
-| delay.s | Millisecond delay function |
-| main.s | Application entry point and blink loop |
-| image_def.s | PICOBIN boot metadata (RISC-V) |
+| vector_table.s | 向量表 (处理程序地址的占位) |
+| reset_handler.s | 启动流程, 调用所有初始化函数 |
+| stack.s | 栈指针初始化 |
+| xosc.s | 晶振初始化与时钟使能 |
+| reset.s | 释放外设复位 |
+| coprocessor.s | 空操作的兼容桩 |
+| gpio.s | GPIO pad 配置, 以及通过 SIO 置位/清零 |
+| delay.s | 毫秒级延时函数 |
+| main.s | 应用入口点与闪烁循环 |
+| image_def.s | PICOBIN 启动元数据 (RISC-V) |
 
-## Stage 2: Linking
+## 阶段 2: 链接
 
 ```bat
 riscv32-unknown-elf-ld -g -T linker.ld ^
@@ -124,89 +124,89 @@ riscv32-unknown-elf-ld -g -T linker.ld ^
   -o blink.elf
 ```
 
-### Linker Flags
+### 链接器参数
 
-| Flag | Meaning |
+| 参数 | 含义 |
 |------|---------|
-| `-g` | Preserve debug information |
-| `-T linker.ld` | Use our linker script for memory layout |
-| `-o blink.elf` | Output filename |
+| `-g` | 保留调试信息 |
+| `-T linker.ld` | 用我们的链接脚本来决定内存布局 |
+| `-o blink.elf` | 输出文件名 |
 
-The linker:
+链接器会:
 
-1. Reads all ten object files
-2. Merges matching sections (all `.text` sections combine into one)
-3. Assigns absolute addresses according to linker.ld
-4. Resolves all symbol references (e.g., `call GPIO_Set` gets patched with the correct offset)
-5. Produces an ELF (Executable and Linkable Format) file
+1. 读取全部十个目标文件
+2. 合并同名的段 (所有 `.text` 段合并成一个)
+3. 按 linker.ld 分配绝对地址
+4. 解析所有符号引用 (比如 `call GPIO_Set` 会被回填成正确的偏移)
+5. 生成一个 ELF (Executable and Linkable Format) 文件
 
-### ELF File Contents
+### ELF 文件的内容
 
-The ELF file contains:
+ELF 文件里装着:
 
-- All machine code at final addresses
-- Section headers describing memory layout
-- Symbol table with resolved addresses
-- Debug information mapping code to source lines
+- 已经定位到最终地址的全部机器码
+- 描述内存布局的段头
+- 地址已解析完毕的符号表
+- 把代码映射到源码行的调试信息
 
-The ELF is used by debuggers (GDB + OpenOCD) for source-level debugging.
+调试器 (GDB + OpenOCD) 就用这个 ELF 来做源码级调试.
 
-## Stage 3: Binary Extraction
+## 阶段 3: 提取二进制
 
 ```bat
 riscv32-unknown-elf-objcopy -O binary blink.elf blink.bin
 ```
 
-`objcopy` strips all ELF metadata and produces a raw binary — the exact bytes that will be written to flash starting at `0x10000000`.  This file contains no headers, no symbol table, no debug info — just machine code and data.
+`objcopy` 剥掉所有 ELF 元数据, 产出一个裸二进制 - 就是从 `0x10000000` 开始要写进 flash 的那些字节, 一个不多一个不少. 这个文件里没有文件头, 没有符号表, 也没有调试信息 - 只有机器码和数据.
 
-## Stage 4: UF2 Conversion
+## 阶段 4: 转换成 UF2
 
 ```bat
 python uf2conv.py -b 0x10000000 -f 0xe48bff5a -o blink.uf2 blink.bin
 ```
 
-### UF2 Flags
+### UF2 参数
 
-| Flag | Meaning |
+| 参数 | 含义 |
 |------|---------|
-| `-b 0x10000000` | Base address (flash start) |
-| `-f 0xe48bff5a` | RP2350 RISC-V family ID |
-| `-o blink.uf2` | Output filename |
+| `-b 0x10000000` | 基地址 (flash 起始处) |
+| `-f 0xe48bff5a` | RP2350 RISC-V 的 family ID |
+| `-o blink.uf2` | 输出文件名 |
 
-UF2 (USB Flashing Format) wraps the binary in a format that the RP2350's USB bootloader understands.  Each 512-byte UF2 block contains:
+UF2 (USB Flashing Format) 把二进制包进一种 RP2350 的 USB 引导程序能识别的格式. 每个 512 字节的 UF2 块里装着:
 
-- Magic numbers for identification
-- Target address for that block's data
-- Up to 256 bytes of payload
-- Family ID to prevent flashing the wrong chip
+- 用于识别的魔数
+- 该块数据的目标地址
+- 最多 256 字节的有效载荷
+- family ID, 用来防止把固件烧进错误的芯片
 
 ### Family ID
 
-The family ID `0xe48bff5a` identifies the target as RP2350 RISC-V.  The ARM family ID is `0xe48bff59` (one different).  If you flash a RISC-V UF2 to an ARM-configured boot, or vice versa, the bootloader rejects it.
+family ID `0xe48bff5a` 表明目标是 RP2350 RISC-V. ARM 的 family ID 是 `0xe48bff59` (只差一位). 如果你把 RISC-V 的 UF2 烧到配置成 ARM 的引导程序上, 或者反过来, 引导程序都会拒绝.
 
-## Error Handling
+## 错误处理
 
-Every command in build.bat is followed by:
+build.bat 里每条命令后面都跟着:
 
 ```bat
 if errorlevel 1 goto error
 ```
 
-If any stage fails (syntax error, undefined symbol, missing file), the build stops immediately with an error message.  This prevents cascading failures where a later stage operates on corrupt or missing input.
+只要有一个阶段失败 (语法错误, 未定义符号, 文件缺失), 构建就立刻停下并报错. 这样可以避免连锁失败 - 否则后面的阶段会拿着已经损坏或根本不存在的输入继续干活.
 
-## Flashing the Firmware
+## 烧录固件
 
-build.bat prints instructions for two flashing methods:
+build.bat 会打印两种烧录方法的说明:
 
-### UF2 (USB Mass Storage)
+### UF2 (USB 大容量存储)
 
-1. Hold BOOTSEL button on the Pico 2
-2. Connect USB cable
-3. Copy blink.uf2 to the RP2350 drive
+1. 按住 Pico 2 上的 BOOTSEL 按钮
+2. 插上 USB 线
+3. 把 blink.uf2 复制到 RP2350 那个盘里
 
-The RP2350 appears as a USB mass storage device.  Copying the UF2 file triggers the bootloader to write the firmware to flash and reset.
+RP2350 会以 USB 大容量存储设备的身份出现. 复制 UF2 文件就会触发引导程序, 把固件写进 flash 并复位.
 
-### OpenOCD (Debug Probe)
+### OpenOCD (调试探针)
 
 ```bat
 openocd -f interface/cmsis-dap.cfg -f target/rp2350.cfg ^
@@ -214,39 +214,39 @@ openocd -f interface/cmsis-dap.cfg -f target/rp2350.cfg ^
   -c "program blink.elf verify reset exit"
 ```
 
-This uses a debug probe (Raspberry Pi Debug Probe or compatible CMSIS-DAP adapter) to:
-1. Connect to the RP2350 via SWD
-2. Program the ELF file to flash
-3. Verify the written data
-4. Reset the chip to start execution
+这里用的是调试探针 (Raspberry Pi Debug Probe 或兼容的 CMSIS-DAP 适配器), 它做的事是:
+1. 通过 SWD 连上 RP2350
+2. 把 ELF 文件烧进 flash
+3. 校验写入的数据
+4. 复位芯片, 开始执行
 
-## The Clean Script
+## 清理脚本
 
 ```bat
 del *.o *.elf *.bin *.uf2 2>nul
 ```
 
-clean.bat removes all build artifacts, returning the directory to source-only state.  The `2>nul` suppresses errors if files don't exist.
+clean.bat 删掉所有构建产物, 把目录恢复到只有源码的状态. `2>nul` 用来在文件本来就不存在时压掉报错.
 
-## Contrast with ARM Build
+## 与 ARM 构建对照
 
-| Aspect | ARM | RISC-V |
+| 方面 | ARM | RISC-V |
 |--------|-----|--------|
-| Assembler | `arm-none-eabi-as` | `riscv32-unknown-elf-as` |
-| CPU flag | `-mcpu=cortex-m33 -mthumb` | `-march=rv32imac_zicsr -mabi=ilp32` |
-| Linker | `arm-none-eabi-ld` | `riscv32-unknown-elf-ld` |
+| 汇编器 | `arm-none-eabi-as` | `riscv32-unknown-elf-as` |
+| CPU 参数 | `-mcpu=cortex-m33 -mthumb` | `-march=rv32imac_zicsr -mabi=ilp32` |
+| 链接器 | `arm-none-eabi-ld` | `riscv32-unknown-elf-ld` |
 | Objcopy | `arm-none-eabi-objcopy` | `riscv32-unknown-elf-objcopy` |
 | Family ID | `0xe48bff59` | `0xe48bff5a` |
-| Output name | `blink.elf` / `blink.uf2` | `blink.elf` / `blink.uf2` |
+| 输出名 | `blink.elf` / `blink.uf2` | `blink.elf` / `blink.uf2` |
 
-The pipeline structure is identical — only the tool prefix, architecture flags, and family ID differ.
+流水线的结构完全一样 - 只是工具前缀, 架构参数和 family ID 不同.
 
-## Summary
+## 小结
 
-- The build pipeline has four stages: assemble → link → extract binary → convert to UF2.
-- `-march=rv32imac_zicsr -mabi=ilp32` configures the assembler for our specific RISC-V core.
-- The linker merges ten object files using linker.ld to produce blink.elf.
-- `objcopy` strips ELF metadata to produce a raw binary.
-- `uf2conv.py` wraps the binary with the RISC-V family ID `0xe48bff5a`.
-- Error handling stops the build immediately on any failure.
-- Firmware can be flashed via UF2 (USB) or OpenOCD (debug probe).
+- 构建流水线分四个阶段: 汇编 → 链接 → 提取二进制 → 转换成 UF2.
+- `-march=rv32imac_zicsr -mabi=ilp32` 让汇编器针对我们这颗 RISC-V 内核工作.
+- 链接器按 linker.ld 把十个目标文件合并成 blink.elf.
+- `objcopy` 剥掉 ELF 元数据, 产出裸二进制.
+- `uf2conv.py` 用 RISC-V 的 family ID `0xe48bff5a` 把二进制包装起来.
+- 错误处理让构建在任何一个环节失败时立刻停下.
+- 固件可以通过 UF2 (USB) 或 OpenOCD (调试探针) 烧录.

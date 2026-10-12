@@ -1,28 +1,28 @@
-# Chapter 17: Bit Manipulation Patterns
+# Chapter 17: 位操作套路
 
-## Introduction
+## 引言
 
-Bare-metal firmware is fundamentally about controlling hardware, and hardware is controlled by setting, clearing, and testing individual bits in memory-mapped registers.  Every peripheral on the RP2350 exposes its functionality through bit fields — groups of bits with specific meanings.  This chapter catalogs the bit manipulation patterns used throughout our blink driver and builds your fluency in reading and writing them.
+裸机固件说到底就是在控制硬件, 而控制硬件的方式, 就是对内存映射寄存器里一个个位做置位, 清零和测试. RP2350 上每个外设都是通过位域 - 一组有特定含义的位 - 来暴露功能的. 本章盘点闪烁驱动里用到的各种位操作套路, 帮你把这些写法读得顺, 写得熟.
 
-## The Fundamental Operations
+## 三个基本操作
 
-There are three primitive bit operations:
+位操作只有三种原语:
 
-| Operation | Instruction | Pattern | Effect |
+| 操作 | 指令 | 写法 | 效果 |
 |-----------|-------------|---------|--------|
-| Set bit | `orr` | `orr Rd, Rd, #(1<<N)` | Force bit N to 1 |
-| Clear bit | `bic` | `bic Rd, Rd, #(1<<N)` | Force bit N to 0 |
-| Test bit | `tst` | `tst Rn, #(1<<N)` | Set Z flag if bit N is 0 |
+| 置位 | `orr` | `orr Rd, Rd, #(1<<N)` | 把第 N 位强制成 1 |
+| 清零 | `bic` | `bic Rd, Rd, #(1<<N)` | 把第 N 位强制成 0 |
+| 测试 | `tst` | `tst Rn, #(1<<N)` | 第 N 位为 0 时置起 Z 标志 |
 
-## Set a Single Bit
+## 置单个位
 
-To set bit N without affecting other bits, OR with a mask that has only bit N set:
+要在不影响其他位的前提下把第 N 位置 1, 就和一个只有第 N 位为 1 的掩码做 OR:
 
 ```asm
-  orr   r5, r5, #(1<<6)                          // set bit 6 (IE)
+  orr   r5, r5, #(1<<6)                          // 置 bit 6 (IE)
 ```
 
-Truth table for OR:
+OR 的真值表:
 
 ```
   Original bit:  0  1  0  1
@@ -30,38 +30,38 @@ Truth table for OR:
   Result:        1  1  0  1
 ```
 
-Bits where the mask is 0 are unchanged.  Bits where the mask is 1 are forced to 1.
+掩码为 0 的位保持不变. 掩码为 1 的位被强制成 1.
 
-### In Our Firmware
+### 在我们的固件里
 
-gpio.s sets the Input Enable bit in the pad register:
-
-```asm
-  orr   r5, r5, #(1<<6)                          // set IE (input enable)
-```
-
-xosc.s enables the peripheral clock:
+gpio.s 把 pad 寄存器里的输入使能位置起来:
 
 ```asm
-  orr   r1, r1, #(1<<11)                         // set ENABLE bit
+  orr   r5, r5, #(1<<6)                          // 置 IE (输入使能)
 ```
 
-coprocessor.s enables CP0 access:
+xosc.s 使能外设时钟:
 
 ```asm
-  orr   r1, r1, #(1<<1)                          // set CP0 access bit 1
-  orr   r1, r1, #(1<<0)                          // set CP0 access bit 0
+  orr   r1, r1, #(1<<11)                         // 置 ENABLE 位
 ```
 
-## Clear a Single Bit
-
-To clear bit N without affecting other bits, BIC (bit clear) with a mask:
+coprocessor.s 使能 CP0 访问:
 
 ```asm
-  bic   r5, r5, #(1<<7)                          // clear bit 7 (OD)
+  orr   r1, r1, #(1<<1)                          // 置 CP0 访问位 1
+  orr   r1, r1, #(1<<0)                          // 置 CP0 访问位 0
 ```
 
-BIC performs `Rd = Rn AND NOT mask`:
+## 清单个位
+
+要在不影响其他位的前提下把第 N 位清 0, 就用掩码做 BIC (位清除):
+
+```asm
+  bic   r5, r5, #(1<<7)                          // 清 bit 7 (OD)
+```
+
+BIC 执行的是 `Rd = Rn AND NOT mask`:
 
 ```
   Original bit:  0  1  0  1
@@ -69,73 +69,73 @@ BIC performs `Rd = Rn AND NOT mask`:
   Result:        0  0  0  1
 ```
 
-Bits where the mask is 0 are unchanged.  Bits where the mask is 1 are forced to 0.
+掩码为 0 的位保持不变. 掩码为 1 的位被强制成 0.
 
-### In Our Firmware
+### 在我们的固件里
 
-gpio.s clears Output Disable and Isolation in the pad register:
-
-```asm
-  bic   r5, r5, #(1<<7)                          // clear OD (output disable)
-  bic   r5, r5, #(1<<8)                          // clear ISO (isolation)
-```
-
-## Clear a Multi-Bit Field
-
-To clear several contiguous bits (a "field"), use a wider mask:
+gpio.s 清掉 pad 寄存器里的输出禁止位和隔离位:
 
 ```asm
-  bic   r5, r5, #0x1f                            // clear bits [4:0]
+  bic   r5, r5, #(1<<7)                          // 清 OD (输出禁止)
+  bic   r5, r5, #(1<<8)                          // 清 ISO (隔离)
 ```
 
-The mask `0x1f` = `0b00011111` clears the lowest 5 bits.  This is used in gpio.s to clear the FUNCSEL field before writing a new value:
+## 清一个多位域
+
+要清掉几个连续的位 (也就是一个 "域"), 用一个更宽的掩码:
 
 ```asm
-  bic   r5, r5, #0x1f                            // clear FUNCSEL [4:0]
-  orr   r5, r5, #0x05                            // set FUNCSEL = 5 (SIO)
+  bic   r5, r5, #0x1f                            // 清 bits [4:0]
 ```
 
-This two-step pattern — clear then set — is standard for writing a multi-bit field without affecting surrounding bits.
-
-## Test a Bit
-
-To check whether a bit is set without modifying any register:
+掩码 `0x1f` = `0b00011111`, 清掉最低的 5 位. gpio.s 在写入新值之前就是用它清掉 FUNCSEL 域的:
 
 ```asm
-  tst   r1, #(1<<31)                             // test STABLE bit
-  beq   .Wait_XOSC                              // branch if bit is 0
+  bic   r5, r5, #0x1f                            // 清 FUNCSEL [4:0]
+  orr   r5, r5, #0x05                            // 置 FUNCSEL = 5 (SIO)
 ```
 
-`tst` performs `AND` and discards the result, updating only the flags:
+这个"先清后置"的两步套路, 是写多位域又不影响周边位的标准做法.
 
-- If bit 31 is 0: result is 0, Z=1, `beq` branches
-- If bit 31 is 1: result is non-zero, Z=0, `beq` falls through
+## 测试某一位
 
-### Polling Loops
+要检查某一位是否置起, 同时不改动任何寄存器:
 
-Both hardware polling loops use `tst` + `beq`:
+```asm
+  tst   r1, #(1<<31)                             // 测试 STABLE 位
+  beq   .Wait_XOSC                              // 该位为 0 就跳转
+```
 
-**XOSC Stabilization:**
+`tst` 做一次 `AND` 然后丢掉结果, 只更新标志:
+
+- 如果 bit 31 是 0: 结果是 0, Z=1, `beq` 跳转
+- 如果 bit 31 是 1: 结果非零, Z=0, `beq` 不跳转
+
+### 轮询循环
+
+两个硬件轮询循环用的都是 `tst` + `beq`:
+
+**XOSC 稳定等待:**
 
 ```asm
 .Wait_XOSC:
-  ldr   r1, [r0]                                 // read XOSC_STATUS
-  tst   r1, #(1<<31)                             // STABLE bit?
-  beq   .Wait_XOSC                              // not yet — keep polling
+  ldr   r1, [r0]                                 // 读取 XOSC_STATUS
+  tst   r1, #(1<<31)                             // STABLE 位?
+  beq   .Wait_XOSC                              // 还没好 - 继续轮询
 ```
 
-**Reset Completion:**
+**复位完成等待:**
 
 ```asm
 .Wait_Reset:
-  ldr   r1, [r0]                                 // read RESET_DONE
-  tst   r1, #(1<<6)                              // IO_BANK0 done?
-  beq   .Wait_Reset                             // not yet — keep polling
+  ldr   r1, [r0]                                 // 读取 RESET_DONE
+  tst   r1, #(1<<6)                              // IO_BANK0 完成了吗?
+  beq   .Wait_Reset                             // 还没好 - 继续轮询
 ```
 
-## Combined Patterns
+## 组合套路
 
-### Read-Modify-Write (Single Bit)
+### 读-改-写 (单个位)
 
 ```asm
   ldr   r1, [r0]                                 // READ
@@ -143,7 +143,7 @@ Both hardware polling loops use `tst` + `beq`:
   str   r1, [r0]                                 // WRITE
 ```
 
-### Read-Modify-Write (Multiple Bits)
+### 读-改-写 (多个位)
 
 ```asm
   ldr   r5, [r3]                                 // READ
@@ -153,7 +153,7 @@ Both hardware polling loops use `tst` + `beq`:
   str   r5, [r3]                                 // WRITE
 ```
 
-### Clear Field Then Set Value
+### 先清域再写值
 
 ```asm
   ldr   r5, [r6]                                 // READ
@@ -162,50 +162,50 @@ Both hardware polling loops use `tst` + `beq`:
   str   r5, [r6]                                 // WRITE
 ```
 
-## Bit Fields in Our Registers
+## 寄存器里的位域
 
-### PADS_BANK0 Pad Register (GPIO16)
-
-```
-Bit 8: ISO  (Isolation)         — clear to 0
-Bit 7: OD   (Output Disable)    — clear to 0
-Bit 6: IE   (Input Enable)      — set to 1
-Bit 5: DRIVE[1]                  — unchanged
-Bit 4: DRIVE[0]                  — unchanged
-Bit 3: PUE  (Pull-Up Enable)    — unchanged
-Bit 2: PDE  (Pull-Down Enable)  — unchanged
-Bit 1: SCHMITT                   — unchanged
-Bit 0: SLEWFAST                  — unchanged
-```
-
-### IO_BANK0 Control Register (GPIO16)
+### PADS_BANK0 pad 寄存器 (GPIO16)
 
 ```
-Bits [4:0]: FUNCSEL — cleared to 0, then set to 5 (SIO)
+Bit 8: ISO  (Isolation)         - clear to 0
+Bit 7: OD   (Output Disable)    - clear to 0
+Bit 6: IE   (Input Enable)      - set to 1
+Bit 5: DRIVE[1]                  - unchanged
+Bit 4: DRIVE[0]                  - unchanged
+Bit 3: PUE  (Pull-Up Enable)    - unchanged
+Bit 2: PDE  (Pull-Down Enable)  - unchanged
+Bit 1: SCHMITT                   - unchanged
+Bit 0: SLEWFAST                  - unchanged
 ```
 
-### CPACR Coprocessor Access
+### IO_BANK0 控制寄存器 (GPIO16)
 
 ```
-Bits [1:0]: CP0 access — set to 0b11 (full access)
+Bits [4:0]: FUNCSEL - cleared to 0, then set to 5 (SIO)
+```
+
+### CPACR 协处理器访问
+
+```
+Bits [1:0]: CP0 access - set to 0b11 (full access)
 ```
 
 ### CLK_PERI_CTRL
 
 ```
-Bit 11:    ENABLE   — set to 1
-Bits [7:5]: AUXSRC  — set to 4 (XOSC)
+Bit 11:    ENABLE   - set to 1
+Bits [7:5]: AUXSRC  - set to 4 (XOSC)
 ```
 
-## Why This Matters
+## 为什么这很重要
 
-Understanding bit manipulation is the single most important skill for bare-metal programming.  Every peripheral on the RP2350 — GPIO, UART, SPI, I2C, timers, DMA — is controlled by reading and writing bit fields in memory-mapped registers.  The patterns in this chapter (`orr` to set, `bic` to clear, `tst` to test, clear-then-set for fields) apply to every register on the chip.
+弄懂位操作, 是裸机编程里最重要的一项技能. RP2350 上的每个外设 - GPIO, UART, SPI, I2C, 定时器, DMA - 都是靠读写内存映射寄存器里的位域来控制的. 本章讲的这些套路 (`orr` 置位, `bic` 清零, `tst` 测试, 写域时先清后置) 对芯片上每一个寄存器都适用.
 
-## Summary
+## 小结
 
-- `orr Rd, Rd, #(1<<N)` sets bit N: the fundamental enable operation.
-- `bic Rd, Rd, #(1<<N)` clears bit N: the fundamental disable operation.
-- `tst Rn, #(1<<N)` tests bit N: used in all polling loops.
-- Multi-bit fields are written with a clear-then-set pattern: `bic` with the field mask, then `orr` with the value.
-- The read-modify-write pattern (ldr → modify → str) preserves bits we do not intend to change.
-- These three operations form the complete vocabulary for hardware register control.
+- `orr Rd, Rd, #(1<<N)` 置第 N 位: 最基本的使能操作.
+- `bic Rd, Rd, #(1<<N)` 清第 N 位: 最基本的关闭操作.
+- `tst Rn, #(1<<N)` 测试第 N 位: 所有轮询循环都要用.
+- 多位域用"先清后置"的套路写入: 先用域掩码 `bic`, 再用数值 `orr`.
+- 读-改-写套路 (ldr → 修改 → str) 能保住那些我们不想动的位.
+- 这三个操作合起来, 就是控制硬件寄存器的全部词汇.

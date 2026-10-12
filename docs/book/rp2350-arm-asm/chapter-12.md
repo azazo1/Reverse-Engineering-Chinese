@@ -1,12 +1,12 @@
-# Chapter 12: ARM Calls, Returns, and the Stack Frame
+# Chapter 12: ARM 调用, 返回与栈帧
 
-## Introduction
+## 引言
 
-Structured software is built from functions that call other functions.  The Cortex-M33 implements calls with `bl` (branch with link) and returns with `bx lr` (branch exchange via the link register).  When functions are nested — a caller invokes a callee that invokes yet another callee — the link register must be saved to the stack.  This chapter examines how calls, returns, and the stack frame work together in our blink driver.
+结构化的软件由一个个函数组成, 函数又会调用别的函数. Cortex-M33 用 `bl` (带链接的分支) 实现调用, 用 `bx lr` (经由链接寄存器分支并交换) 实现返回. 当函数层层嵌套 - 调用方调用了被调用方, 被调用方又调用了另一个被调用方 - 链接寄存器就必须保存到栈上. 本章考察闪烁驱动里调用, 返回和栈帧是如何协同工作的.
 
-## The Link Register
+## 链接寄存器
 
-When `bl` executes, the processor stores the address of the next instruction in the Link Register (LR, also named r14):
+`bl` 执行时, 处理器把下一条指令的地址存进链接寄存器 (LR, 也叫 r14):
 
 ```
 Before bl:
@@ -18,41 +18,41 @@ After bl:
   LR = 0x10000104   (return address, next instruction)
 ```
 
-The callee returns by executing `bx lr`, which loads LR back into PC.
+被调用方执行 `bx lr` 就返回了, 这条指令把 LR 装回 PC.
 
-## Leaf Functions vs. Non-Leaf Functions
+## 叶子函数与非叶子函数
 
-A **leaf function** does not call any other function.  It can use LR directly without saving it:
+**叶子函数**不调用任何其他函数. 它可以直接使用 LR, 不必保存:
 
 ```asm
 Init_Stack:
-  ldr   r0, =STACK_TOP                           // r0 = stack top
-  msr   PSP, r0                                  // set process stack pointer
-  ldr   r0, =STACK_LIMIT                         // r0 = stack limit
-  msr   MSPLIM, r0                               // set main stack limit
-  msr   PSPLIM, r0                               // set process stack limit
-  ldr   r0, =STACK_TOP                           // r0 = stack top
-  msr   MSP, r0                                  // set main stack pointer
-  bx    lr                                       // return (LR preserved)
+  ldr   r0, =STACK_TOP                           // r0 = 栈顶
+  msr   PSP, r0                                  // 设置进程栈指针
+  ldr   r0, =STACK_LIMIT                         // r0 = 栈上限
+  msr   MSPLIM, r0                               // 设置主栈上限
+  msr   PSPLIM, r0                               // 设置进程栈上限
+  ldr   r0, =STACK_TOP                           // r0 = 栈顶
+  msr   MSP, r0                                  // 设置主栈指针
+  bx    lr                                       // 返回 (LR 未被破坏)
 ```
 
-A **non-leaf function** calls other functions, which overwrites LR.  It must save LR on entry and restore it on exit:
+**非叶子函数**会调用其他函数, 而调用会覆盖 LR. 所以它必须在入口保存 LR, 在出口恢复:
 
 ```asm
 main:
-  push  {r4-r12, lr}                             // save LR (and work registers)
+  push  {r4-r12, lr}                             // 保存 LR (以及工作寄存器)
   ...
-  bl    GPIO_Config                              // LR overwritten
+  bl    GPIO_Config                              // LR 被覆盖
   ...
-  bl    GPIO_Set                                 // LR overwritten again
+  bl    GPIO_Set                                 // LR 再次被覆盖
   ...
-  pop   {r4-r12, lr}                             // restore original LR
-  bx    lr                                       // return to caller
+  pop   {r4-r12, lr}                             // 恢复原来的 LR
+  bx    lr                                       // 返回调用方
 ```
 
-## The Call Chain
+## 调用链
 
-Our blink driver has this call hierarchy:
+闪烁驱动的调用层次是这样的:
 
 ```
 Reset_Handler
@@ -68,11 +68,11 @@ Reset_Handler
         +-- GPIO_Clear    (leaf)
 ```
 
-Reset_Handler uses `bl` to call each initialization function and then `b main` (branch, not branch-with-link) because main never returns.  Within main, `bl` calls GPIO and delay functions.
+Reset_Handler 用 `bl` 调用每个初始化函数, 然后用 `b main` (普通分支, 不是带链接的分支) 跳过去, 因为 main 永远不会返回. 在 main 内部, 再用 `bl` 调用 GPIO 和延时函数.
 
-## The Stack Frame
+## 栈帧
 
-When `push {r4-r12, lr}` executes, the stack pointer decreases and registers are saved:
+`push {r4-r12, lr}` 执行时, 栈指针减小, 寄存器被逐个保存:
 
 ```
 High addresses (STACK_TOP = 0x20082000)
@@ -91,11 +91,11 @@ High addresses (STACK_TOP = 0x20082000)
 Low addresses
 ```
 
-When the function returns, `pop {r4-r12, lr}` restores every register and advances SP back up.
+函数返回时, `pop {r4-r12, lr}` 恢复每一个寄存器, 并把 SP 加回去.
 
-## Nested Calls
+## 嵌套调用
 
-When `main` calls `GPIO_Set`, and GPIO_Set pushes its own registers:
+当 `main` 调用 `GPIO_Set`, 而 GPIO_Set 又压入自己的寄存器时:
 
 ```
 +------------------+
@@ -111,69 +111,69 @@ When `main` calls `GPIO_Set`, and GPIO_Set pushes its own registers:
 +------------------+  <-- SP
 ```
 
-Each function gets its own frame.  When GPIO_Set returns, its frame is removed.  When main's loop calls GPIO_Clear, a new frame is created at the same location.
+每个函数都有自己的栈帧. GPIO_Set 返回时, 它的栈帧就被撤掉. main 的循环再调用 GPIO_Clear 时, 会在同一位置建立新的栈帧.
 
-## The ARM Calling Convention (AAPCS)
+## ARM 调用约定 (AAPCS)
 
-Our firmware follows the ARM Architecture Procedure Call Standard (AAPCS):
+我们的固件遵循 ARM 架构过程调用标准 (AAPCS):
 
-| Register | Role | Caller/Callee Saved |
+| 寄存器 | 角色 | 调用方/被调用方保存 |
 |----------|------|-------------------|
-| r0–r3 | Arguments and return values | Caller-saved (scratch) |
-| r4–r11 | General purpose | Callee-saved (must preserve) |
-| r12 | Intra-procedure scratch | Caller-saved |
-| r13 (SP) | Stack pointer | Callee-saved |
-| r14 (LR) | Link register | Callee-saved (if non-leaf) |
-| r15 (PC) | Program counter | — |
+| r0-r3 | 参数与返回值 | 调用方保存 (临时) |
+| r4-r11 | 通用 | 被调用方保存 (必须保持) |
+| r12 | 过程内临时寄存器 | 调用方保存 |
+| r13 (SP) | 栈指针 | 被调用方保存 |
+| r14 (LR) | 链接寄存器 | 被调用方保存 (非叶子时) |
+| r15 (PC) | 程序计数器 | - |
 
-Our functions demonstrate this convention:
+我们的函数正好体现了这套约定:
 
-- `main` passes GPIO number in r0 and delay milliseconds in r0
-- `GPIO_Config` receives pad offset (r0), ctrl offset (r1), GPIO number (r2)
-- `GPIO_Set` and `GPIO_Clear` receive GPIO number in r0
-- `Delay_MS` receives milliseconds in r0
+- `main` 在 r0 里传 GPIO 编号, 也在 r0 里传延时毫秒数
+- `GPIO_Config` 接收 pad 偏移 (r0), ctrl 偏移 (r1), GPIO 编号 (r2)
+- `GPIO_Set` 和 `GPIO_Clear` 在 r0 里接收 GPIO 编号
+- `Delay_MS` 在 r0 里接收毫秒数
 
-## Parameter Passing Example
+## 参数传递示例
 
-When main calls GPIO_Config:
-
-```asm
-  ldr   r0, =PADS_BANK0_GPIO16_OFFSET            // r0 = pad offset
-  ldr   r1, =IO_BANK0_GPIO16_CTRL_OFFSET          // r1 = ctrl offset
-  mov   r2, #16                                  // r2 = GPIO number
-  bl    GPIO_Config                              // call
-```
-
-The callee receives these in r0, r1, r2 with no additional mechanism needed.
-
-When main calls GPIO_Set:
+main 调用 GPIO_Config 时:
 
 ```asm
-  mov   r0, #16                                  // r0 = GPIO number
-  bl    GPIO_Set                                 // call
+  ldr   r0, =PADS_BANK0_GPIO16_OFFSET            // r0 = pad 偏移
+  ldr   r1, =IO_BANK0_GPIO16_CTRL_OFFSET          // r1 = ctrl 偏移
+  mov   r2, #16                                  // r2 = GPIO 编号
+  bl    GPIO_Config                              // 调用
 ```
 
-## Reset_Handler: A Special Case
+被调用方直接在 r0, r1, r2 里拿到这些值, 不需要任何额外机制.
 
-Reset_Handler never returns.  It calls initialization functions with `bl` and then jumps to main with `b` (not `bl`):
+main 调用 GPIO_Set 时:
+
+```asm
+  mov   r0, #16                                  // r0 = GPIO 编号
+  bl    GPIO_Set                                 // 调用
+```
+
+## Reset_Handler: 一个特例
+
+Reset_Handler 永远不返回. 它用 `bl` 调用各个初始化函数, 然后用 `b` (不是 `bl`) 跳到 main:
 
 ```asm
 Reset_Handler:
-  bl    Init_Stack                               // returns via bx lr
-  bl    Init_XOSC                                // returns via bx lr
-  bl    Enable_XOSC_Peri_Clock                   // returns via bx lr
-  bl    Init_Subsystem                           // returns via bx lr
-  bl    Enable_Coprocessor                       // returns via bx lr
-  b     main                                     // never returns
+  bl    Init_Stack                               // 经由 bx lr 返回
+  bl    Init_XOSC                                // 经由 bx lr 返回
+  bl    Enable_XOSC_Peri_Clock                   // 经由 bx lr 返回
+  bl    Init_Subsystem                           // 经由 bx lr 返回
+  bl    Enable_Coprocessor                       // 经由 bx lr 返回
+  b     main                                     // 永不返回
 ```
 
-Using `b` instead of `bl` means main's LR value is the return address from the last `bl` — but since main contains an infinite loop, this is irrelevant.  The system never returns past main.
+用 `b` 而不是 `bl`, 意味着 main 里的 LR 值还是最后一次 `bl` 留下的返回地址 - 但 main 里是个无限循环, 所以这一点无关紧要. 系统永远不会从 main 返回.
 
-## Summary
+## 小结
 
-- `bl` saves the return address in LR and branches to the target function.
-- `bx lr` returns to the caller by loading LR into PC.
-- Non-leaf functions save LR with `push` and restore it with `pop`.
-- The stack grows downward; each function creates a frame for its saved registers.
-- The AAPCS defines r0–r3 as argument/return registers and r4–r11 as callee-saved.
-- Reset_Handler uses `b main` (not `bl`) because the system never returns.
+- `bl` 把返回地址保存到 LR, 然后跳转到目标函数.
+- `bx lr` 把 LR 装回 PC, 从而返回调用方.
+- 非叶子函数用 `push` 保存 LR, 用 `pop` 恢复 LR.
+- 栈向低地址方向增长; 每个函数都为自己的被保存寄存器建立一帧.
+- AAPCS 规定 r0-r3 是参数/返回寄存器, r4-r11 由被调用方保存.
+- Reset_Handler 用 `b main` (不是 `bl`), 因为系统永远不会返回.

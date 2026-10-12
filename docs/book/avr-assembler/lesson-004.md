@@ -1,91 +1,91 @@
 # Lesson 004 - RGB LED
 
-## What Are We Building Today?
+## 今天我们要做什么?
 
-Welcome to Lesson 4! Have you ever wondered how your TV, phone screen, or computer monitor creates millions of different colors? 
+欢迎来到第 4 课! 你有没有想过, 你的电视, 手机屏幕或者显示器是怎么造出几百万种颜色的?
 
-It actually only uses three colors: **Red**, **Green**, and **Blue** (RGB). By mixing these three primary colors of light, you can create almost any color imaginable!
+其实它只用了三种颜色: **红**, **绿**和**蓝** (RGB). 把这三种光的三原色混在一起, 你几乎能造出任何想象得到的颜色!
 
-Today, we are going to control an RGB LED to cycle through solid Red, Green, and Blue, and then turn completely off. 
+今天我们要控制一颗 RGB LED, 让它依次亮出纯红, 纯绿, 纯蓝, 然后完全熄灭.
 
-By the end of this lesson, you'll know how to control multiple pins at the exact same time using pure Assembly!
+学完这一课, 你就会用纯汇编同时控制多个引脚了!
 
 [CODE](https://github.com/mytechnotalent/Assembler/blob/main/lessons/004/lesson.s)
 
 ---
 
-## Hardware Check: The RGB LED
+## 硬件检查: RGB LED
 
-An RGB LED is essentially three tiny LEDs squished into a single bulb. Because there are three LEDs inside, it needs 4 metal legs:
-- 1 leg for the **Red** positive (Anode)
-- 1 leg for the **Green** positive (Anode)
-- 1 leg for the **Blue** positive (Anode)
-- 1 long leg for the shared **Negative** ground (Common Cathode)
+一颗 RGB LED 本质上就是把三颗小 LED 塞进同一个灯泡里. 因为里面有三颗 LED, 所以它需要 4 条金属引脚:
+- 1 条引脚接**红色**正极 (阳极)
+- 1 条引脚接**绿色**正极 (阳极)
+- 1 条引脚接**蓝色**正极 (阳极)
+- 1 条长引脚接公共的**负极**地 (共阴极)
 
-In this lesson, we will wire the LEDs to three separate pins on Port B:
-- **Red** is wired to Pin 9 (**PB1**)
-- **Green** is wired to Pin 10 (**PB2**)
-- **Blue** is wired to Pin 11 (**PB3**)
+这一课里, 我们把三颗 LED 分别接到 Port B 的三个引脚上:
+- **红** 接 Pin 9 (**PB1**)
+- **绿** 接 Pin 10 (**PB2**)
+- **蓝** 接 Pin 11 (**PB3**)
 
-## The Code Walkthrough
+## 代码讲解
 
-Since we have three LEDs, we have to prepare three different pins to output electricity!
+因为有三颗 LED, 我们得把三个不同的引脚都准备好往外送电!
 
-### 1. The Defines
+### 1. 定义部分
 ```assembly
-.equ DDRB,   0x04                      ; Data Direction Register for Port B
-.equ PORTB,  0x05                      ; Data Register for Port B
-.equ PB1,    1                         ; Pin 1 on Port B (Red)
-.equ PB2,    2                         ; Pin 2 on Port B (Green)
-.equ PB3,    3                         ; Pin 3 on Port B (Blue)
+.equ DDRB,   0x04                      ; Port B 的数据方向寄存器
+.equ PORTB,  0x05                      ; Port B 的数据寄存器
+.equ PB1,    1                         ; Port B 的第 1 脚 (红)
+.equ PB2,    2                         ; Port B 的第 2 脚 (绿)
+.equ PB3,    3                         ; Port B 的第 3 脚 (蓝)
 ```
-We define `DDRB` (the gatekeeper that sets pins to output) and `PORTB` (the register that actually turns the pins on and off). We also give names to our three color pins: `PB1`, `PB2`, and `PB3`.
+我们定义 `DDRB` (把引脚设成输出的看门人) 和 `PORTB` (真正负责开关引脚的那个寄存器). 我们还给三个颜色引脚起了名字: `PB1`, `PB2` 和 `PB3`.
 
-### 2. Setting Up the Outputs
-In our `main` program, after setting up the stack, we tell the gatekeeper to let electricity out of all three pins:
+### 2. 设置输出
+在 `main` 程序里, 搭好栈之后, 我们告诉看门人让这三个引脚都往外送电:
 ```assembly
-  SBI    DDRB, PB1                     ; Set PB1 (Red) as output
-  SBI    DDRB, PB2                     ; Set PB2 (Green) as output
-  SBI    DDRB, PB3                     ; Set PB3 (Blue) as output
+  SBI    DDRB, PB1                     ; 把 PB1 (红) 设为输出
+  SBI    DDRB, PB2                     ; 把 PB2 (绿) 设为输出
+  SBI    DDRB, PB3                     ; 把 PB3 (蓝) 设为输出
 ```
-We use `SBI` (Set Bit in I/O Register) three times to flip the output switches for Red, Green, and Blue!
+我们用 `SBI` (置位 I/O 寄存器中的某一位) 三次, 分别把红, 绿, 蓝的输出开关拨上去!
 
-### 3. The Color Cycle Animation
-Now we enter our infinite loop! We want to show one color at a time for exactly 1 second.
+### 3. 变色动画
+现在我们进入无限循环! 我们想让每种颜色各显示整整 1 秒.
 ```assembly
-.loop:                                 
-  SBI    PORTB, PB1                    ; Turn Red ON
-  CBI    PORTB, PB2                    ; Turn Green OFF
-  CBI    PORTB, PB3                    ; Turn Blue OFF
-  RCALL  delay_1000ms                  ; Wait 1000ms
+.loop:
+  SBI    PORTB, PB1                    ; 打开红色
+  CBI    PORTB, PB2                    ; 关闭绿色
+  CBI    PORTB, PB3                    ; 关闭蓝色
+  RCALL  delay_1000ms                  ; 等待 1000ms
 ```
-To show Red, we use `SBI` to turn PB1 ON, and `CBI` (Clear Bit in I/O Register) to make sure Green and Blue are OFF. Then we wait 1000 milliseconds (1 full second)!
-
-```assembly
-  CBI    PORTB, PB1                    ; Turn Red OFF
-  SBI    PORTB, PB2                    ; Turn Green ON
-  CBI    PORTB, PB3                    ; Turn Blue OFF
-  RCALL  delay_1000ms                  ; Wait 1000ms
-```
-Next, we turn Red OFF, turn Green ON, keep Blue OFF, and wait another second.
+要显示红色, 我们用 `SBI` 把 PB1 打开, 再用 `CBI` (清零 I/O 寄存器中的某一位) 确保绿和蓝是关着的. 然后等 1000 毫秒 (整整 1 秒)!
 
 ```assembly
-  CBI    PORTB, PB1                    ; Turn Red OFF
-  CBI    PORTB, PB2                    ; Turn Green OFF
-  SBI    PORTB, PB3                    ; Turn Blue ON
-  RCALL  delay_1000ms                  ; Wait 1000ms
+  CBI    PORTB, PB1                    ; 关闭红色
+  SBI    PORTB, PB2                    ; 打开绿色
+  CBI    PORTB, PB3                    ; 关闭蓝色
+  RCALL  delay_1000ms                  ; 等待 1000ms
 ```
-Finally, we turn Red and Green OFF, and turn Blue ON! We wait one more second.
+接下来, 我们关掉红色, 打开绿色, 让蓝色保持关闭, 再等一秒.
 
 ```assembly
-  CBI    PORTB, PB1                    ; Turn Red OFF
-  CBI    PORTB, PB2                    ; Turn Green OFF
-  CBI    PORTB, PB3                    ; Turn Blue OFF
-  RCALL  delay_1000ms                  ; Wait 1000ms
-  RJMP   .loop                         ; Infinite loop
+  CBI    PORTB, PB1                    ; 关闭红色
+  CBI    PORTB, PB2                    ; 关闭绿色
+  SBI    PORTB, PB3                    ; 打开蓝色
+  RCALL  delay_1000ms                  ; 等待 1000ms
 ```
-We finish the animation by turning all three LEDs OFF for one second. The `RJMP .loop` command forces the microcontroller back to the top of the animation, running our beautiful color cycle forever!
+最后, 我们关掉红色和绿色, 打开蓝色! 再等一秒.
+
+```assembly
+  CBI    PORTB, PB1                    ; 关闭红色
+  CBI    PORTB, PB2                    ; 关闭绿色
+  CBI    PORTB, PB3                    ; 关闭蓝色
+  RCALL  delay_1000ms                  ; 等待 1000ms
+  RJMP   .loop                         ; 无限循环
+```
+我们用三颗 LED 全灭一秒来收尾. `RJMP .loop` 命令把单片机送回动画的开头, 让这段漂亮的变色循环永远跑下去!
 
 ---
 
-Congratulations! You now know how to orchestrate multiple hardware pins to create animations in pure Assembly!
+恭喜! 你现在已经会用纯汇编调度多个硬件引脚来做动画了!

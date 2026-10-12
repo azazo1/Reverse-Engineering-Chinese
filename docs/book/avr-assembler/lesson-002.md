@@ -1,88 +1,88 @@
-# Lesson 002 - Blink
+# Lesson 002 - 闪烁
 
-## What Are We Building Today?
+## 今天我们要做什么?
 
-Welcome to Lesson 2! Have you ever wanted to control physical things with code? Today, we are going to do exactly that by writing a program that turns a real, physical LED on and off! 
+欢迎来到第 2 课! 你有没有想过用代码去控制真实的物理世界? 今天我们就来做这件事, 写一个程序把一颗实实在在的 LED 点亮又熄灭!
 
-By the end of this lesson, the tiny built-in LED on your ATmega328P board (which is connected to Pin 13) will blink on and off every half second forever.
+学完这一课, 你的 ATmega328P 板子上那颗小小的板载 LED (它接在 Pin 13 上) 会永远每半秒闪一下.
 
 [CODE](https://github.com/mytechnotalent/Assembler/blob/main/lessons/002/lesson.s)
 
 ---
 
-## Hardware Check: Where is the LED?
+## 硬件检查: LED 在哪儿?
 
-If you look closely at your Arduino UNO or compatible board, you'll see a tiny LED labeled "L" right next to the number 13 on the side headers. 
-This LED is physically wired to **Pin 5 on Port B** of the ATmega328P microcontroller (we call it `PB5` for short). 
-To turn it on, we just have to tell the microcontroller to send 5 Volts of electricity to that specific pin.
+如果你凑近看 Arduino UNO 或者兼容板, 会看到侧边排针上数字 13 的旁边有一颗标着 "L" 的小 LED.
+这颗 LED 在电路上直接连到 ATmega328P 的 **Port B 的第 5 脚** (我们简称 `PB5`).
+要点亮它, 我们只需要让单片机往那个引脚送出 5 伏电压.
 
-## Setting Up the Registers (The Switches)
+## 设置寄存器 (那些开关)
 
-In Lesson 1, we learned that the microcontroller uses **Registers** (tiny, fast memory boxes) to do things. 
-To control pins on the microcontroller, we use two very special hardware registers:
+第 1 课里我们学过, 单片机用 **寄存器** (又小又快的存储盒子) 来干活.
+要控制单片机上的引脚, 我们要用两个非常特殊的硬件寄存器:
 
-1. **DDRB (Data Direction Register B)**: This register acts like a gatekeeper for the pins on Port B. By default, pins are "Inputs" (like a microphone listening for a signal). If we want to push electricity *out* to turn on an LED, we have to tell the gatekeeper to switch that specific pin to be an "Output".
-2. **PORTB (Data Register B)**: Once a pin is an output, we use this register to control the electricity. If we write a `1` to the pin in this register, it turns ON (5 Volts). If we write a `0`, it turns OFF (0 Volts).
+1. **DDRB (Data Direction Register B)**: 这个寄存器就像 Port B 各引脚的看门人. 默认情况下, 引脚都是"输入" (就像一只等着听信号的麦克风). 如果我们想把电*送出去*点亮 LED, 就得告诉看门人把那个引脚改成"输出".
+2. **PORTB (Data Register B)**: 一旦某个引脚成了输出, 我们就用这个寄存器来控制电流. 如果往这个寄存器对应的位写 `1`, 引脚就打开 (5 伏). 如果写 `0`, 引脚就关闭 (0 伏).
 
 ---
 
-## Step-by-Step Code Walkthrough
+## 逐行代码讲解
 
-Let's break down the assembly code that makes this happen!
+我们把实现这一切的汇编代码拆开看看!
 
-### 1. The Defines
-At the very top of our code, we use `.equ` to give easy-to-read names to raw memory addresses.
+### 1. 定义部分
+在代码最开头, 我们用 `.equ` 给原始的内存地址起好记的名字.
 ```assembly
-.equ DDRB,   0x04                      ; Data Direction Register for Port B
-.equ PORTB,  0x05                      ; Data Register for Port B
-.equ PB5,    5                         ; Pin 5 on Port B
+.equ DDRB,   0x04                      ; Port B 的数据方向寄存器
+.equ PORTB,  0x05                      ; Port B 的数据寄存器
+.equ PB5,    5                         ; Port B 的第 5 脚
 ```
-Instead of memorizing that the Data Register for Port B is at memory address `0x05`, we just name it `PORTB`. And since the LED is connected to pin number 5 on that port, we name it `PB5`.
+与其去背 Port B 的数据寄存器在内存地址 `0x05`, 我们直接给它起名叫 `PORTB`. 既然 LED 接在这个端口的第 5 号引脚上, 我们就叫它 `PB5`.
 
-### 2. The Main Program
-After setting up our stack (just like we did in Lesson 1), we hit this line of code:
+### 2. 主程序
+把栈设置好之后 (和第 1 课一样), 我们会碰到这一行代码:
 ```assembly
-main:                                  
+main:
 ...
-  SBI    DDRB, PB5                     ; Set PB5 as an output pin
+  SBI    DDRB, PB5                     ; 把 PB5 设为输出引脚
 ```
-`SBI` stands for **Set Bit in I/O Register**. It goes to the `DDRB` register (the gatekeeper), looks at bit number 5 (`PB5`), and sets it to a `1`. 
-Boom! The pin is now an Output. It is ready to send electricity out to the LED.
+`SBI` 是 **Set Bit in I/O Register** (置位 I/O 寄存器中的某一位) 的缩写. 它跑到 `DDRB` 寄存器 (也就是看门人) 那里, 找到第 5 位 (`PB5`), 把它设成 `1`.
+砰! 这个引脚现在就是输出了. 它准备好把电送给 LED 了.
 
-### 3. The Infinite Blink Loop
-Now we want the LED to blink forever, so we create a loop:
+### 3. 无限闪烁循环
+现在我们想让 LED 一直闪下去, 所以写一个循环:
 ```assembly
-.loop:                                 
-  SBI    PORTB, PB5                    ; Set PB5 high (turn LED on)
+.loop:
+  SBI    PORTB, PB5                    ; 把 PB5 置高 (点亮 LED)
 ```
-Here is that `SBI` instruction again! This time we are setting bit 5 in the `PORTB` register. This tells the microcontroller to push 5 Volts of electricity out of Pin 13. The LED turns ON!
-
-```assembly
-  RCALL  delay_500ms                   ; Wait 500ms
-```
-We use `RCALL` to jump to our delay subroutine. If we didn't wait, the LED would turn on and off millions of times a second, and it would just look like it was dimly lit! We wait 500 milliseconds (half a second) so our human eyes can see it.
+又是这条 `SBI` 指令! 这次我们把 `PORTB` 寄存器里的第 5 位置位. 这等于告诉单片机从 Pin 13 送出 5 伏电压. LED 亮了!
 
 ```assembly
-  CBI    PORTB, PB5                    ; Set PB5 low (turn LED off)
+  RCALL  delay_500ms                   ; 等待 500ms
 ```
-`CBI` stands for **Clear Bit in I/O Register**. It does the exact opposite of `SBI`. It goes to `PORTB`, looks at bit 5, and clears it to `0`. The electricity stops flowing, and the LED turns OFF.
+我们用 `RCALL` 跳到延时子程序. 如果不等, LED 一秒钟会开关上百万次, 看上去只是微微发亮而已! 我们等 500 毫秒 (半秒), 这样人眼才能看清.
 
 ```assembly
-  RCALL  delay_500ms                   ; Wait 500ms
-  RJMP   .loop                         ; Infinite loop
+  CBI    PORTB, PB5                    ; 把 PB5 置低 (熄灭 LED)
 ```
-We wait another half second while the LED is off. Finally, `RJMP .loop` (Relative Jump) forces the processor to jump all the way back up to `.loop:` so it can do the whole thing again. Forever!
+`CBI` 是 **Clear Bit in I/O Register** (清零 I/O 寄存器中的某一位) 的缩写. 它做的事和 `SBI` 正好相反. 它跑到 `PORTB` 那里, 找到第 5 位, 把它清成 `0`. 电流停了, LED 熄灭.
+
+```assembly
+  RCALL  delay_500ms                   ; 等待 500ms
+  RJMP   .loop                         ; 无限循环
+```
+LED 熄灭的时候我们再等半秒. 最后 `RJMP .loop` (相对跳转) 逼着处理器一路跳回 `.loop:`, 把刚才的事再做一遍. 永远做下去!
 
 ---
 
-## Time Travel (Delays)
-Just like in Lesson 1, we use the `delay_500ms` subroutine to pause time.
+## 时间旅行 (延时)
+和第 1 课一样, 我们用 `delay_500ms` 子程序来让时间暂停一会儿.
 ```assembly
-delay_500ms:                           
-  LDI    R18, 0x18                     ; High byte of delay counter
-  LDI    R17, 0x69                     ; Mid byte of delay counter
-  LDI    R16, 0xFE                     ; Low byte of delay counter
+delay_500ms:
+  LDI    R18, 0x18                     ; 延时计数器高字节
+  LDI    R17, 0x69                     ; 延时计数器中字节
+  LDI    R16, 0xFE                     ; 延时计数器低字节
 ```
-Because the ATmega328P processes 16 million instructions every single second, waiting half a second requires it to count backwards from a massive number. We link three 8-bit registers (R16, R17, and R18) together to hold that huge number, and then use `SUBI` and `SBCI` to subtract 1 over and over until they hit zero. 
+因为 ATmega328P 每秒钟要处理 1600 万条指令, 想等半秒就得让它从一个巨大的数字开始倒数. 我们把三个 8 位寄存器 (R16, R17 和 R18) 串起来装下这个巨大的数字, 然后用 `SUBI` 和 `SBCI` 一遍又一遍地减 1, 直到它们都变成零.
 
-Congratulations! You've just controlled physical hardware using pure Assembly!
+恭喜! 你刚刚用纯汇编控制了一个真实的硬件!

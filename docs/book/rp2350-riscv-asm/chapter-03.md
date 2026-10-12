@@ -1,45 +1,45 @@
-# Chapter 3: Memory — Addresses, Bytes, Words, and Endianness
+# Chapter 3: 内存 - 地址, 字节, 字与字节序
 
-## Introduction
+## 引言
 
-Memory is where our firmware lives and where the RP2350 stores the data it operates on.  This chapter explains how memory is organized, how addresses work, what endianness means, and how the RP2350's address map divides 4 GB of address space among flash, SRAM, and peripherals.
+内存是固件栖身的地方, 也是 RP2350 存放它所处理数据的地方. 本章讲清内存是如何组织的, 地址是怎么工作的, 字节序是什么意思, 以及 RP2350 的地址映射如何把 4 GB 地址空间分给 flash, SRAM 和外设.
 
-## The Address Space
+## 地址空间
 
-The RISC-V Hazard3 core in the RP2350 has a 32-bit address bus, giving it a 4 GB address space (0x00000000 to 0xFFFFFFFF).  Every byte in this space has a unique numeric address.  Not all addresses correspond to physical memory — many ranges are unimplemented and will generate a bus fault if accessed.
+RP2350 里的 RISC-V Hazard3 内核有 32 位地址总线, 因此地址空间是 4 GB (0x00000000 到 0xFFFFFFFF). 这个空间里的每个字节都有唯一的数字地址. 并不是所有地址都对应真实的存储器 - 很多区间并没有实现, 访问它们会触发总线错误.
 
-The RP2350 maps different resources to different address ranges:
+RP2350 把不同的资源映射到不同的地址区间:
 
-| Range | Size | Resource |
+| 区间 | 大小 | 资源 |
 |-------|------|----------|
-| 0x00000000–0x0FFFFFFF | 256 MB | Internal ROM (boot ROM) |
-| 0x10000000–0x11FFFFFF | 32 MB | External flash (XIP) |
-| 0x20000000–0x2007FFFF | 512 KB | SRAM |
-| 0x40000000–0x4FFFFFFF | 256 MB | APB peripherals |
-| 0xD0000000–0xD00FFFFF | 1 MB | SIO (Single-cycle I/O) |
-| 0xE0000000–0xE00FFFFF | 1 MB | PPB (Private Peripheral Bus) |
+| 0x00000000-0x0FFFFFFF | 256 MB | 内部 ROM (启动 ROM) |
+| 0x10000000-0x11FFFFFF | 32 MB | 外部 flash (XIP) |
+| 0x20000000-0x2007FFFF | 512 KB | SRAM |
+| 0x40000000-0x4FFFFFFF | 256 MB | APB 外设 |
+| 0xD0000000-0xD00FFFFF | 1 MB | SIO (单周期 I/O) |
+| 0xE0000000-0xE00FFFFF | 1 MB | PPB (私有外设总线) |
 
-Our firmware executes from flash (0x10000000) and uses SRAM (0x20000000) for the stack.
+我们的固件从 flash (0x10000000) 执行, 并用 SRAM (0x20000000) 存放栈.
 
-## Bytes, Halfwords, and Words
+## 字节, 半字和字
 
-| Unit | Size | Aligned Address |
+| 单位 | 大小 | 对齐地址 |
 |------|------|----------------|
-| Byte | 8 bits | Any address |
-| Halfword | 16 bits | Multiple of 2 |
-| Word | 32 bits | Multiple of 4 |
+| 字节 (Byte) | 8 位 | 任意地址 |
+| 半字 (Halfword) | 16 位 | 2 的倍数 |
+| 字 (Word) | 32 位 | 4 的倍数 |
 
-All RP2350 peripheral registers are 32 bits wide and must be accessed as words at word-aligned addresses.
+RP2350 的所有外设寄存器都是 32 位宽, 必须以字为单位在字对齐的地址上访问.
 
-## Alignment
+## 对齐
 
-Alignment means a data item's address is a multiple of its size.  A word at address 0x40028084 is word-aligned because 0x40028084 is divisible by 4.  Unaligned access on RISC-V may cause a load/store address misaligned exception.
+对齐的意思是: 一个数据项的地址是它自身大小的整数倍. 位于地址 0x40028084 的字是字对齐的, 因为 0x40028084 能被 4 整除. 在 RISC-V 上做非对齐访问, 可能触发加载/存储地址未对齐异常.
 
-## Little-Endian Byte Order
+## 小端字节序
 
-The RP2350 stores multi-byte values in **little-endian** order: the least significant byte occupies the lowest address.
+RP2350 用**小端 (little-endian)** 方式存放多字节数值: 最低有效字节占据最低的地址.
 
-The 32-bit value 0x12345678 stored at address 0x20000000:
+32 位数值 0x12345678 存放在地址 0x20000000 时:
 
 ```
 Address:   0x20000000  0x20000001  0x20000002  0x20000003
@@ -47,64 +47,64 @@ Content:      0x78        0x56        0x34        0x12
               (LSB)                               (MSB)
 ```
 
-This is important when examining raw memory dumps during debugging.
+调试时查看原始内存转储, 这一点很重要.
 
-## Memory-Mapped Registers
+## 内存映射寄存器
 
-The RP2350 does not use separate I/O instructions.  Instead, hardware peripherals appear as memory addresses.  Writing to address 0x40048000 does not store a value in RAM — it configures the crystal oscillator's control register.
-
-```asm
-  li    t0, 0x40048000                           # XOSC_CTRL address
-  li    t1, 0x00FABAA0                           # frequency range value
-  sw    t1, 0(t0)                                # configure XOSC
-```
-
-This is called **memory-mapped I/O** and is the mechanism behind every hardware configuration in our firmware.
-
-## The Stack
-
-The stack is a region of SRAM used for saving return addresses and temporary data.  It grows **downward** — from high addresses to low addresses.  On RISC-V, the stack pointer is register `sp` (x2).
-
-Our firmware sets the stack pointer to 0x20082000 (top of a 32 KB stack region):
+RP2350 没有单独的 I/O 指令. 硬件外设直接以内存地址的形式出现. 往地址 0x40048000 写数据并不是把值存进 RAM - 而是在配置晶振的控制寄存器.
 
 ```asm
-  li    sp, STACK_TOP                            # set SP to top of RAM stack
+  li    t0, 0x40048000                           # XOSC_CTRL 地址
+  li    t1, 0x00FABAA0                           # 频率范围值
+  sw    t1, 0(t0)                                # 配置 XOSC
 ```
 
-When a `call` instruction executes, the return address is saved in `ra` (x1).  Functions that call other functions save `ra` on the stack.
+这叫作**内存映射 I/O (memory-mapped I/O)**, 我们固件里每一次硬件配置都是靠它完成的.
 
-## Flash Memory (XIP)
+## 栈
 
-Our firmware is stored in external flash memory starting at address 0x10000000.  The RP2350 supports **Execute-In-Place (XIP)**, meaning the processor fetches instructions directly from flash through a cache — no need to copy the program to SRAM first.
+栈是 SRAM 里的一块区域, 用来保存返回地址和临时数据. 它向**下**生长 - 从高地址走向低地址. 在 RISC-V 上, 栈指针是寄存器 `sp` (x2).
 
-The first 4 KB of flash must contain the IMAGE_DEF metadata block so the boot ROM can recognize and launch our firmware.
+我们的固件把栈指针设为 0x20082000 (32 KB 栈区的顶端):
+
+```asm
+  li    sp, STACK_TOP                            # 把 SP 设为 RAM 栈顶
+```
+
+`call` 指令执行时, 返回地址保存在 `ra` (x1) 里. 那些还要调用别的函数的函数, 会把 `ra` 存到栈上.
+
+## Flash 存储器 (XIP)
+
+我们的固件存放在从地址 0x10000000 开始的外部 flash 里. RP2350 支持**就地执行 (Execute-In-Place, XIP)**, 也就是说处理器通过缓存直接从 flash 取指令 - 不必先把程序复制到 SRAM.
+
+flash 的头 4 KB 必须包含 IMAGE_DEF 元数据块, 这样启动 ROM 才能认出并启动我们的固件.
 
 ## SRAM
 
-The RP2350 has 520 KB of on-chip SRAM starting at 0x20000000.  We use a 32 KB region at the top of the first 512 KB for our stack.  For this blink driver, SRAM is used only for the stack — all code executes from flash.
+RP2350 有 520 KB 片上 SRAM, 起始地址 0x20000000. 我们取前 512 KB 顶部的一块 32 KB 区域作为栈. 对这个闪烁驱动来说, SRAM 只用来放栈 - 所有代码都从 flash 执行.
 
-## Reading the Address Map
+## 读地址映射
 
-When you see an address in our firmware, you can immediately identify what it accesses:
+当你在固件里看到一个地址, 可以立刻判断它在访问什么:
 
-| Address | What It Is |
+| 地址 | 是什么 |
 |---------|------------|
-| 0x10000000 | Start of flash — IMAGE_DEF block goes here |
-| 0x20082000 | Stack top (top of SRAM + 8 KB offset) |
-| 0x40010048 | CLK_PERI_CTRL — peripheral clock control |
-| 0x40020000 | RESETS_RESET — reset controller |
-| 0x40028000 | IO_BANK0 — GPIO function select |
-| 0x40038000 | PADS_BANK0 — GPIO pad control |
-| 0x40048000 | XOSC — crystal oscillator |
-| 0xD0000000 | SIO — single-cycle I/O for GPIO |
+| 0x10000000 | flash 起点 - IMAGE_DEF 块放在这里 |
+| 0x20082000 | 栈顶 (SRAM 顶部加 8 KB 偏移) |
+| 0x40010048 | CLK_PERI_CTRL - 外设时钟控制 |
+| 0x40020000 | RESETS_RESET - 复位控制器 |
+| 0x40028000 | IO_BANK0 - GPIO 功能选择 |
+| 0x40038000 | PADS_BANK0 - GPIO pad 控制 |
+| 0x40048000 | XOSC - 晶振 |
+| 0xD0000000 | SIO - 用于 GPIO 的单周期 I/O |
 
-Every address in our constants.s file maps to a specific hardware function.
+constants.s 里的每一个地址都对应一项具体的硬件功能.
 
-## Summary
+## 小结
 
-- The RP2350 has a 32-bit address space (4 GB) divided among flash, SRAM, and peripherals.
-- All peripheral registers are memory-mapped — accessed with normal load/store instructions.
-- Data is stored in little-endian byte order.
-- The stack lives in SRAM and grows downward from STACK_TOP (0x20082000).
-- Flash supports execute-in-place; our code runs directly from 0x10000000.
-- Each address range identifies the hardware resource being accessed.
+- RP2350 有 32 位地址空间 (4 GB), 划分给 flash, SRAM 和外设.
+- 所有外设寄存器都是内存映射的 - 用普通的加载/存储指令访问.
+- 数据按小端字节序存放.
+- 栈位于 SRAM, 从 STACK_TOP (0x20082000) 向下生长.
+- Flash 支持就地执行; 我们的代码直接在 0x10000000 上运行.
+- 每个地址区间都对应正在访问的硬件资源.

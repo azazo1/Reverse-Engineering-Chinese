@@ -1,79 +1,79 @@
-# Lesson 010 - Ultrasonic Sensor
+# Lesson 010 - 超声波传感器
 
-## What Are We Building Today?
+## 今天我们要做什么?
 
-Today we are going to build a high-speed digital stopwatch in pure assembly! 
+今天我们要用纯汇编做一块高速数字秒表!
 
-We will use an **HC-SR04 Ultrasonic Sensor** to measure distance using echolocation—exactly like a bat or a submarine. The sensor emits a pulse of high-frequency sound, and listens for the echo to bounce off an object and return. Because we know the speed of sound, we can calculate how far away the object is simply by timing how long the echo took!
+我们要用 **HC-SR04 超声波传感器**, 靠回声定位来测距离 - 跟蝙蝠或者潜艇一模一样的原理. 传感器先发出一小段高频声音, 然后听着回声从物体上弹回来. 既然我们知道声速, 那么只要给回声计个时, 就能算出物体离得多远!
 
-We will build a "Parking Sensor". If you place an object closer than 10 centimeters, the built-in LED on Pin 13 will turn ON!
+我们要做一个"倒车雷达". 如果你把物体放在 10 厘米以内, Pin 13 上的板载 LED 就会亮!
 
 [CODE](https://github.com/mytechnotalent/Assembler/blob/main/lessons/010/lesson.s)
 
 ---
 
-## Hardware Check: The HC-SR04 Protocol
+## 硬件检查: HC-SR04 的协议
 
-The HC-SR04 is a very simple module with 4 pins:
-- **VCC (5V)** & **GND** for power.
-- **Trigger (PD2 / Pin 2)**: We send a tiny 10-microsecond electrical pulse to this pin to tell the module, "Ping now!"
-- **Echo (PD3 / Pin 3)**: Right after pinging, this pin goes HIGH (5 Volts). When the sound bounces back and hits the microphone, this pin goes LOW (0 Volts). 
+HC-SR04 是一个很简单的模块, 一共 4 个引脚:
+- **VCC (5V)** 和 **GND** 用来供电.
+- **Trigger (PD2 / Pin 2)**: 我们往这个引脚发一个 10 微秒的电脉冲, 告诉模块"现在发一次!"
+- **Echo (PD3 / Pin 3)**: 发波之后, 这个引脚马上变成高电平 (5 伏). 等声音弹回来打到麦克风上, 这个引脚又变回低电平 (0 伏).
 
-Our entire job is to use our microcontroller as an insanely fast stopwatch to count how long the Echo pin stays HIGH.
+我们全部的活儿, 就是把这颗单片机当成一块快到不可思议的秒表, 数一数 Echo 引脚保持高电平有多久.
 
-## The Code Walkthrough
+## 代码讲解
 
-### 1. The 10 Microsecond Trigger Pulse
-To start a measurement, we set the Trigger pin HIGH, wait exactly 10 microseconds, and set it LOW. 
+### 1. 10 微秒的触发脉冲
+要开始一次测量, 我们把 Trigger 拉高, 精确地等 10 微秒, 再把它拉低.
 
 ```assembly
-  SBI    PORTD, PD2                    ; Set Trigger HIGH
-  RCALL  delay_10us                    ; Wait 10 microseconds
-  CBI    PORTD, PD2                    ; Set Trigger LOW
+  SBI    PORTD, PD2                    ; 把 Trigger 拉高
+  RCALL  delay_10us                    ; 等 10 微秒
+  CBI    PORTD, PD2                    ; 把 Trigger 拉低
 ```
-We wrote a tiny `delay_10us` subroutine that loops exactly 53 times, burning just enough clock cycles at 16 MHz to take exactly 10 millionths of a second.
+我们写了一个小小的 `delay_10us` 子程序, 它正好循环 53 次, 在 16 MHz 下烧掉刚刚好的时钟周期, 让时间正好是百万分之十秒.
 
-### 2. Waiting for the Echo to Start
+### 2. 等待回声开始
 ```assembly
-.wait_echo_high:                       
-  SBIS   PIND, PD3                     ; Skip next if Echo is HIGH
-  RJMP   .wait_echo_high               ; Keep waiting for Echo to go HIGH
+.wait_echo_high:
+  SBIS   PIND, PD3                     ; 若 Echo 为高电平则跳过下一条
+  RJMP   .wait_echo_high               ; 一直等到 Echo 变高
 ```
-We use `SBIS` (Skip if Bit is Set) to check the Echo pin. We loop infinitely in this tight two-line block until the Echo pin finally flips to HIGH, indicating the sound pulse has been fired into the air.
+我们用 `SBIS` (位被置位就跳过) 来检查 Echo 引脚. 我们在这个只有两行的紧凑小循环里无限打转, 直到 Echo 引脚终于翻成高电平, 说明声音脉冲已经射出去了.
 
-### 3. The 16-Cycle Microsecond Loop
-This is the most beautiful part of the code! At 16 MHz, 1 microsecond is exactly 16 clock cycles. We carefully crafted a counting loop that takes exactly 16 clock cycles to execute.
+### 3. 16 个周期的微秒循环
+这是整段代码里最漂亮的部分! 在 16 MHz 下, 1 微秒正好是 16 个时钟周期. 我们精心雕琢了一个计数循环, 让它正好花掉 16 个时钟周期.
 
 ```assembly
-.measure_high:                         
-  SBIC   PIND, PD3                     ; Skip if Echo is LOW (1 cycle if false)
-  RJMP   .echo_is_high                 ; Jump if HIGH (2 cycles)
-  RJMP   .done                         ; Echo went LOW, stop measuring!
-.echo_is_high:                         
-  ADIW   R24, 1                        ; Increment microsecond counter (2 cycles)
-  NOP                                  ; Pad loop to exactly 16 cycles (1us)
+.measure_high:
+  SBIC   PIND, PD3                     ; 若 Echo 为低电平则跳过 (不成立时 1 周期)
+  RJMP   .echo_is_high                 ; 若为高电平则跳转 (2 周期)
+  RJMP   .done                         ; Echo 变低, 停止测量!
+.echo_is_high:
+  ADIW   R24, 1                        ; 微秒计数器加 1 (2 周期)
+  NOP                                  ; 把循环补齐到正好 16 周期 (1us)
   ... (8 more NOPs)
-  RJMP   .measure_high                 ; Loop back (2 cycles. Total loop = 16 cycles)
+  RJMP   .measure_high                 ; 绕回去 (2 周期. 整个循环 = 16 周期)
 ```
-For every time this loop runs, exactly 1 microsecond has passed. We use `ADIW` (Add Immediate to Word) to increment a 16-bit counter in `R25:R24`. 
-Because our loop takes exactly 1 microsecond, the final number sitting in `R25:R24` when the Echo pin goes LOW will literally be the length of the echo in microseconds! 
+这个循环每跑一次, 就正好过去 1 微秒. 我们用 `ADIW` (Add Immediate to Word) 给 `R25:R24` 里的 16 位计数器加 1.
+因为我们的循环正好耗时 1 微秒, 所以当 Echo 引脚变低时, `R25:R24` 里剩下的那个数字, 就字面意义上等于回声的微秒数!
 
-### 4. Math and the Speed of Sound
-The speed of sound is roughly 340 meters per second, which means sound travels 1 centimeter in about 29.4 microseconds. 
-Because the sound has to travel to the object **and** back, a distance of 10 cm takes `10 * 29.4 * 2 = ~588 microseconds`.
+### 4. 数学与声速
+声速大约是每秒 340 米, 也就是说声音大约 29.4 微秒走 1 厘米.
+因为声音要跑到物体那儿**再**跑回来, 所以 10 厘米的距离要花 `10 * 29.4 * 2 = ~588 microseconds`.
 
 ```assembly
-.done:                                 
-  LDI    R16, 0x4C                     ; Low byte of 588us (10cm)
-  CP     R24, R16                      ; Compare lower byte
-  LDI    R16, 0x02                     ; High byte of 588us
-  CPC    R25, R16                      ; Compare higher byte
-  BRSH   .too_far                      ; If >= 10cm, jump
-  SBI    PORTB, PB5                    ; Turn LED ON (Object is close!)
+.done:
+  LDI    R16, 0x4C                     ; 588us (10cm) 的低字节
+  CP     R24, R16                      ; 比较低字节
+  LDI    R16, 0x02                     ; 588us 的高字节
+  CPC    R25, R16                      ; 比较高字节
+  BRSH   .too_far                      ; 若 >= 10cm 就跳转
+  SBI    PORTB, PB5                    ; 点亮 LED (物体很近了!)
 ```
-We simply take our counter (in `R25:R24`) and compare it to `588` (which is `0x024C` in hex).
-If the echo took less than 588 microseconds, the object is closer than 10cm, so we turn on the built-in LED!
+我们只要把计数器 (`R25:R24`) 里的值拿来跟 `588` (十六进制是 `0x024C`) 比一比.
+如果回声花的时间少于 588 微秒, 说明物体比 10cm 更近, 于是我们点亮板载 LED!
 
 ---
 
-Congratulations! You have successfully implemented a sub-millisecond precision timing loop and radar physics in bare metal assembly!
+恭喜! 你已经在裸机汇编里实现了亚毫秒级精度的计时循环和雷达物理!

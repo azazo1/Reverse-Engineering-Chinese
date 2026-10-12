@@ -1,113 +1,113 @@
-# Chapter 24: reset_handler.s — The Boot Sequence
+# Chapter 24: reset_handler.s - 引导流程
 
-## Introduction
+## 引言
 
-After the hardware loads the stack pointer and jumps to the reset vector, `Reset_Handler` takes control.  It is the first code we write that actually executes.  Its job is simple but critical: call each initialization function in the correct order, then hand control to the main application.  This chapter examines the boot sequence and explains why the order matters.
+硬件装入栈指针并跳到复位向量之后, 就轮到 `Reset_Handler` 接管了. 它是我们写的第一段真正会执行的代码. 它的任务简单但关键: 按正确的顺序调用各个初始化函数, 然后把控制权交给主程序. 本章剖析这段引导流程, 并说明为什么顺序很重要.
 
-## Complete Source Code
+## 完整源码
 
 ```asm
-.syntax unified                                  // use unified assembly syntax
-.cpu cortex-m33                                  // target Cortex-M33 core
-.thumb                                           // use Thumb instruction set
+.syntax unified                                  // 使用统一汇编语法
+.cpu cortex-m33                                  // 目标核心为 Cortex-M33
+.thumb                                           // 使用 Thumb 指令集
 
 .include "constants.s"
 
-.section .text                                   // code section
-.align 2                                         // align to 4-byte boundary
+.section .text                                   // 代码段
+.align 2                                         // 对齐到 4 字节边界
 
-.global Reset_Handler                            // export Reset_Handler symbol
+.global Reset_Handler                            // 导出 Reset_Handler 符号
 .type Reset_Handler, %function
 Reset_Handler:
-  bl    Init_Stack                               // initialize MSP/PSP and limits
-  bl    Init_XOSC                                // initialize external crystal oscillator
-  bl    Enable_XOSC_Peri_Clock                   // enable XOSC peripheral clock
-  bl    Init_Subsystem                           // initialize subsystems
-  bl    Enable_Coprocessor                       // enable CP0 coprocessor
-  b     main                                     // branch to main loop
+  bl    Init_Stack                               // 初始化 MSP/PSP 与上限
+  bl    Init_XOSC                                // 初始化外部晶振
+  bl    Enable_XOSC_Peri_Clock                   // 使能 XOSC 外设时钟
+  bl    Init_Subsystem                           // 初始化各子系统
+  bl    Enable_Coprocessor                       // 启用 CP0 协处理器
+  b     main                                     // 跳转到主循环
 .size Reset_Handler, . - Reset_Handler
 ```
 
-## Symbol Metadata
+## 符号元数据
 
 ```asm
-.global Reset_Handler                            // export Reset_Handler symbol
+.global Reset_Handler                            // 导出 Reset_Handler 符号
 .type Reset_Handler, %function
 ```
 
-`Reset_Handler` is global because vector_table.s references it.  The `.type` directive marks it as a function for the linker and debugger.
+`Reset_Handler` 是全局符号, 因为 vector_table.s 引用了它. `.type` 指令把它标记为函数, 供链接器和调试器使用.
 
 ```asm
 .size Reset_Handler, . - Reset_Handler
 ```
 
-`.size` calculates the function's byte size (current address minus start address) and records it in the symbol table.  This aids debuggers in displaying function boundaries.
+`.size` 计算函数的字节大小 (当前地址减去起始地址), 并把它记录到符号表里. 这有助于调试器显示函数的边界.
 
-## The Initialization Sequence
+## 初始化顺序
 
-Each `bl` (branch with link) call does one initialization step:
+每个 `bl` (带链接的分支) 调用完成一个初始化步骤:
 
-### Step 1: Init_Stack (stack.s)
-
-```asm
-  bl    Init_Stack                               // initialize MSP/PSP and limits
-```
-
-Sets MSP, PSP, MSPLIM, and PSPLIM.  This must be first because every subsequent function uses the stack (push/pop).
-
-**Why first?** The hardware already loaded MSP from the vector table, so the stack technically works.  But Init_Stack also sets the limit registers, which catch overflow.  Calling it first ensures overflow protection is active for all subsequent calls.
-
-### Step 2: Init_XOSC (xosc.s)
+### 第 1 步: Init_Stack (stack.s)
 
 ```asm
-  bl    Init_XOSC                                // initialize external crystal oscillator
+  bl    Init_Stack                               // 初始化 MSP/PSP 与上限
 ```
 
-Configures the external crystal oscillator and waits for it to stabilize.  The chip initially runs on the internal ring oscillator (~14.5 MHz).  XOSC provides a stable 12 MHz reference.
+设置 MSP, PSP, MSPLIM 和 PSPLIM. 这一步必须放在最前面, 因为后面每个函数都要用栈 (push/pop).
 
-**Why second?** The XOSC must be stable before we can use it as a clock source for peripherals.
+**为什么要第一个?** 硬件已经从向量表装入了 MSP, 所以严格说栈已经能用. 但 Init_Stack 还会设置上限寄存器, 用来捕获溢出. 先调用它, 才能保证后续所有调用都处在溢出保护之下.
 
-### Step 3: Enable_XOSC_Peri_Clock (xosc.s)
+### 第 2 步: Init_XOSC (xosc.s)
 
 ```asm
-  bl    Enable_XOSC_Peri_Clock                   // enable XOSC peripheral clock
+  bl    Init_XOSC                                // 初始化外部晶振
 ```
 
-Configures CLK_PERI to use XOSC as its source and enables the clock output.
+配置外部晶振并等待它稳定. 芯片起初运行在内部环形振荡器上 (约 14.5 MHz). XOSC 提供一个稳定的 12 MHz 参考时钟.
 
-**Why third?** The XOSC must be stable (step 2) before we route it to peripherals.  Peripherals need a clock to function.
+**为什么要第二个?** 只有 XOSC 稳定之后, 才能把它当作外设的时钟源.
 
-### Step 4: Init_Subsystem (reset.s)
+### 第 3 步: Enable_XOSC_Peri_Clock (xosc.s)
 
 ```asm
-  bl    Init_Subsystem                           // initialize subsystems
+  bl    Enable_XOSC_Peri_Clock                   // 使能 XOSC 外设时钟
 ```
 
-Releases IO_BANK0 from reset and waits for the reset to complete.
+把 CLK_PERI 的时钟源配置为 XOSC, 并打开时钟输出.
 
-**Why fourth?** The peripheral clock must be running (step 3) before we release peripherals from reset.  A peripheral without a clock cannot complete its reset sequence.
+**为什么要第三个?** 必须等 XOSC 稳定 (第 2 步) 之后, 才能把它接到外设上. 外设需要时钟才能工作.
 
-### Step 5: Enable_Coprocessor (coprocessor.s)
+### 第 4 步: Init_Subsystem (reset.s)
 
 ```asm
-  bl    Enable_Coprocessor                       // enable CP0 coprocessor
+  bl    Init_Subsystem                           // 初始化各子系统
 ```
 
-Grants full access to coprocessor 0 (SIO) by modifying CPACR and executing barrier instructions.
+把 IO_BANK0 从复位中释放, 并等待复位过程完成.
 
-**Why fifth?** The coprocessor is used for GPIO operations in main.  It must be enabled before any `mcrr` instruction executes.
+**为什么要第四个?** 必须先让外设时钟跑起来 (第 3 步), 才能把外设从复位中释放. 没有时钟的外设无法完成它的复位流程.
 
-### Step 6: Branch to main
+### 第 5 步: Enable_Coprocessor (coprocessor.s)
 
 ```asm
-  b     main                                     // branch to main loop
+  bl    Enable_Coprocessor                       // 启用 CP0 协处理器
 ```
 
-Note the use of `b` (branch) instead of `bl` (branch with link).  `b` does not save a return address because main never returns — it contains an infinite loop.  Using `b` also means Reset_Handler does not need to save LR, since it never returns either.
+通过修改 CPACR 并执行屏障指令, 授予对协处理器 0 (SIO) 的完全访问权限.
 
-## Dependency Chain
+**为什么要第五个?** main 里的 GPIO 操作要用到协处理器. 必须保证在任何 `mcrr` 指令执行之前, 它已经被启用.
 
-The initialization order is not arbitrary — each step depends on the previous one:
+### 第 6 步: 跳到 main
+
+```asm
+  b     main                                     // 跳转到主循环
+```
+
+注意这里用的是 `b` (分支), 而不是 `bl` (带链接的分支). `b` 不保存返回地址, 因为 main 永远不会返回 - 它里面是一个死循环. 用 `b` 还有一个好处: Reset_Handler 也不必保存 LR, 因为它同样永不返回.
+
+## 依赖链
+
+初始化的顺序不是随便定的 - 每一步都依赖前一步:
 
 ```
 Init_Stack
@@ -129,31 +129,31 @@ main
   |  (GPIO set/clear via mcrr)
 ```
 
-If any step were skipped or reordered:
+如果跳过或调换任何一步:
 
-| Missing Step | Consequence |
+| 缺失的步骤 | 后果 |
 |-------------|-------------|
-| Init_Stack | Stack overflow is undetected |
-| Init_XOSC | Peripheral clock has no stable source |
-| Enable_XOSC_Peri_Clock | Peripherals have no clock |
-| Init_Subsystem | GPIO registers read as zero |
-| Enable_Coprocessor | `mcrr` triggers UsageFault |
+| Init_Stack | 栈溢出无法被发现 |
+| Init_XOSC | 外设时钟没有稳定的时钟源 |
+| Enable_XOSC_Peri_Clock | 外设没有时钟 |
+| Init_Subsystem | GPIO 寄存器读出全零 |
+| Enable_Coprocessor | `mcrr` 触发 UsageFault |
 
-## Reset_Handler Is Not a Normal Function
+## Reset_Handler 不是普通函数
 
-Reset_Handler has several special properties:
+Reset_Handler 有几个特殊之处:
 
-1. **Never called by software** — only by hardware via the reset vector
-2. **Never returns** — it branches to main, which loops forever
-3. **Does not save/restore registers** — there is no caller to preserve state for
-4. **Uses `bl` for init calls** — each init function returns via `bx lr`
-5. **Uses `b` for main** — tail call, not a function call
+1. **永远不会被软件调用** - 只由硬件通过复位向量调用
+2. **永远不会返回** - 它跳到 main, 而 main 会一直循环
+3. **不保存/恢复寄存器** - 没有调用者需要它保留状态
+4. **初始化调用用 `bl`** - 每个初始化函数都用 `bx lr` 返回
+5. **main 用 `b`** - 这是尾调用, 不是函数调用
 
-## Summary
+## 小结
 
-- Reset_Handler is the first code executed after the hardware reads the vector table.
-- It calls five initialization functions in strict dependency order.
-- Each `bl` calls a function that returns via `bx lr`.
-- The final `b main` is a one-way branch — the firmware never returns past this point.
-- Reordering or skipping any step would cause hardware faults or incorrect behavior.
-- `.size` records the function size for debugger support.
+- Reset_Handler 是硬件读完向量表之后执行的第一段代码.
+- 它按严格的依赖顺序调用五个初始化函数.
+- 每个 `bl` 调用的函数都用 `bx lr` 返回.
+- 最后的 `b main` 是单向分支 - 固件从此不会再返回.
+- 调换或跳过任何一步都会导致硬件异常或行为错误.
+- `.size` 记录函数大小, 供调试器使用.

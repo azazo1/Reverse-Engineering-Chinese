@@ -1,72 +1,72 @@
-# Lesson 014 - LCD Display
+# Lesson 014 - LCD 显示屏
 
-## What Are We Building Today?
+## 今天我们要做什么?
 
-It's time to give our microcontroller a voice that doesn't just beep or blink, but actually speaks English! Today we are going to write a custom software driver for an **HD44780-compatible 16x2 Character LCD Display**. 
+是时候给单片机一副嗓子了 - 不只是会叫会闪, 而是真的会说英语! 今天我们要给一块 **HD44780 兼容的 16x2 字符型 LCD 显示屏** 写一套自己的软件驱动.
 
-We will learn how to interface with the display in "4-bit mode", send it initialization commands, and then print the word **HELLO** on the screen using pure assembly language!
+我们要学会怎么用"4 位模式"跟显示屏对接, 给它发送初始化命令, 然后用纯汇编语言在屏幕上打出 **HELLO** 这个词!
 
 [CODE](https://github.com/mytechnotalent/Assembler/blob/main/lessons/014/lesson.s)
 
 ---
 
-## Hardware Check: The LCD Interface
+## 硬件检查: LCD 接口
 
-The LCD requires 6 wires to control it from our ATmega328P:
-- **RS (Register Select)**: Connected to `PD7`. If `0`, we are sending a Command. If `1`, we are sending Character Data (ASCII).
-- **E (Enable)**: Connected to `PD6`. We quickly pulse this pin HIGH then LOW to tell the LCD, "Read the data now!"
-- **D4 to D7 (Data Bus)**: Connected to `PD5` through `PD2`. This is where we send the 4-bit data "nibble".
+用 ATmega328P 控制这块 LCD, 需要 6 根线:
+- **RS (寄存器选择)**: 接在 `PD7`. 如果是 `0`, 我们发的是命令. 如果是 `1`, 我们发的是字符数据 (ASCII).
+- **E (使能)**: 接在 `PD6`. 我们快速地把这个引脚拉高再拉低, 告诉 LCD: "现在读数据!"
+- **D4 到 D7 (数据总线)**: 接在 `PD5` 到 `PD2` 上. 我们就是在这里送出 4 位的数据"半字节".
 
-Wait, look at the data bus carefully:
-- LCD `D4` is wired to Microcontroller `PD5`
-- LCD `D5` is wired to Microcontroller `PD4`
-- LCD `D6` is wired to Microcontroller `PD3`
-- LCD `D7` is wired to Microcontroller `PD2`
+等等, 仔细看看这条数据总线:
+- LCD 的 `D4` 接到单片机的 `PD5`
+- LCD 的 `D5` 接到单片机的 `PD4`
+- LCD 的 `D6` 接到单片机的 `PD3`
+- LCD 的 `D7` 接到单片机的 `PD2`
 
-The wires are entirely backwards! This is very common in hardware hacking when wires are plugged in where they physically fit best, rather than in perfectly logical order. We will have to fix this hardware mess in our software using bit manipulation!
+这些线完全是反的! 在硬件折腾里这非常常见 - 线往哪儿插得顺手就往哪儿插, 而不是按完全合理的顺序. 我们只能在软件里用位操作把这个硬件的烂摊子收拾干净!
 
-## The Code Walkthrough
+## 代码讲解
 
-### 1. Bit Surgery (BST and BLD)
-To send a 4-bit "nibble", we wrote the `lcd_send_nibble` subroutine. It takes a nibble in `R16` and meticulously surgically implants it into the `PORTD` register backwards!
+### 1. 位的整形手术 (BST 和 BLD)
+要发送 4 位的"半字节", 我们写了 `lcd_send_nibble` 子程序. 它从 `R16` 里取出一个半字节, 一丝不苟地把它反过来"植入" `PORTD` 寄存器!
 
 ```assembly
-  BST    R16, 0                        ; Store bit 0 in T flag
-  BLD    R17, 5                        ; Load T flag into bit 5 (D4)
-  BST    R16, 1                        ; Store bit 1 in T flag
-  BLD    R17, 4                        ; Load T flag into bit 4 (D5)
+  BST    R16, 0                        ; 把第 0 位存进 T 标志
+  BLD    R17, 5                        ; 把 T 标志装入第 5 位 (D4)
+  BST    R16, 1                        ; 把第 1 位存进 T 标志
+  BLD    R17, 4                        ; 把 T 标志装入第 4 位 (D5)
 ```
-We use two brand new, incredibly powerful assembly instructions:
-- **BST (Bit Store from Register to T Flag)**: Copies a single bit from our register and saves it in a special temporary holding cell in the CPU called the "T Flag".
-- **BLD (Bit Load from T Flag to Register)**: Takes the bit sitting in the T Flag and injects it into a specific slot in another register!
+我们用了两条全新, 而且极其强大的汇编指令:
+- **BST (Bit Store from Register to T Flag, 从寄存器存位到 T 标志)**: 从我们的寄存器里复制单独一位, 存进 CPU 里一个特殊的临时格子, 叫 "T 标志".
+- **BLD (Bit Load from T Flag to Register, 从 T 标志装位到寄存器)**: 把待在 T 标志里的那一位取出来, 塞进另一个寄存器里指定的位置!
 
-We do this 4 times to flawlessly reverse the 4 bits in software to match our backwards hardware wiring!
+我们做 4 次, 在软件里把 4 个位完美地反过来, 好配上我们那条反着接的硬件线!
 
-### 2. High and Low Nibbles (SWAP)
-Because we are using 4-bit mode (to save pins), sending a full 8-bit command (like `0x28`) requires sending it in two chunks: the High Nibble (`0x2`) and then the Low Nibble (`0x8`).
+### 2. 高半字节和低半字节 (SWAP)
+因为我们用的是 4 位模式 (为了省引脚), 想发一个完整的 8 位命令 (比如 `0x28`) 就得分成两块发: 先发高半字节 (`0x2`), 再发低半字节 (`0x8`).
 
 ```assembly
 lcd_write_command:
-  CBI    PORTD, PD7                    ; Set RS LOW (Instruction mode)
-  MOV    R18, R16                      ; Backup full byte
-  SWAP   R16                           ; Swap high and low nibbles
-  RCALL  lcd_send_nibble               ; Send high nibble
-  MOV    R16, R18                      ; Restore full byte
-  RCALL  lcd_send_nibble               ; Send low nibble
+  CBI    PORTD, PD7                    ; 把 RS 拉低 (指令模式)
+  MOV    R18, R16                      ; 备份整个字节
+  SWAP   R16                           ; 交换高低半字节
+  RCALL  lcd_send_nibble               ; 发送高半字节
+  MOV    R16, R18                      ; 恢复整个字节
+  RCALL  lcd_send_nibble               ; 发送低半字节
 ```
-To get the High Nibble into position, we use the `SWAP` instruction. It magically swaps the left 4 bits with the right 4 bits in a single clock cycle!
+要把高半字节挪到位, 我们用 `SWAP` 指令. 它在一个时钟周期里就把左边 4 位和右边 4 位换了个位置, 跟变魔术一样!
 
-### 3. Printing HELLO
-Once the complex multi-step Initialization Sequence is complete (which takes about 50 milliseconds of precise delays and configuration commands), writing to the screen is incredibly easy!
+### 3. 打印 HELLO
+一旦那套复杂的多步初始化流程跑完 (它需要大约 50 毫秒的精确延时和一串配置命令), 往屏幕上写东西就变得特别简单!
 
 ```assembly
-  LDI    R16, 'H'                      ; ASCII for 'H'
-  RCALL  lcd_write_data                ; Send Data
-  LDI    R16, 'E'                      ; ASCII for 'E'
-  RCALL  lcd_write_data                ; Send Data
+  LDI    R16, 'H'                      ; 'H' 的 ASCII
+  RCALL  lcd_write_data                ; 发送数据
+  LDI    R16, 'E'                      ; 'E' 的 ASCII
+  RCALL  lcd_write_data                ; 发送数据
 ```
-We simply load the ASCII character (in single quotes) into `R16` and call `lcd_write_data`. The assembler automatically turns `'H'` into its ASCII numerical value (`0x48`) for us!
+我们只要把 ASCII 字符 (写在单引号里) 装进 `R16`, 然后调用 `lcd_write_data`. 汇编器会自动帮我们把 `'H'` 变成它对应的 ASCII 数值 (`0x48`)!
 
 ---
 
-Congratulations! You have successfully tamed a complex parallel communication protocol and performed advanced bit manipulation to display text on a physical screen in bare metal assembly!
+恭喜! 你成功驯服了一套复杂的并行通信协议, 还做了高级的位操作, 在裸机汇编里把文字显示到了真实的屏幕上!

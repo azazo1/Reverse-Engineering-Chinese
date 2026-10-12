@@ -1,16 +1,16 @@
-# Chapter 29: main.rs — The UART Echo Loop
+# Chapter 29: main.rs - UART 回显循环
 
-## Introduction
+## 引言
 
-The UART driver's `main.rs` is the whole course in one file: `no_std`
-attributes, module wiring, a `bind_interrupts!` binding, a configurable UART
-built from eight arguments, and an async loop that reads a byte, transforms it,
-and writes the result. It is only 87 lines, and this chapter walks every one of
-them.
+UART 驱动的 `main.rs` 把整个课程装进了一个文件: `no_std`
+属性, 模块接线, 一个 `bind_interrupts!` 绑定, 用八个参数
+构造出来的可配置 UART, 以及一个读字节, 变换字节,
+再写出结果的异步循环. 它只有 87 行, 本章逐行
+走一遍.
 
-## Complete Source Code
+## 完整源代码
 
-Here is `src/main.rs` for the UART driver, in full:
+下面是 UART 驱动的 `src/main.rs` 的完整内容:
 
 ```rust
 /*
@@ -45,11 +45,11 @@ Here is `src/main.rs` for the UART driver, in full:
 //! FILE: main.rs
 //!
 //! DESCRIPTION:
-//! RP2350 Embedded Rust Embassy UART Echo Application.
+//! RP2350 嵌入式 Rust Embassy UART 回显应用.
 //!
 //! BRIEF:
-//! Main application entry point for RP2350 UART echo driver using Embassy.
-//! Implements async UART character echo on GPIO 0 (TX) and GPIO 1 (RX).
+//! 使用 Embassy 的 RP2350 UART 回显驱动主程序入口.
+//! 在 GPIO 0 (TX) 和 GPIO 1 (RX) 上实现异步 UART 字符回显.
 //!
 //! AUTHOR: Kevin Thomas
 //! CREATION DATE: December 4, 2025
@@ -72,17 +72,17 @@ bind_interrupts!(struct Irqs {
     UART0_IRQ => InterruptHandler<UART0>;
 });
 
-/// Main application entry point.
+/// 主程序入口.
 ///
 /// # Details
-/// Initializes Embassy runtime and runs the main UART echo loop.
-/// Uses UartController for state management.
+/// 初始化 Embassy 运行时, 并运行主 UART 回显循环.
+/// 用 UartController 管理状态.
 ///
 /// # Arguments
-/// * `_spawner` - Embassy task spawner (reserved for future async tasks).
+/// * `_spawner` - Embassy 任务 spawner (为将来的异步任务预留).
 ///
 /// # Returns
-/// * `()` - Never returns (infinite loop).
+/// * `()` - 永不返回 (无限循环).
 #[embassy_executor::main]
 async fn main(_spawner: Spawner) {
     let p = embassy_rp::init(Default::default());
@@ -102,20 +102,20 @@ async fn main(_spawner: Spawner) {
 }
 ```
 
-Against the previous drivers, two things are genuinely new: the
-`bind_interrupts!` block (Chapter 28) and the argument list of `Uart::new`.
-The loop itself is smaller than the button's.
+和前面几个驱动相比, 真正新鲜的东西有两处:
+`bind_interrupts!` 块 (第 28 章) 以及 `Uart::new` 的参数列表.
+循环本身比按钮驱动的还小.
 
-## Imports and the IRQ Binding
+## 导入与 IRQ 绑定
 
-The imports pair Embassy's UART surface with the controller and config:
+这些导入把 Embassy 的 UART 接口与控制器和配置配在一起:
 
 ```rust
 use embassy_rp::uart::{Config, Uart};
 use embassy_rp::{bind_interrupts, peripherals::UART0, uart::InterruptHandler};
 ```
 
-Then the one macro call the whole driver depends on:
+接着是整个驱动所依赖的那一次宏调用:
 
 ```rust
 bind_interrupts!(struct Irqs {
@@ -123,47 +123,47 @@ bind_interrupts!(struct Irqs {
 });
 ```
 
-As Chapter 28 demonstrated, this creates the statically-registered `Irqs`
-binding and hands it to `Uart::new`. It is written once, near the top, before
-any execution — so the interrupt linkage exists before `main` begins.
+正如第 28 章演示的, 它创建了静态注册的 `Irqs`
+绑定, 并把它交给 `Uart::new`. 它只写一次, 位置靠上, 在任何
+执行发生之前 - 所以在这段连接关系上, 中断链在 `main` 开始之前就已经存在了.
 
-## Constructing the UART
+## 构造 UART
 
-Eight arguments, four conceptual groups:
+八个参数, 四个概念分组:
 
 ```rust
 let mut config = Config::default();
 config.baudrate = UART_BAUD_RATE;
 let mut uart = Uart::new(
-    p.UART0,          // the UART peripheral token
-    p.PIN_0,          // TX pin
-    p.PIN_1,          // RX pin
-    Irqs,             // the interrupt binding from above
-    p.DMA_CH0,        // DMA controller 0 (receive)
-    p.DMA_CH1,        // DMA controller 1 (transmit)
-    config,           // settings: baud 115200, 8N1
+    p.UART0,          // UART 外设令牌
+    p.PIN_0,          // TX 引脚
+    p.PIN_1,          // RX 引脚
+    Irqs,             // 上面那个中断绑定
+    p.DMA_CH0,        // DMA 控制器 0 (接收)
+    p.DMA_CH1,        // DMA 控制器 1 (发送)
+    config,           // 设置: 波特率 115200, 8N1
 );
 ```
 
-`Config::default()` already encodes a sane UART profile; the driver changes
-exactly one field — `baudrate` — from the config module. The pin order `(TX,
-RX)` matches the datasheet's `UART0_TX`/`UART0_RX` designation (Chapter 26),
-and the DMA channels complete the interrupt+DMA story. Setup is complete in
-nine lines; no registers were touched by hand.
+`Config::default()` 本身已经编码了一套合理的 UART 配置; 驱动只改了
+一个字段 - `baudrate` - 而且取自配置模块. 引脚顺序 `(TX,
+RX)` 与数据手册里的 `UART0_TX`/`UART0_RX` 命名一致 (第 26 章),
+而两个 DMA 通道则补全了中断加 DMA 的故事. 九行之内
+就完成了设置; 没有任何寄存器被手工碰过.
 
-## The Controller and the Buffer
+## 控制器与缓冲区
 
 ```rust
 let mut controller = UartController::new();
 let mut buf = [0u8; 1];
 ```
 
-The controller tracks echo statistics. The buffer is a single byte on the
-stack — exactly one RX byte in flight. Embassy's DMA writes into its own
-internal static first and copies here, so a stack array of size one is all the
-application ever needs.
+控制器跟踪回显统计. 缓冲区是栈上的一个字节 -
+正好一个 RX 字节还在路上. Embassy 的 DMA 先写进它自己的
+内部静态区, 再复制到这里, 所以一个大小为 1 的栈数组
+就够这个应用用了.
 
-## The Echo Loop
+## 回显循环
 
 ```rust
 loop {
@@ -174,31 +174,31 @@ loop {
 }
 ```
 
-Four steps, the whole application:
+四步, 就是整个应用:
 
-1. `uart.read(&mut buf).await` — suspend until a byte arrives (hardware
-   interrupt + DMA as in Chapter 28); `Ok` means a byte sits in `buf`.
-2. `controller.process_char(buf[0])` — translate the byte into echo bytes and
-   bump the count (Chapter 27).
-3. `uart.write(echo_bytes).await` — transmit and wait for the FIFO to drain.
-4. Loop — the executor absorbed every pause; the CPU never polled a register.
+1. `uart.read(&mut buf).await` - 挂起直到有字节到来 (硬件
+   中断加 DMA, 见第 28 章); `Ok` 表示 `buf` 里已经有一个字节.
+2. `controller.process_char(buf[0])` - 把这个字节转换成要回显的字节, 并
+   把计数加一 (第 27 章).
+3. `uart.write(echo_bytes).await` - 发送, 并等待 FIFO 排空.
+4. 循环 - 每一次暂停都被执行器吸收了; CPU 从未轮询过任何寄存器.
 
-The read `Result` is checked so error frames (parity, overrun, break) never
-reach the echo — and the write result is consciously discarded with `let _`,
-documenting that a full wire is not recoverable at this layer.
+读操作的 `Result` 会被检查, 这样错误帧 (校验, 溢出, break) 就绝不会
+进入回显 - 而写操作的结果则有意用 `let _` 丢弃掉,
+以此说明在这一层无法从写满的线路中恢复.
 
-Running the driver with a host terminal at 115200, each keystroke returns
-immediately, and the backspace key visibly erases the previous character.
+在主机终端以 115200 运行这个驱动时, 每次按键都会立刻
+返回, 退格键则会实实在在地擦掉前一个字符.
 
-## Summary
+## 小结
 
-- Imports + one `bind_interrupts!` establish the UART IRQ linkage before
-  anything runs.
-- `Config` + `Uart::new` with eight arguments build the entire UART in nine
-  lines, changing only the baud rate from defaults.
-- A one-byte buffer and a shared controller are the loop's only state.
-- The loop reads, translates, writes, and repeats — sleeping on each `await`.
-- Reads check `Ok`; writes acknowledge errors consciously.
+- 导入加上一次 `bind_interrupts!`, 在任何东西跑起来之前就建立了
+  UART 的 IRQ 链接.
+- `Config` 加上带八个参数的 `Uart::new`, 用九行代码构造出整个 UART,
+  相对默认值只改了波特率.
+- 一个一字节的缓冲区和共享的控制器, 就是循环仅有的状态.
+- 循环读, 变换, 写, 再重复 - 每次 `await` 都在睡觉.
+- 读操作检查 `Ok`; 写操作则有意承认错误.
 
-Part VI complete. The final chapter assembles all three drivers into a single
-integrated application.
+第 VI 部分结束. 最后一章把三个驱动组装成一个
+完整的集成应用.

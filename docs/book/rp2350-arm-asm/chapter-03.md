@@ -1,50 +1,50 @@
-# Chapter 3: Memory — Addresses, Bytes, Words, and Endianness
+# Chapter 3: 内存 - 地址, 字节, 字与字节序
 
-## Introduction
+## 引言
 
-Every instruction our processor executes and every hardware register it accesses lives at a numeric address in a single, flat address space.  This chapter explains how the RP2350 organizes its 4 GB address space, how data is stored in memory, and why alignment and endianness matter for bare-metal programming.
+处理器执行的每一条指令, 访问的每一个硬件寄存器, 都位于一个统一的平坦地址空间里某个数字地址上. 本章讲解 RP2350 如何组织它的 4 GB 地址空间, 数据在内存里怎么存放, 以及为什么对齐和字节序对裸机编程很重要.
 
-## The Address Space
+## 地址空间
 
-The ARM Cortex-M33 uses 32-bit addresses, giving a theoretical range of 0x00000000 to 0xFFFFFFFF — 4 GB.  Most of that space is unoccupied.  The RP2350 maps real hardware into specific regions:
+ARM Cortex-M33 使用 32 位地址, 理论范围从 0x00000000 到 0xFFFFFFFF, 也就是 4 GB. 这个空间里大部分是空的. RP2350 把真实硬件映射到特定区间:
 
-| Address Range | Size | Contents |
+| 地址区间 | 大小 | 内容 |
 |--------------|------|----------|
-| 0x00000000–0x0FFFFFFF | 256 MB | Boot ROM, internal ROM |
-| 0x10000000–0x11FFFFFF | 32 MB | External flash (XIP) |
-| 0x20000000–0x20081FFF | 520 KB | SRAM |
-| 0x40000000–0x4FFFFFFF | 256 MB | Peripheral registers (APB/AHB) |
-| 0xE0000000–0xE00FFFFF | 1 MB | Private Peripheral Bus (PPB) — NVIC, SysTick, SCB |
+| 0x00000000-0x0FFFFFFF | 256 MB | 启动 ROM, 内部 ROM |
+| 0x10000000-0x11FFFFFF | 32 MB | 外部 flash (XIP) |
+| 0x20000000-0x20081FFF | 520 KB | SRAM |
+| 0x40000000-0x4FFFFFFF | 256 MB | 外设寄存器 (APB/AHB) |
+| 0xE0000000-0xE00FFFFF | 1 MB | 私有外设总线 (PPB) - NVIC, SysTick, SCB |
 
-Our firmware occupies flash starting at 0x10000000 and uses SRAM from 0x20000000 for the stack.
+我们的固件占据从 0x10000000 开始的 flash, 并使用从 0x20000000 开始的 SRAM 存放栈.
 
-## Bytes, Halfwords, and Words
+## 字节, 半字和字
 
-| Unit | Size | Example |
+| 单位 | 大小 | 示例 |
 |------|------|---------|
-| Byte | 8 bits (1 byte) | A single ASCII character |
-| Halfword | 16 bits (2 bytes) | A Thumb 16-bit instruction |
-| Word | 32 bits (4 bytes) | A register value, a memory address |
+| 字节 (Byte) | 8 位 (1 字节) | 一个 ASCII 字符 |
+| 半字 (Halfword) | 16 位 (2 字节) | 一条 Thumb 16 位指令 |
+| 字 (Word) | 32 位 (4 字节) | 一个寄存器值, 一个内存地址 |
 
-The ARM Cortex-M33 is a 32-bit architecture.  All general-purpose registers are one word (32 bits) wide.
+ARM Cortex-M33 是 32 位架构. 所有通用寄存器都是一个字 (32 位) 宽.
 
-## Alignment
+## 对齐
 
-A word-sized access must target an address divisible by 4.  A halfword access must target an address divisible by 2.  A byte access can target any address.
+字大小的访问必须落在能被 4 整除的地址上. 半字访问必须落在能被 2 整除的地址上. 字节访问可以落在任何地址上.
 
-| Access Size | Valid Addresses | Invalid Addresses |
+| 访问大小 | 合法地址 | 非法地址 |
 |-------------|----------------|-------------------|
-| Word (4 bytes) | 0x00, 0x04, 0x08 | 0x01, 0x02, 0x03 |
-| Halfword (2 bytes) | 0x00, 0x02, 0x04 | 0x01, 0x03 |
-| Byte (1 byte) | Any | None |
+| 字 (4 字节) | 0x00, 0x04, 0x08 | 0x01, 0x02, 0x03 |
+| 半字 (2 字节) | 0x00, 0x02, 0x04 | 0x01, 0x03 |
+| 字节 (1 字节) | 任意 | 无 |
 
-An unaligned word access triggers a HardFault exception on Cortex-M33.  All peripheral registers in the RP2350 are word-aligned by design.
+在 Cortex-M33 上做非对齐的字访问会触发 HardFault 异常. RP2350 的所有外设寄存器在设计上都是字对齐的.
 
-## Little-Endian Byte Order
+## 小端字节序
 
-The ARM Cortex-M33 stores multi-byte values in **little-endian** order: the least significant byte occupies the lowest address.
+ARM Cortex-M33 用**小端 (little-endian)** 方式存放多字节数值: 最低有效字节占据最低的地址.
 
-The 32-bit value 0x12345678 stored at address 0x20000000:
+32 位数值 0x12345678 存放在地址 0x20000000 时:
 
 ```
 Address:  0x20000000  0x20000001  0x20000002  0x20000003
@@ -52,44 +52,44 @@ Content:     0x78        0x56        0x34        0x12
               LSB                                 MSB
 ```
 
-This matters when examining memory in a debugger — the bytes appear "reversed" compared to how we write the number.
+在调试器里查看内存时这一点很重要 - 字节的显示顺序跟我们书写数字的顺序正好"反着来".
 
-## Memory-Mapped Registers
+## 内存映射寄存器
 
-The RP2350 exposes hardware control through **memory-mapped registers**.  Reading from or writing to a specific address directly controls hardware:
-
-```asm
-  ldr   r0, =XOSC_CTRL                           // load XOSC_CTRL address (0x40048000)
-  ldr   r1, =0x00FABAA0                          // value to configure oscillator
-  str   r1, [r0]                                 // write value — hardware starts oscillator
-```
-
-The `str` instruction does not just store data — it triggers real hardware behavior.  The crystal oscillator physically begins oscillating because we wrote to that address.
-
-## The Stack
-
-The stack is a region of SRAM used for:
-
-- Saving and restoring registers across function calls (`push`/`pop`)
-- Storing local variables
-- Saving processor state during interrupts
-
-The ARM Cortex-M33 stack grows **downward**: pushing data decreases the stack pointer (SP), popping increases it.
-
-In our firmware:
+RP2350 通过**内存映射寄存器**暴露硬件控制. 读或写某个特定地址, 就直接控制了硬件:
 
 ```asm
-  .equ STACK_TOP,   0x20082000                    // top of stack (highest address)
-  .equ STACK_LIMIT, 0x2007a000                    // bottom of stack (lowest address)
+  ldr   r0, =XOSC_CTRL                           // 加载 XOSC_CTRL 地址 (0x40048000)
+  ldr   r1, =0x00FABAA0                          // 用于配置晶振的值
+  str   r1, [r0]                                 // 写入值 - 硬件随即启动晶振
 ```
 
-This gives us 32 KB of stack space (0x20082000 − 0x2007A000 = 0x8000 = 32,768 bytes).
+`str` 指令不只是存了个数据 - 它触发了真实的硬件行为. 因为我们往那个地址写了值, 晶振物理上真的开始振荡了.
 
-## Flash Memory (XIP)
+## 栈
 
-Our firmware is stored in external SPI flash.  The RP2350 maps this flash into the address space starting at 0x10000000 through a mechanism called **Execute-In-Place (XIP)**: the processor fetches instructions directly from flash as if it were regular memory.
+栈是 SRAM 里的一块区域, 用于:
 
-The linker script places our code at 0x10000000:
+- 在函数调用之间保存和恢复寄存器 (`push`/`pop`)
+- 存放局部变量
+- 中断发生时保存处理器状态
+
+ARM Cortex-M33 的栈向**低地址方向生长**: 压栈会让栈指针 (SP) 减小, 出栈会让它增大.
+
+在我们的固件里:
+
+```asm
+  .equ STACK_TOP,   0x20082000                    // 栈顶 (最高地址)
+  .equ STACK_LIMIT, 0x2007a000                    // 栈底 (最低地址)
+```
+
+这样我们就有了 32 KB 的栈空间 (0x20082000 - 0x2007A000 = 0x8000 = 32,768 字节).
+
+## Flash 存储器 (XIP)
+
+我们的固件存放在外部 SPI flash 里. RP2350 通过一种叫**就地执行 (Execute-In-Place, XIP)** 的机制, 把这块 flash 映射到从 0x10000000 开始的地址空间: 处理器就像读普通内存一样, 直接从 flash 里取指令.
+
+链接脚本把我们的代码放在 0x10000000:
 
 ```
 FLASH (rx) : ORIGIN = 0x10000000, LENGTH = 32M
@@ -97,27 +97,27 @@ FLASH (rx) : ORIGIN = 0x10000000, LENGTH = 32M
 
 ## SRAM
 
-The RP2350 provides 520 KB of on-chip SRAM starting at 0x20000000.  Our firmware uses this exclusively for the stack.  No global variables are needed for a simple blink driver.
+RP2350 提供 520 KB 的片上 SRAM, 起始于 0x20000000. 我们的固件只用它来放栈. 一个简单的闪烁驱动不需要任何全局变量.
 
 ```
 RAM (rwx) : ORIGIN = 0x20000000, LENGTH = 512K
 ```
 
-## Reading the Address Map
+## 读懂地址映射
 
-When you see an address like 0x40038044 in the firmware:
+当你在固件里看到像 0x40038044 这样的地址时:
 
-1. **0x4003xxxx** — falls in the peripheral region, specifically PADS_BANK0 (base 0x40038000).
-2. **Offset 0x44** — this is the PADS_BANK0_GPIO16 register (0x40038000 + 0x44).
+1. **0x4003xxxx** - 落在外设区, 具体说是 PADS_BANK0 (基地址 0x40038000).
+2. **偏移 0x44** - 这就是 PADS_BANK0_GPIO16 寄存器 (0x40038000 + 0x44).
 
-Learning to decompose addresses into base + offset is essential for understanding every hardware access in our code.
+学会把地址拆成基地址加偏移, 是理解代码里每一次硬件访问的关键.
 
-## Summary
+## 小结
 
-- The RP2350 uses a flat 32-bit address space — flash, SRAM, and peripherals all share one map.
-- Data sizes are byte (8-bit), halfword (16-bit), and word (32-bit).
-- Word accesses must be 4-byte aligned.
-- Little-endian: least significant byte at the lowest address.
-- Memory-mapped I/O means writing to an address controls real hardware.
-- The stack lives in SRAM and grows downward.
-- Flash is mapped at 0x10000000 via XIP.
+- RP2350 使用平坦的 32 位地址空间 - flash, SRAM 和外设共用同一张映射表.
+- 数据尺寸有字节 (8 位), 半字 (16 位) 和字 (32 位).
+- 字访问必须 4 字节对齐.
+- 小端: 最低有效字节在最低地址.
+- 内存映射 I/O 意味着往某个地址写数据就是在控制真实硬件.
+- 栈位于 SRAM, 向低地址方向生长.
+- Flash 通过 XIP 映射到 0x10000000.

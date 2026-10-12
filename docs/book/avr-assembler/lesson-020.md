@@ -1,61 +1,61 @@
-# Lesson 020 - 4-Digit 7-Segment Display
+# Lesson 020 - 四位七段数码管
 
-## What Are We Building Today?
+## 今天我们要做什么?
 
-We know how to light up a single 7-segment digit. But what if we want to display a 4-digit number like "1234"?
-If a 1-digit display takes 8 wires, a 4-digit display must take 32 wires, right? Wrong! 
+我们已经会点亮一位七段数码管了. 可要是我们想显示一个像 "1234" 这样的四位数呢?
+一位数码管要 8 根线, 那四位数码管岂不是要 32 根线? 错!
 
-Through the magic of a hardware optical illusion called **Persistence of Vision (POV)** and a technique called **Multiplexing**, we can drive all 4 digits using only 12 wires total!
+靠一个叫**视觉暂留 (POV)** 的硬件光学错觉, 再加上一种叫**多路复用**的技巧, 我们总共只用 12 根线就能驱动全部 4 位!
 
 [CODE](https://github.com/mytechnotalent/Assembler/blob/main/lessons/020/lesson.s)
 
 ---
 
-## The Hardware: Multiplexing
+## 硬件: 多路复用
 
-Inside a 4-Digit 7-Segment Display module, all 4 of the "A" segments are wired together. All 4 of the "B" segments are wired together. 
-If we send the signal to light up segment "A", *every single digit* will light up its "A" segment simultaneously.
+在四位七段数码管模块内部, 4 个 "A" 段是接在一起的. 4 个 "B" 段也是接在一起的.
+如果我们发出点亮 "A" 段的信号, *每一位*都会同时点亮自己的 "A" 段.
 
-To solve this, the module gives us 4 separate "Common Cathode" Ground pins, one for each digit. If we disconnect the Ground for Digit 2, 3, and 4, then *only Digit 1* will light up!
+为了解决这个问题, 模块给了我们 4 个各自独立的"共阴极"接地脚, 每一位一个. 如果我们把第 2, 3, 4 位的接地断开, 那就*只有第 1 位*会亮!
 
-We will connect these 4 Ground pins to `PD2`, `PD3`, `PD4`, and `PD5`. (We usually use NPN transistors here so the microcontroller pins don't burn out).
+我们把这 4 个接地脚接到 `PD2`, `PD3`, `PD4` 和 `PD5`. (这里通常要用 NPN 三极管, 免得单片机的引脚被烧坏).
 
-## The Code Walkthrough
+## 代码讲解
 
-### 1. Extracting the Digits
-We want to display the number `1234`. We load it into a 16-bit virtual register (`R25:R24`):
+### 1. 把各位数字拆出来
+我们想显示数字 `1234`. 我们把它装进一个 16 位虚拟寄存器 (`R25:R24`):
 ```assembly
   LDI    R25, hi8(1234)
   LDI    R24, lo8(1234)
 ```
-We then call our trusty `extract_digits` subroutine (which uses the Repeated Subtraction algorithm from Lesson 15). 
-This rips the number `1234` apart into `1`, `2`, `3`, and `4` and stores them in `R20`, `R21`, `R22`, and `R23`!
+接着我们调用靠得住的 `extract_digits` 子程序 (它用的就是第 15 课那套反复减法算法).
+它把 `1234` 拆成 `1`, `2`, `3` 和 `4`, 分别存进 `R20`, `R21`, `R22` 和 `R23`!
 
-### 2. The Optical Illusion Loop (POV)
-Now, we run our display loop. The goal is to only ever have ONE single digit turned on at any given millisecond. But we switch between them so fast that the human eye is tricked into thinking they are all on at the same time!
+### 2. 光学错觉循环 (POV)
+现在我们跑显示循环. 目标是任意一个毫秒里都只点亮一位数字. 但我们切换得实在太快, 人眼就被骗了, 以为它们同时都亮着!
 
 ```assembly
 .loop:
-  ; --- Digit 1 (Thousands) ---
-  MOV    R16, R20                      ; Load thousands digit ('1')
-  RCALL  get_segment_pattern           ; Convert to segment mask (0x06)
-  RCALL  shift_out                     ; Send to Shift Register
-  RCALL  latch                         ; Latch it
-  SBI    PORTD, PD2                    ; Turn ON Digit 1 Ground
-  RCALL  delay_2ms                     ; Wait 2 milliseconds
-  CBI    PORTD, PD2                    ; Turn OFF Digit 1 Ground
+  ; --- 第 1 位 (千位) ---
+  MOV    R16, R20                      ; 装入千位数字 ('1')
+  RCALL  get_segment_pattern           ; 转成笔画段掩码 (0x06)
+  RCALL  shift_out                     ; 发送到移位寄存器
+  RCALL  latch                         ; 锁存
+  SBI    PORTD, PD2                    ; 打开第 1 位的接地
+  RCALL  delay_2ms                     ; 等待 2 毫秒
+  CBI    PORTD, PD2                    ; 关闭第 1 位的接地
 ```
 
-1. Load the Thousands digit (`1`).
-2. Convert it to a segment mask using the Flash Array we learned in Lesson 19.
-3. Send it to the Shift Register.
-4. Turn **ON** `PD2` (Digit 1 Ground). Now the first digit shines brightly!
-5. Wait `2ms`. (This is just enough time for the LED to get fully bright and hit your retina).
-6. Turn **OFF** `PD2`. The display goes completely black!
+1. 装入千位数字 (`1`).
+2. 用第 19 课学的 Flash 数组把它转成笔画段掩码.
+3. 把它发送给移位寄存器.
+4. **打开** `PD2` (第 1 位接地). 现在第一位亮得刺眼!
+5. 等 `2ms`. (这段时间刚好够 LED 完全亮起来, 打在你的视网膜上).
+6. **关闭** `PD2`. 显示屏完全变黑!
 
-We instantly repeat this exact same process for `Digit 2`, `Digit 3`, and `Digit 4`. 
-Because the whole cycle finishes in `8ms` (125 times a second), it looks like a solid, unblinking number!
+我们马上对 `Digit 2`, `Digit 3` 和 `Digit 4` 重复完全相同的过程.
+因为整个循环 `8ms` 就跑完 (每秒 125 次), 看起来就是一个稳稳的, 不闪的数字!
 
 ---
 
-Congratulations! You have successfully mastered time-domain hardware multiplexing and Persistence of Vision illusions in bare metal assembly!
+恭喜! 你已经在裸机汇编里掌握了时域硬件多路复用和视觉暂留错觉!

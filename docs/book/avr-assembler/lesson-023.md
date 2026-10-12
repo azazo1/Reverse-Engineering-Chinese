@@ -1,66 +1,66 @@
-# Lesson 023 - Stepper Motor
+# Lesson 023 - 步进电机
 
-## What Are We Building Today?
+## 今天我们要做什么?
 
-A DC Motor (like we used in Lesson 21) is great for spinning things fast, but it is terrible for precision. If you want a robot arm to rotate exactly 90 degrees and stop, a DC motor will overshoot or undershoot.
+直流电机 (比如第 21 课用的那个) 很适合把东西转得飞快, 可它在精度上很糟糕. 想让机械臂正好转过 90 度然后停住, 直流电机要么转过头, 要么不够.
 
-To solve this, we use a **Stepper Motor**. A Stepper Motor doesn't just spin wildly; it moves in discrete, perfect "steps". Every time we send it a signal, it rotates exactly `0.175` degrees!
+为了解决这个问题, 我们用**步进电机**. 步进电机不会乱转一气, 它是一步一步地, 走出一个个离散而精准的"步". 我们每给它一个信号, 它就精确地转过 `0.175` 度!
 
-Today, we will learn the fundamental physics of Stepper Motors and write a "Wave Drive" algorithm in assembly to manually rotate the motor step-by-step!
+今天我们要学习步进电机的基本物理原理, 并用汇编写一个"单相励磁"算法, 手动让电机一步一步地转!
 
 [CODE](https://github.com/mytechnotalent/Assembler/blob/main/lessons/023/lesson.s)
 
 ---
 
-## Hardware Check: The 28BYJ-48 Stepper & ULN2003 Driver
-Inside our Stepper Motor, there is a central magnetic rotor surrounded by 4 independent Electromagnets (Coils). 
-To make the motor spin, we have to turn these 4 magnets on and off in a circle. The rotor will literally "chase" the magnetic field as it moves around!
+## 硬件检查: 28BYJ-48 步进电机和 ULN2003 驱动
+我们的步进电机内部有一个居中的磁性转子, 周围绕着 4 个各自独立的电磁铁 (线圈).
+要让电机转起来, 我们得按着圆圈顺序把这 4 个磁铁依次开开关关. 转子会一路"追着"移动的磁场跑!
 
-Because Stepper Motors draw a lot of current, we must use a driver board. We will use the **ULN2003 Darlington Array Driver**.
-We connect `IN1`, `IN2`, `IN3`, and `IN4` on the driver board to `PD2`, `PD3`, `PD4`, and `PD5` on our ATmega328P.
+因为步进电机拉的电流不小, 我们必须用一块驱动板. 我们用 **ULN2003 达林顿阵列驱动器**.
+我们把驱动板上的 `IN1`, `IN2`, `IN3` 和 `IN4` 接到 ATmega328P 的 `PD2`, `PD3`, `PD4` 和 `PD5`.
 
-## The Code Walkthrough
+## 代码讲解
 
-### The Wave-Drive Algorithm
-The simplest way to drive a stepper motor is called the **Wave Drive** (or 1-Phase On). 
-The algorithm is simple:
-1. Turn ON Magnet 1. (Wait 5ms for the rotor to snap to it).
-2. Turn OFF Magnet 1, and Turn ON Magnet 2. (Wait 5ms).
-3. Turn OFF Magnet 2, and Turn ON Magnet 3. (Wait 5ms).
-4. Turn OFF Magnet 3, and Turn ON Magnet 4. (Wait 5ms).
-5. Repeat!
+### 单相励磁算法
+驱动步进电机最简单的办法叫**单相励磁** (也叫单相通电).
+算法很简单:
+1. 打开磁铁 1. (等 5ms, 让转子啪一下跟上).
+2. 关掉磁铁 1, 打开磁铁 2. (等 5ms).
+3. 关掉磁铁 2, 打开磁铁 3. (等 5ms).
+4. 关掉磁铁 3, 打开磁铁 4. (等 5ms).
+5. 重复!
 
-If we write directly to the `PORTD` register, we can control all 4 pins simultaneously in a single clock cycle!
+如果我们直接往 `PORTD` 寄存器写数据, 就能在一个时钟周期里同时控制这 4 个引脚!
 
 ```assembly
 .loop:
-  ; Step 1: Fire Coil 1 (IN1 is on PD2)
-  LDI    R16, 0b00000100               ; Set bit 2 HIGH
-  OUT    PORTD, R16                    ; Overwrite all PORTD pins instantly
+  ; 第 1 步: 给线圈 1 通电 (IN1 接在 PD2 上)
+  LDI    R16, 0b00000100               ; 把第 2 位置为高电平
+  OUT    PORTD, R16                    ; 瞬间覆盖 PORTD 所有引脚
   RCALL  delay_5ms
 
-  ; Step 2: Fire Coil 2 (IN2 is on PD3)
-  LDI    R16, 0b00001000               ; Set bit 3 HIGH
+  ; 第 2 步: 给线圈 2 通电 (IN2 接在 PD3 上)
+  LDI    R16, 0b00001000               ; 把第 3 位置为高电平
   OUT    PORTD, R16
   RCALL  delay_5ms
 
-  ; Step 3: Fire Coil 3 (IN3 is on PD4)
-  LDI    R16, 0b00010000               ; Set bit 4 HIGH
+  ; 第 3 步: 给线圈 3 通电 (IN3 接在 PD4 上)
+  LDI    R16, 0b00010000               ; 把第 4 位置为高电平
   OUT    PORTD, R16
   RCALL  delay_5ms
 
-  ; Step 4: Fire Coil 4 (IN4 is on PD5)
-  LDI    R16, 0b00100000               ; Set bit 5 HIGH
+  ; 第 4 步: 给线圈 4 通电 (IN4 接在 PD5 上)
+  LDI    R16, 0b00100000               ; 把第 5 位置为高电平
   OUT    PORTD, R16
   RCALL  delay_5ms
 
-  RJMP   .loop                         ; Do it again!
+  RJMP   .loop                         ; 再来一遍!
 ```
 
-This sequence repeats endlessly, causing the magnetic field to spin around the stator, dragging the physical rotor with it! 
+这个序列无限重复下去, 磁场就绕着定子转圈, 把实实在在的转子拖着一起走!
 
-**Note on Timing:** If you make the delay too short (e.g., 1ms), the magnetic field will spin faster than the physical mass of the rotor can move. The motor will just vibrate and screech without spinning at all! 5ms is a safe, stable speed for the 28BYJ-48.
+**关于时序的提醒:** 如果你把延时做得太短 (比如 1ms), 磁场转得会比转子那块实实在在的金属跟得上的速度还快. 电机只会嗡嗡抖着尖叫, 压根不转! 对 28BYJ-48 来说, 5ms 是一个安全稳定的速度.
 
 ---
 
-Congratulations! You have successfully mastered Electromagnet Sequencing and Stepper Motor Wave-Drives in bare metal assembly!
+恭喜! 你已经在裸机汇编里掌握了电磁铁时序和步进电机的单相励磁驱动!

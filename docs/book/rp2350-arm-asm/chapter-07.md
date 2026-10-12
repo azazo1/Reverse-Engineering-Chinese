@@ -1,103 +1,103 @@
-# Chapter 7: ARM Cortex-M33 ISA Overview
+# Chapter 7: ARM Cortex-M33 指令集架构概览
 
-## Introduction
+## 引言
 
-The instruction set architecture (ISA) defines every operation the processor can perform.  The ARM Cortex-M33 implements the ARMv8-M Mainline architecture using the **Thumb-2** instruction set — a variable-length encoding that mixes 16-bit and 32-bit instructions for both code density and performance.  This chapter surveys the ISA at a high level and identifies every instruction our blink driver uses.
+指令集架构 (ISA) 定义了处理器能执行的全部操作. ARM Cortex-M33 用 **Thumb-2** 指令集实现 ARMv8-M Mainline 架构 - 这是一种变长编码, 把 16 位和 32 位指令混在一起, 既照顾代码密度, 也照顾性能. 本章从高处俯瞰这套 ISA, 并盘点我们的闪烁驱动用到的每一条指令.
 
-## The ARM Design Philosophy
+## ARM 的设计哲学
 
-ARM processors follow the RISC (Reduced Instruction Set Computer) philosophy:
+ARM 处理器遵循 RISC (精简指令集计算机) 哲学:
 
-- **Fixed-width instructions** (with the Thumb-2 exception of 16/32-bit mix)
-- **Load-store architecture** — only `ldr`/`str` access memory
-- **Large register file** — 16 general-purpose registers
-- **Simple addressing modes** — base + offset
-- **Conditional execution** — many instructions can be conditionally executed
+- **定长指令** (Thumb-2 的 16/32 位混合是个例外)
+- **加载-存储架构** - 只有 `ldr`/`str` 访问内存
+- **庞大的寄存器组** - 16 个通用寄存器
+- **简单的寻址方式** - 基地址加偏移
+- **条件执行** - 很多指令都可以带条件执行
 
-The Thumb-2 extension adds 32-bit encodings to the original 16-bit Thumb set, giving access to the full ARM feature set without sacrificing code density.
+Thumb-2 扩展在原有的 16 位 Thumb 指令集上增加了 32 位编码, 让你在不牺牲代码密度的前提下用上 ARM 的全部功能.
 
-## Thumb-2 Instruction Encoding
+## Thumb-2 指令编码
 
-Every instruction is either 16 bits (2 bytes) or 32 bits (4 bytes):
+每条指令要么是 16 位 (2 字节), 要么是 32 位 (4 字节):
 
-| Type | Size | When Used |
+| 类型 | 大小 | 使用场合 |
 |------|------|-----------|
-| Narrow (Thumb) | 16-bit | Simple operations with low registers (r0–r7) |
-| Wide (Thumb-2) | 32-bit | Complex operations, large immediates, high registers |
+| 窄 (Thumb) | 16 位 | 使用低寄存器 (r0-r7) 的简单操作 |
+| 宽 (Thumb-2) | 32 位 | 复杂操作, 大立即数, 高寄存器 |
 
-The assembler chooses the narrowest encoding that can represent the operation.  The `.syntax unified` directive tells the assembler to accept both widths transparently.
+汇编器会挑能表达该操作的最窄编码. `.syntax unified` 指示汇编器透明地接受这两种宽度.
 
-16-bit example:
-
-```asm
-  bx    lr                                       // 16-bit: return to caller
-```
-
-32-bit example:
+16 位的例子:
 
 ```asm
-  bic   r5, r5, #(1<<7)                          // 32-bit: clear bit 7
+  bx    lr                                       // 16 位: 返回调用者
 ```
 
-## Instruction Categories
+32 位的例子:
 
-All Cortex-M33 instructions fall into these categories:
+```asm
+  bic   r5, r5, #(1<<7)                          // 32 位: 清除第 7 位
+```
 
-| Category | Examples | Used in Our Firmware |
+## 指令分类
+
+Cortex-M33 的所有指令都属于以下几类:
+
+| 类别 | 例子 | 我们固件里用过 |
 |----------|---------|---------------------|
-| Data processing | `add`, `sub`, `orr`, `bic`, `tst`, `cmp`, `mul` | Yes |
-| Load/store | `ldr`, `str`, `push`, `pop` | Yes |
-| Branch | `b`, `bl`, `bx`, `beq`, `bne`, `ble` | Yes |
-| Move | `mov`, `ldr Rd, =imm` | Yes |
-| System | `msr`, `mrs`, `dsb`, `isb`, `mcrr` | Yes |
-| Multiply | `mul` | Yes |
+| 数据处理 | `add`, `sub`, `orr`, `bic`, `tst`, `cmp`, `mul` | 是 |
+| 加载/存储 | `ldr`, `str`, `push`, `pop` | 是 |
+| 跳转 | `b`, `bl`, `bx`, `beq`, `bne`, `ble` | 是 |
+| 传送 | `mov`, `ldr Rd, =imm` | 是 |
+| 系统 | `msr`, `mrs`, `dsb`, `isb`, `mcrr` | 是 |
+| 乘法 | `mul` | 是 |
 
-## Instruction Encoding Formats
+## 指令编码格式
 
-Thumb-2 32-bit instructions use several encoding formats:
+Thumb-2 的 32 位指令使用好几种编码格式:
 
-| Format | Description | Example |
+| 格式 | 说明 | 例子 |
 |--------|-------------|---------|
-| Data processing (register) | op Rd, Rn, Rm | `orr r1, r1, #(1<<11)` |
-| Data processing (immediate) | op Rd, Rn, #imm | `bic r5, r5, #(1<<7)` |
-| Load/store (immediate) | ldr/str Rt, [Rn, #imm] | `ldr r1, [r0]` |
-| Branch | b/bl label | `bl GPIO_Set` |
-| System | msr/mrs special, Rn | `msr MSP, r0` |
-| Coprocessor | mcrr pN, opc, Rt, Rt2, CRm | `mcrr p0, #4, r2, r4, c4` |
+| 数据处理 (寄存器) | op Rd, Rn, Rm | `orr r1, r1, #(1<<11)` |
+| 数据处理 (立即数) | op Rd, Rn, #imm | `bic r5, r5, #(1<<7)` |
+| 加载/存储 (立即数) | ldr/str Rt, [Rn, #imm] | `ldr r1, [r0]` |
+| 跳转 | b/bl label | `bl GPIO_Set` |
+| 系统 | msr/mrs special, Rn | `msr MSP, r0` |
+| 协处理器 | mcrr pN, opc, Rt, Rt2, CRm | `mcrr p0, #4, r2, r4, c4` |
 
-## Instructions Used in Our Firmware
+## 我们固件里用到的指令
 
-Here is the complete list of instructions appearing in our blink driver:
+下面是闪烁驱动里出现的全部指令:
 
-| Instruction | Category | Description |
+| 指令 | 类别 | 说明 |
 |-------------|----------|-------------|
-| `ldr Rd, =imm` | Pseudo-instruction | Load 32-bit constant into register |
-| `ldr Rd, [Rn]` | Load | Load word from memory |
-| `str Rd, [Rn]` | Store | Store word to memory |
-| `push {regs}` | Store (multiple) | Push registers onto stack |
-| `pop {regs}` | Load (multiple) | Pop registers from stack |
-| `add Rd, Rn, Rm` | Arithmetic | Add two registers |
-| `sub Rd, Rd, #imm` | Arithmetic | Subtract immediate |
-| `subs Rd, Rd, #imm` | Arithmetic | Subtract and update flags |
-| `mul Rd, Rn, Rm` | Multiply | Multiply two registers |
-| `orr Rd, Rd, #imm` | Logic | Bitwise OR with immediate |
-| `bic Rd, Rd, #imm` | Logic | Bit clear (AND with NOT imm) |
-| `tst Rn, #imm` | Logic | Test bits (AND, discard, set flags) |
-| `cmp Rn, #imm` | Comparison | Compare (subtract, discard, set flags) |
-| `b label` | Branch | Unconditional branch |
-| `bl label` | Branch | Branch with link (call) |
-| `bx Rn` | Branch | Branch exchange (return) |
-| `beq label` | Branch | Branch if equal (Z=1) |
-| `bne label` | Branch | Branch if not equal (Z=0) |
-| `ble label` | Branch | Branch if less or equal |
-| `msr reg, Rn` | System | Write to special register |
-| `dsb` | Barrier | Data synchronization barrier |
-| `isb` | Barrier | Instruction synchronization barrier |
-| `mcrr pN, opc, Rt, Rt2, CRm` | Coprocessor | Move to coprocessor from two registers |
+| `ldr Rd, =imm` | 伪指令 | 把 32 位常量加载进寄存器 |
+| `ldr Rd, [Rn]` | 加载 | 从内存加载一个字 |
+| `str Rd, [Rn]` | 存储 | 往内存存储一个字 |
+| `push {regs}` | 存储 (多寄存器) | 把寄存器压入栈 |
+| `pop {regs}` | 加载 (多寄存器) | 从栈弹出寄存器 |
+| `add Rd, Rn, Rm` | 算术 | 两个寄存器相加 |
+| `sub Rd, Rd, #imm` | 算术 | 减去立即数 |
+| `subs Rd, Rd, #imm` | 算术 | 相减并更新标志 |
+| `mul Rd, Rn, Rm` | 乘法 | 两个寄存器相乘 |
+| `orr Rd, Rd, #imm` | 逻辑 | 与立即数按位或 |
+| `bic Rd, Rd, #imm` | 逻辑 | 位清除 (与立即数的反码相与) |
+| `tst Rn, #imm` | 逻辑 | 测试位 (相与, 丢弃结果, 置标志) |
+| `cmp Rn, #imm` | 比较 | 比较 (相减, 丢弃结果, 置标志) |
+| `b label` | 跳转 | 无条件跳转 |
+| `bl label` | 跳转 | 带链接跳转 (调用) |
+| `bx Rn` | 跳转 | 跳转并切换指令集 (返回) |
+| `beq label` | 跳转 | 相等则跳转 (Z=1) |
+| `bne label` | 跳转 | 不相等则跳转 (Z=0) |
+| `ble label` | 跳转 | 小于等于则跳转 |
+| `msr reg, Rn` | 系统 | 写入专用寄存器 |
+| `dsb` | 屏障 | 数据同步屏障 |
+| `isb` | 屏障 | 指令同步屏障 |
+| `mcrr pN, opc, Rt, Rt2, CRm` | 协处理器 | 从两个寄存器传送到协处理器 |
 
-## Summary
+## 小结
 
-- The Cortex-M33 uses the Thumb-2 instruction set: a mix of 16-bit and 32-bit encodings.
-- `.syntax unified` enables transparent use of both widths.
-- Instructions are categorized into data processing, load/store, branch, system, and coprocessor.
-- Our blink driver uses approximately 23 distinct instructions to achieve full GPIO control from bare metal.
+- Cortex-M33 使用 Thumb-2 指令集: 16 位和 32 位编码的混合.
+- `.syntax unified` 让两种宽度都能透明使用.
+- 指令分为数据处理, 加载/存储, 跳转, 系统和协处理器几类.
+- 我们的闪烁驱动大约用了 23 条不同的指令, 就实现了从裸机完全控制 GPIO.

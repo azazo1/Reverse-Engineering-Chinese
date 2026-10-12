@@ -1,112 +1,112 @@
-# Chapter 5: Load-Store Architecture — How RISC-V Accesses Memory
+# Chapter 5: 加载-存储架构 - RISC-V 如何访问内存
 
-## Introduction
+## 引言
 
-RISC-V is a **load-store architecture**: the only instructions that access memory are loads and stores.  All arithmetic and logic operates exclusively on registers.  This chapter explains the load-store model, shows the key load and store instructions used in our firmware, and demonstrates the fundamental read-modify-write pattern for hardware programming.
+RISC-V 是**加载-存储架构 (load-store architecture)**: 唯一能够访问内存的指令就是加载和存储. 所有算术和逻辑运算都只在寄存器上进行. 本章讲解加载-存储模型, 展示固件里用到的关键加载和存储指令, 并演示硬件编程中那个基础的模式: 读-改-写.
 
-## Why Load-Store?
+## 为什么是加载-存储?
 
-In a load-store architecture, computation never operates directly on memory.  To add 1 to a value in memory, you must:
+在加载-存储架构里, 计算从不直接操作内存. 要把内存里的某个值加 1, 你必须:
 
-1. **Load** the value from memory into a register.
-2. **Add** 1 to the register.
-3. **Store** the result back to memory.
+1. **加载 (Load)** - 把值从内存读进寄存器.
+2. **相加 (Add)** - 给寄存器加 1.
+3. **存储 (Store)** - 把结果写回内存.
 
-This constraint simplifies the processor hardware and enables fast, pipelined execution.  Every RISC-V instruction either operates on registers or transfers data between registers and memory — never both in the same instruction.
+这个约束简化了处理器硬件, 也让快速流水线执行成为可能. 每条 RISC-V 指令要么只操作寄存器, 要么只在寄存器和内存之间搬数据 - 绝不会在同一条指令里两者兼顾.
 
-## The Load Instruction: lw
+## 加载指令: lw
 
-The `lw` (load word) instruction reads a 32-bit value from a memory address into a register:
-
-```asm
-  lw    t1, 0(t0)                                # read 32-bit value at address in t0
-```
-
-This reads 4 bytes from the address in `t0` and places them in `t1`.  Our firmware uses this pattern to read every peripheral register:
+`lw` (load word, 加载字) 指令把一个 32 位值从内存地址读进寄存器:
 
 ```asm
-  li    t0, RESETS_RESET                         # load RESETS->RESET address
-  lw    t1, 0(t0)                                # read current RESETS->RESET value
+  lw    t1, 0(t0)                                # 读取 t0 地址处的 32 位值
 ```
 
-## The Store Instruction: sw
-
-The `sw` (store word) instruction writes a 32-bit value from a register to a memory address:
+它从 `t0` 里的地址处读 4 个字节, 放到 `t1` 里. 我们的固件就用这个模式读取每一个外设寄存器:
 
 ```asm
-  sw    t1, 0(t0)                                # write t1 to address in t0
+  li    t0, RESETS_RESET                         # 加载 RESETS->RESET 地址
+  lw    t1, 0(t0)                                # 读取 RESETS->RESET 当前值
 ```
 
-This writes the 4 bytes in `t1` to the address in `t0`.  In peripheral programming, this is how we configure hardware:
+## 存储指令: sw
+
+`sw` (store word, 存储字) 指令把一个 32 位值从寄存器写到内存地址:
 
 ```asm
-  sw    t1, 0(t0)                                # store value into XOSC_CTRL
+  sw    t1, 0(t0)                                # 把 t1 写到 t0 里的地址
 ```
 
-## The Load-Modify-Store Pattern
-
-Most hardware configuration follows a three-step pattern:
-
-1. Load the current register value.
-2. Modify specific bits (set, clear, or toggle).
-3. Store the modified value back.
+它把 `t1` 里的 4 个字节写到 `t0` 里的地址上. 在外设编程中, 我们就是这样配置硬件的:
 
 ```asm
-  li    t0, CLK_PERI_CTRL                        # load CLK_PERI_CTRL address
-  lw    t1, 0(t0)                                # read CLK_PERI_CTRL value
-  li    t2, (1<<11)                              # ENABLE bit mask
-  or    t1, t1, t2                               # set ENABLE bit
-  sw    t1, 0(t0)                                # store value into CLK_PERI_CTRL
+  sw    t1, 0(t0)                                # 把值存进 XOSC_CTRL
 ```
 
-This pattern guarantees we only change the bits we intend to, preserving all other bits in the register.
+## 加载-修改-存储模式
 
-## Byte and Halfword Access
+大多数硬件配置都遵循三步模式:
 
-RISC-V also supports narrower loads and stores:
+1. 加载寄存器当前的值.
+2. 修改特定的位 (置位, 清零或取反).
+3. 把修改后的值存回去.
 
-| Instruction | Width | Description |
+```asm
+  li    t0, CLK_PERI_CTRL                        # 加载 CLK_PERI_CTRL 地址
+  lw    t1, 0(t0)                                # 读取 CLK_PERI_CTRL 的值
+  li    t2, (1<<11)                              # ENABLE 位掩码
+  or    t1, t1, t2                               # 置位 ENABLE 位
+  sw    t1, 0(t0)                                # 把值存进 CLK_PERI_CTRL
+```
+
+这个模式保证我们只改想改的位, 寄存器里其余的位都保持原样.
+
+## 字节和半字访问
+
+RISC-V 也支持更窄的加载和存储:
+
+| 指令 | 宽度 | 说明 |
 |-------------|-------|-------------|
-| `lb` / `sb` | 8 bits | Load/store byte |
-| `lh` / `sh` | 16 bits | Load/store halfword |
-| `lw` / `sw` | 32 bits | Load/store word |
-| `lbu` | 8 bits | Load byte unsigned |
-| `lhu` | 16 bits | Load halfword unsigned |
+| `lb` / `sb` | 8 位 | 加载/存储字节 |
+| `lh` / `sh` | 16 位 | 加载/存储半字 |
+| `lw` / `sw` | 32 位 | 加载/存储字 |
+| `lbu` | 8 位 | 加载无符号字节 |
+| `lhu` | 16 位 | 加载无符号半字 |
 
-Our firmware uses only `lw`/`sw` because all RP2350 peripheral registers are 32 bits wide.  The `lb`/`lbu` variants exist for byte-oriented data processing.
+我们的固件只用 `lw`/`sw`, 因为 RP2350 的所有外设寄存器都是 32 位宽. `lb`/`lbu` 这些变体是给按字节处理的数据准备的.
 
-## Stack Operations
+## 栈操作
 
-RISC-V uses explicit `sw`/`lw` instructions with the stack pointer for push/pop operations:
+RISC-V 用显式的 `sw`/`lw` 指令配合栈指针来实现压栈和出栈:
 
 ```asm
-  addi  sp, sp, -4                               # allocate stack frame
-  sw    ra, 0(sp)                                # save return address
+  addi  sp, sp, -4                               # 分配栈帧
+  sw    ra, 0(sp)                                # 保存返回地址
   ...
-  lw    ra, 0(sp)                                # restore return address
-  addi  sp, sp, 4                                # deallocate stack frame
+  lw    ra, 0(sp)                                # 恢复返回地址
+  addi  sp, sp, 4                                # 释放栈帧
 ```
 
-This is functionally equivalent to ARM's `push`/`pop` but makes the stack pointer adjustment explicit.
+功能上这等价于 ARM 的 `push`/`pop`, 只是把栈指针的调整写得更明确了.
 
-## Memory Access in Our Firmware
+## 固件中的内存访问
 
-Every hardware interaction in our firmware follows the load-store model:
+固件里的每一次硬件交互都遵循加载-存储模型:
 
-| Operation | Pattern |
+| 操作 | 模式 |
 |-----------|---------|
-| Read peripheral | `li t0, ADDR` then `lw t1, 0(t0)` |
-| Write peripheral | `li t0, ADDR` then `sw t1, 0(t0)` |
-| Set bits | Load, `or`, store |
-| Clear bits | Load, `and` with inverted mask, store |
-| Test a bit | Load, `andi`, branch |
-| Push to stack | `addi sp, sp, -N` then `sw ra, 0(sp)` |
-| Pop from stack | `lw ra, 0(sp)` then `addi sp, sp, N` |
+| 读外设 | 先 `li t0, ADDR`, 再 `lw t1, 0(t0)` |
+| 写外设 | 先 `li t0, ADDR`, 再 `sw t1, 0(t0)` |
+| 置位 | 加载, `or`, 存储 |
+| 清零 | 加载, 与反相掩码做 `and`, 存储 |
+| 测试某一位 | 加载, `andi`, 分支 |
+| 压栈 | `addi sp, sp, -N` 再 `sw ra, 0(sp)` |
+| 出栈 | `lw ra, 0(sp)` 再 `addi sp, sp, N` |
 
-## Summary
+## 小结
 
-- RISC-V is a load-store architecture — only `lw`/`sw` (and variants) access memory.
-- All computations happen in registers.
-- The load-modify-store pattern is the foundation of all hardware configuration.
-- Stack operations use explicit `sw`/`lw` with `sp` adjustments.
-- Our firmware uses word-width access (`lw`/`sw`) for all peripheral registers.
+- RISC-V 是加载-存储架构 - 只有 `lw`/`sw` (及其变体) 访问内存.
+- 所有计算都在寄存器里进行.
+- 加载-修改-存储模式是所有硬件配置的基础.
+- 栈操作靠显式的 `sw`/`lw` 加上 `sp` 调整来完成.
+- 我们的固件对所有外设寄存器都采用字宽访问 (`lw`/`sw`).

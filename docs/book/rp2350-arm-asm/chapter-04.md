@@ -1,158 +1,158 @@
-# Chapter 4: What Is a Register?
+# Chapter 4: 什么是寄存器?
 
-## Introduction
+## 引言
 
-Registers are the fastest storage in the processor — small, 32-bit holding cells built directly into the CPU silicon.  Every computation happens in registers: loading values from memory, performing arithmetic, testing conditions, and storing results back.  This chapter maps out the complete ARM Cortex-M33 register file and shows exactly which registers our blink driver uses.
+寄存器是处理器里最快的存储 - 一些直接做在 CPU 硅片上的小格子, 每个 32 位宽. 所有计算都在寄存器里发生: 从内存加载值, 做算术运算, 测试条件, 再把结果存回去. 本章把 ARM Cortex-M33 的寄存器组完整梳理一遍, 并指出我们的闪烁驱动到底用了哪些寄存器.
 
-## The ARM Cortex-M33 Register File
+## ARM Cortex-M33 的寄存器组
 
-The Cortex-M33 provides 16 general-purpose registers plus several special-purpose registers:
+Cortex-M33 提供 16 个通用寄存器, 外加若干专用寄存器:
 
-| Register | ABI Name | Purpose |
+| 寄存器 | ABI 名称 | 用途 |
 |----------|----------|---------|
-| r0 | a1 | Argument 1 / return value / scratch |
-| r1 | a2 | Argument 2 / scratch |
-| r2 | a3 | Argument 3 / scratch |
-| r3 | a4 | Argument 4 / scratch |
-| r4 | v1 | Callee-saved variable |
-| r5 | v2 | Callee-saved variable |
-| r6 | v3 | Callee-saved variable |
-| r7 | v4 | Callee-saved variable |
-| r8 | v5 | Callee-saved variable |
-| r9 | v6 | Callee-saved variable (platform-specific) |
-| r10 | v7 | Callee-saved variable |
-| r11 | v8 | Callee-saved variable (frame pointer) |
-| r12 | IP | Intra-procedure scratch |
-| r13 | SP | Stack Pointer |
-| r14 | LR | Link Register |
-| r15 | PC | Program Counter |
+| r0 | a1 | 参数 1 / 返回值 / 暂存 |
+| r1 | a2 | 参数 2 / 暂存 |
+| r2 | a3 | 参数 3 / 暂存 |
+| r3 | a4 | 参数 4 / 暂存 |
+| r4 | v1 | 被调用者保存的变量 |
+| r5 | v2 | 被调用者保存的变量 |
+| r6 | v3 | 被调用者保存的变量 |
+| r7 | v4 | 被调用者保存的变量 |
+| r8 | v5 | 被调用者保存的变量 |
+| r9 | v6 | 被调用者保存的变量 (与平台相关) |
+| r10 | v7 | 被调用者保存的变量 |
+| r11 | v8 | 被调用者保存的变量 (帧指针) |
+| r12 | IP | 过程内暂存 |
+| r13 | SP | 栈指针 |
+| r14 | LR | 链接寄存器 |
+| r15 | PC | 程序计数器 |
 
-## Registers r0-r3: Arguments and Scratch
+## 寄存器 r0-r3: 参数与暂存
 
-The first four registers pass function arguments and return values.  They are **caller-saved**: a called function is free to overwrite them without restoring their previous values.
+前四个寄存器用来传递函数参数和返回值. 它们是**调用者保存**的: 被调用的函数可以随意覆写它们, 不需要恢复原来的值.
 
-In our firmware:
-
-```asm
-  ldr   r0, =PADS_BANK0_GPIO16_OFFSET            // argument 1: pad offset
-  ldr   r1, =IO_BANK0_GPIO16_CTRL_OFFSET         // argument 2: ctrl offset
-  ldr   r2, =16                                  // argument 3: GPIO number
-  bl    GPIO_Config                              // call GPIO_Config
-```
-
-Three arguments are loaded into r0, r1, r2 before the call.
-
-## Registers r4-r11: Callee-Saved
-
-These registers must be preserved across function calls.  If a function uses them, it must save them on entry and restore them on exit:
+在我们的固件里:
 
 ```asm
-  push  {r4-r12, lr}                             // save callee-saved registers
-  // ... use r4, r5 freely ...
-  pop   {r4-r12, lr}                             // restore callee-saved registers
+  ldr   r0, =PADS_BANK0_GPIO16_OFFSET            // 参数 1: pad 偏移
+  ldr   r1, =IO_BANK0_GPIO16_CTRL_OFFSET         // 参数 2: ctrl 偏移
+  ldr   r2, =16                                  // 参数 3: GPIO 编号
+  bl    GPIO_Config                              // 调用 GPIO_Config
 ```
 
-Our GPIO_Config function uses r4 and r5 as working registers for address calculations and read-modify-write operations.
+调用之前, 三个参数被分别装进 r0, r1, r2.
 
-## Register r12 (IP): Intra-Procedure Scratch
+## 寄存器 r4-r11: 被调用者保存
 
-r12 is designated as the Intra-Procedure call scratch register.  The linker may use it for long-range branch veneers.  Our firmware saves and restores it as part of the `{r4-r12, lr}` push/pop block.
-
-## Register r13 (SP): Stack Pointer
-
-The Stack Pointer holds the address of the top of the stack.  ARM Cortex-M33 actually has two stack pointers:
-
-- **MSP (Main Stack Pointer)** — used in handler mode (interrupts) and by default in thread mode
-- **PSP (Process Stack Pointer)** — optionally used in thread mode
-
-Our Init_Stack function initializes both:
+这些寄存器必须在函数调用之间保持不变. 如果某个函数要用它们, 就必须在入口处保存, 在出口处恢复:
 
 ```asm
-  ldr   r0, =STACK_TOP                           // load stack top
-  msr   PSP, r0                                  // set PSP
-  msr   MSP, r0                                  // set MSP
+  push  {r4-r12, lr}                             // 保存被调用者保存的寄存器
+  // ... 可自由使用 r4, r5 ...
+  pop   {r4-r12, lr}                             // 恢复被调用者保存的寄存器
 ```
 
-## Register r14 (LR): Link Register
+我们的 GPIO_Config 函数把 r4 和 r5 当作工作寄存器, 用来做地址计算和读-改-写操作.
 
-When a `bl` (branch-with-link) instruction calls a function, the processor stores the return address in LR.  The function returns by branching to this address:
+## 寄存器 r12 (IP): 过程内暂存
+
+r12 被指定为过程内调用暂存寄存器. 链接器可能用它来构造远距离跳转的跳板. 我们的固件把它和 `{r4-r12, lr}` 这一组一起压栈和出栈, 所以它也被保存和恢复.
+
+## 寄存器 r13 (SP): 栈指针
+
+栈指针保存着栈顶的地址. ARM Cortex-M33 其实有两个栈指针:
+
+- **MSP (主栈指针)** - 在处理器模式 (中断) 下使用, 线程模式下默认也用它
+- **PSP (进程栈指针)** - 线程模式下可选使用
+
+我们的 Init_Stack 函数把两个都初始化了:
 
 ```asm
-  bl    GPIO_Set                                 // LR = address of next instruction
-  // ... GPIO_Set runs ...
-  bx    lr                                       // return to caller
+  ldr   r0, =STACK_TOP                           // 加载栈顶
+  msr   PSP, r0                                  // 设置 PSP
+  msr   MSP, r0                                  // 设置 MSP
 ```
 
-For nested calls, LR must be saved on the stack because the inner call will overwrite it.
+## 寄存器 r14 (LR): 链接寄存器
 
-## Register r15 (PC): Program Counter
+当 `bl` (带链接跳转) 指令调用一个函数时, 处理器把返回地址存进 LR. 函数结束时跳回这个地址, 就回到了调用处:
 
-The PC holds the address of the current instruction being fetched.  You rarely write to it directly — branches, calls, and returns update it implicitly.
+```asm
+  bl    GPIO_Set                                 // LR = 下一条指令的地址
+  // ... GPIO_Set 开始运行 ...
+  bx    lr                                       // 返回调用者
+```
 
-On Cortex-M33, the PC always contains the address of the current instruction plus 4 (due to the pipeline).
+如果是嵌套调用, LR 必须先存到栈上, 因为内层调用会把它覆盖掉.
 
-## Special Registers
+## 寄存器 r15 (PC): 程序计数器
 
-Beyond the general-purpose file, the Cortex-M33 has special registers accessible only through the `msr` and `mrs` instructions:
+PC 保存着当前正在取指的那条指令的地址. 你很少直接写它 - 跳转, 调用和返回都会隐式地更新它.
 
-| Register | Purpose |
+在 Cortex-M33 上, PC 读出来的值总是当前指令地址加 4 (这是流水线造成的).
+
+## 专用寄存器
+
+除了通用寄存器组, Cortex-M33 还有一些只能通过 `msr` 和 `mrs` 指令访问的专用寄存器:
+
+| 寄存器 | 用途 |
 |----------|---------|
-| MSP | Main Stack Pointer |
-| PSP | Process Stack Pointer |
-| MSPLIM | MSP limit (stack overflow detection) |
-| PSPLIM | PSP limit (stack overflow detection) |
-| PRIMASK | Interrupt mask (1 = all interrupts disabled) |
-| CONTROL | Stack pointer selection, privilege level |
-| xPSR | Combined program status register |
+| MSP | 主栈指针 |
+| PSP | 进程栈指针 |
+| MSPLIM | MSP 下限 (用于检测栈溢出) |
+| PSPLIM | PSP 下限 (用于检测栈溢出) |
+| PRIMASK | 中断屏蔽 (为 1 表示屏蔽所有中断) |
+| CONTROL | 栈指针选择, 特权级别 |
+| xPSR | 合并的程序状态寄存器 |
 
-Our Init_Stack function uses four of these:
+我们的 Init_Stack 函数用到了其中四个:
 
 ```asm
-  msr   PSP, r0                                  // set Process Stack Pointer
-  msr   MSPLIM, r0                               // set MSP lower limit
-  msr   PSPLIM, r0                               // set PSP lower limit
-  msr   MSP, r0                                  // set Main Stack Pointer
+  msr   PSP, r0                                  // 设置进程栈指针
+  msr   MSPLIM, r0                               // 设置 MSP 下限
+  msr   PSPLIM, r0                               // 设置 PSP 下限
+  msr   MSP, r0                                  // 设置主栈指针
 ```
 
-## The Program Status Register (xPSR)
+## 程序状态寄存器 (xPSR)
 
-The xPSR is actually three registers combined:
+xPSR 其实是三个寄存器合在一起:
 
-| Sub-register | Bits | Contents |
+| 子寄存器 | 位 | 内容 |
 |-------------|------|----------|
-| APSR | 31:28 | Condition flags: N (negative), Z (zero), C (carry), V (overflow) |
-| IPSR | 8:0 | Exception number (0 = thread mode, nonzero = handler) |
-| EPSR | 24 | T bit (always 1 for Thumb mode) |
+| APSR | 31:28 | 条件标志: N (负), Z (零), C (进位), V (溢出) |
+| IPSR | 8:0 | 异常编号 (0 表示线程模式, 非零表示处理器模式) |
+| EPSR | 24 | T 位 (Thumb 模式下恒为 1) |
 
-The condition flags in APSR are set by instructions with the `s` suffix (like `subs`, `tst`, `cmp`) and tested by conditional branches (`beq`, `bne`, `ble`, etc.).
+APSR 里的条件标志由带 `s` 后缀的指令置位 (例如 `subs`, `tst`, `cmp`), 由条件跳转指令来测试 (`beq`, `bne`, `ble` 等).
 
-In our delay loop:
+在我们的延时循环里:
 
 ```asm
-  subs  r5, r5, #1                               // decrement counter (sets Z flag)
-  bne   .Delay_MS_Loop                           // branch if Z=0 (not zero)
+  subs  r5, r5, #1                               // 计数器减一 (置 Z 标志)
+  bne   .Delay_MS_Loop                           // 若 Z=0 (不为零) 则跳转
 ```
 
-The `subs` instruction updates the Z flag.  When r5 reaches zero, Z is set to 1, and `bne` falls through to end the loop.
+`subs` 指令会更新 Z 标志. 当 r5 减到零时, Z 被置为 1, 于是 `bne` 不再跳转, 循环结束.
 
-## Register Usage in Our Firmware
+## 我们固件里的寄存器用法
 
-| Register | Where Used | Purpose |
+| 寄存器 | 用在哪 | 用途 |
 |----------|-----------|---------|
-| r0 | Everywhere | Addresses, arguments, GPIO pin numbers |
-| r1 | Everywhere | Register values, second arguments |
-| r2 | main.s | GPIO number argument |
-| r4 | gpio.s, delay.s | Working register for address math |
-| r5 | gpio.s, delay.s | Working register for values |
-| SP | Implicitly | Stack operations (push/pop) |
-| LR | Implicitly | Return addresses |
-| PC | Implicitly | Instruction fetch |
+| r0 | 到处都用 | 地址, 参数, GPIO 引脚编号 |
+| r1 | 到处都用 | 寄存器值, 第二个参数 |
+| r2 | main.s | GPIO 编号参数 |
+| r4 | gpio.s, delay.s | 地址运算的工作寄存器 |
+| r5 | gpio.s, delay.s | 存放数值的工作寄存器 |
+| SP | 隐式 | 栈操作 (push/pop) |
+| LR | 隐式 | 返回地址 |
+| PC | 隐式 | 取指 |
 
-## Summary
+## 小结
 
-- The Cortex-M33 has 16 general-purpose registers (r0–r15) plus special registers.
-- r0–r3 are argument/scratch registers; r4–r11 are callee-saved.
-- SP (r13) points to the top of the stack; LR (r14) holds the return address.
-- The xPSR contains condition flags (N, Z, C, V) set by arithmetic instructions.
-- Special registers (MSP, PSP, MSPLIM, PSPLIM) are accessed via `msr`/`mrs`.
-- Our firmware uses r0–r2 for function arguments and r4–r5 for internal computation.
+- Cortex-M33 有 16 个通用寄存器 (r0-r15), 外加专用寄存器.
+- r0-r3 是参数与暂存寄存器; r4-r11 是被调用者保存的.
+- SP (r13) 指向栈顶; LR (r14) 保存返回地址.
+- xPSR 里存着由算术指令置位的条件标志 (N, Z, C, V).
+- 专用寄存器 (MSP, PSP, MSPLIM, PSPLIM) 通过 `msr`/`mrs` 访问.
+- 我们的固件用 r0-r2 传函数参数, 用 r4-r5 做内部计算.

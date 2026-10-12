@@ -1,6 +1,6 @@
-# TUTORIAL: WebAssembly Component Model with Pulley — From Scratch
+# 教程: 使用 Pulley 的 WebAssembly 组件模型 - 从零开始
 
-## License
+## 许可证
 
 SPDX-License-Identifier: MIT
 
@@ -8,47 +8,47 @@ Copyright (c) 2026 Kevin Thomas
 
 ---
 
-## Who This Is For
+## 这本书写给谁
 
-You have never used WebAssembly. You have never heard of WIT, Component Model, or Pulley. You may or may not know Rust. This tutorial assumes nothing and explains everything. By the end, you will understand exactly what every file, every struct, every function, and every line of code in this project does, and why it matters for embedded systems.
-
----
-
-## Table of Contents
-
-1. [The Big Picture](#the-big-picture)
-2. [What Is WebAssembly (Wasm)](#what-is-webassembly-wasm)
-3. [What Is a Wasm Runtime](#what-is-a-wasm-runtime)
-4. [What Is Wasmtime](#what-is-wasmtime)
-5. [What Is Pulley](#what-is-pulley)
-6. [What Is WIT](#what-is-wit)
-7. [What Is the Component Model](#what-is-the-component-model)
-8. [What Is no_std](#what-is-no_std)
-9. [What Is AOT Precompilation](#what-is-aot-precompilation)
-10. [Project Structure](#project-structure)
-11. [The WIT Files — Line by Line](#the-wit-files--line-by-line)
-12. [Guest1 — Line by Line](#guest1--line-by-line)
-13. [Guest2 — Line by Line](#guest2--line-by-line)
-14. [The Build Script — Line by Line](#the-build-script--line-by-line)
-15. [The Host — Line by Line](#the-host--line-by-line)
-16. [The Engine — In Depth](#the-engine--in-depth)
-17. [The Linker — In Depth](#the-linker--in-depth)
-18. [The Store — In Depth](#the-store--in-depth)
-19. [The Component — In Depth](#the-component--in-depth)
-20. [The Instance — In Depth](#the-instance--in-depth)
-21. [How They All Connect](#how-they-all-connect)
-22. [The Integration Tests — Line by Line](#the-integration-tests--line-by-line)
-23. [How to Build and Run](#how-to-build-and-run)
-24. [Why This Matters for Embedded Systems](#why-this-matters-for-embedded-systems)
-25. [Glossary](#glossary)
+你从没用过 WebAssembly. 你没听过 WIT, 组件模型和 Pulley. Rust 你可能懂, 也可能不懂. 本教程不预设任何前提, 把所有东西都讲清楚. 读完之后, 你会确切知道这个项目里每个文件, 每个结构体, 每个函数, 每一行代码在做什么, 以及它们对嵌入式系统为什么重要.
 
 ---
 
-## The Big Picture
+## 目录
 
-This project has two guest programs and one host program. The guests are written in Rust with `#![no_std]` (no standard library), compiled to WebAssembly, and packaged as "components." At build time, a build script (`build.rs`) compiles each guest, encodes it as a WebAssembly component, and AOT-precompiles it to Pulley bytecode. The host binary embeds those precompiled artifacts, deserializes them at runtime, and calls the functions that the guests export. Guests return strings through the Component Model canonical ABI — no WASI, no `println!`, no operating system dependencies.
+1. [全局图景](#全局图景)
+2. [什么是 WebAssembly (Wasm)](#什么是-webassembly-wasm)
+3. [什么是 Wasm 运行时](#什么是-wasm-运行时)
+4. [什么是 Wasmtime](#什么是-wasmtime)
+5. [什么是 Pulley](#什么是-pulley)
+6. [什么是 WIT](#什么是-wit)
+7. [什么是组件模型](#什么是组件模型)
+8. [什么是 no_std](#什么是-no_std)
+9. [什么是 AOT 预编译](#什么是-aot-预编译)
+10. [项目结构](#项目结构)
+11. [WIT 文件逐行讲解](#wit-文件逐行讲解)
+12. [Guest1 逐行讲解](#guest1-逐行讲解)
+13. [Guest2 逐行讲解](#guest2-逐行讲解)
+14. [构建脚本逐行讲解](#构建脚本逐行讲解)
+15. [宿主逐行讲解](#宿主逐行讲解)
+16. [深入 Engine](#深入-engine)
+17. [深入 Linker](#深入-linker)
+18. [深入 Store](#深入-store)
+19. [深入 Component](#深入-component)
+20. [深入 Instance](#深入-instance)
+21. [它们如何串在一起](#它们如何串在一起)
+22. [集成测试逐行讲解](#集成测试逐行讲解)
+23. [如何构建和运行](#如何构建和运行)
+24. [这对嵌入式系统为什么重要](#这对嵌入式系统为什么重要)
+25. [术语表](#术语表)
 
-The entire execution flow looks like this:
+---
+
+## 全局图景
+
+这个项目有两个客体程序和一个宿主程序. 两个客体用 Rust 以 `#![no_std]` (不带标准库) 编写, 编译成 WebAssembly, 再打包成 "组件". 构建时, 构建脚本 (`build.rs`) 编译每个客体, 把它编码成 WebAssembly 组件, 并 AOT 预编译成 Pulley 字节码. 宿主二进制程序把这些预编译产物嵌进去, 在运行时反序列化, 然后调用客体导出的函数. 客体通过组件模型的规范 ABI 返回字符串 - 不用 WASI, 不用 `println!`, 也不依赖任何操作系统.
+
+整个执行流程长这样:
 
 ```
 You type: cargo build
@@ -98,80 +98,80 @@ You type: cargo run --bin hello
 
 ---
 
-## What Is WebAssembly (Wasm)
+## 什么是 WebAssembly (Wasm)
 
-WebAssembly is a binary instruction format. Think of it as a portable machine language. When you write code in C, Rust, Go, or other languages, the compiler normally produces machine code for a specific processor — x86 for Intel/AMD, ARM for phones and Raspberry Pi, etc. That machine code only runs on that one type of processor.
+WebAssembly 是一种二进制指令格式. 你可以把它想成一种可移植的机器语言. 当你用 C, Rust, Go 或别的语言写代码时, 编译器通常生成的是针对某一款处理器的机器码 - Intel/AMD 上是 x86, 手机和树莓派上是 ARM, 等等. 那些机器码只能在那一种处理器上运行.
 
-WebAssembly is different. The compiler produces instructions for a virtual machine instead of a real processor. That means the same compiled WebAssembly binary can run on any system that has a WebAssembly runtime, regardless of what processor that system has.
+WebAssembly 不一样. 编译器生成的指令不是给真实处理器用的, 而是给一台虚拟机的. 也就是说, 同一份编译好的 WebAssembly 二进制文件, 在任何装了 WebAssembly 运行时的系统上都能跑, 不管那台系统的处理器是什么.
 
-Key properties of WebAssembly:
+WebAssembly 的几个关键性质:
 
-- **Portable**: One binary runs everywhere a runtime exists.
-- **Sandboxed**: A WebAssembly program cannot access your filesystem, network, or memory unless the host explicitly allows it. This is a security feature.
-- **Fast**: Much faster than traditional interpreters (like Python or JavaScript interpreters) because the format is designed to be close to native machine code.
-
----
-
-## What Is a Wasm Runtime
-
-A Wasm runtime is the program that actually executes WebAssembly code. The WebAssembly binary by itself is just a file of bytes. It cannot run on its own. It needs a runtime to:
-
-1. Read and validate the binary.
-2. Compile or interpret the instructions.
-3. Provide any imports the guest code needs (if any).
-4. Execute the guest's exported functions when asked.
-
-Think of it like this: a `.mp3` file does not produce sound by itself. You need a music player (the runtime) to read it and send audio to your speakers. A `.wasm` file does not execute by itself. You need a Wasm runtime to read it and execute its instructions.
+- **可移植**: 一份二进制文件, 凡是有运行时的地方都能运行.
+- **沙箱化**: 除非宿主显式允许, WebAssembly 程序碰不到你的文件系统, 网络或内存. 这是一项安全特性.
+- **快**: 比传统的解释器 (比如 Python 或 JavaScript 解释器) 快得多, 因为这种格式的设计目标就是贴近原生机器码.
 
 ---
 
-## What Is Wasmtime
+## 什么是 Wasm 运行时
 
-Wasmtime is one specific Wasm runtime, built by the Bytecode Alliance. It is written in Rust and is designed for production use. There are other runtimes (Wasmer, WasmEdge, etc.), but this project uses Wasmtime.
+Wasm 运行时就是真正执行 WebAssembly 代码的那个程序. WebAssembly 二进制文件本身只是一堆字节, 它自己跑不起来. 它需要一个运行时来做这些事:
 
-Wasmtime provides the Rust crate `wasmtime` which gives you types like `Engine`, `Store`, `Component`, and `Linker`. These are the building blocks your host program uses to load and run guest WebAssembly code.
+1. 读取并校验二进制文件.
+2. 编译或解释其中的指令.
+3. 提供客体代码需要的导入 (如果有的话).
+4. 在被要求时执行客体导出的函数.
 
-In this project, the host program in `host.rs` uses the `wasmtime` crate directly.
-
----
-
-## What Is Pulley
-
-Pulley is a software interpreter built into Wasmtime. To understand why it exists, you need to understand how Wasmtime normally executes WebAssembly.
-
-**Normal Wasmtime execution (on your laptop or server):**
-
-Wasmtime uses a compiler called Cranelift to translate WebAssembly instructions into native machine code for your processor (x86-64 on most laptops, AArch64 on Apple Silicon Macs). This is fast because the result is real machine code that runs directly on your CPU.
-
-**The problem on embedded systems:**
-
-Embedded microcontrollers (like the RP2350 on the Raspberry Pi Pico 2) use processors that Cranelift does not support. The RP2350 uses a Cortex-M33 (ARMv8-M) processor. Cranelift cannot generate native code for it. So normal Wasmtime execution does not work.
-
-**The Pulley solution:**
-
-Pulley is a portable interpreter inside Wasmtime. Instead of compiling WebAssembly to native machine code, Wasmtime compiles it to Pulley bytecode — a simple instruction set that the Pulley interpreter can execute on any processor, including ones Cranelift does not support.
-
-The tradeoff: Pulley is slower than native compilation because the Pulley interpreter has to read and execute each bytecode instruction one at a time, rather than letting the CPU execute native instructions directly. But it works everywhere, which is the entire point for embedded.
-
-**In this project:**
-
-We set `config.target("pulley64")` in both the build script and the host. This tells Wasmtime: "Do not compile to native machine code. Compile to Pulley bytecode instead." We use `pulley64` because we are running on a 64-bit system (your Mac). On a 32-bit embedded target like the RP2350, you would use `pulley32`.
-
-This project runs on your laptop to teach you the concepts. The same architecture — host deserializes precompiled guest component, executes via Pulley — is exactly what runs on an embedded microcontroller like the RP2350 in the [embedded-wasm-uart-rp2350](https://github.com/mytechnotalent/embedded-wasm-uart-rp2350) project.
+可以这样理解: 一个 `.mp3` 文件本身不会发出声音, 你需要一个播放器 (也就是运行时) 去读它, 把音频送到扬声器. 一个 `.wasm` 文件自己也不会执行, 你需要一个 Wasm 运行时去读它, 执行它的指令.
 
 ---
 
-## What Is WIT
+## 什么是 Wasmtime
 
-WIT stands for WebAssembly Interface Types. It is a plain-text language for defining function signatures that cross the boundary between a host and a guest.
+Wasmtime 是其中一个具体的 Wasm 运行时, 由 Bytecode Alliance 打造. 它用 Rust 编写, 面向生产环境设计. 还有别的运行时 (Wasmer, WasmEdge 等等), 但这个项目用的是 Wasmtime.
 
-**Why it exists:**
+Wasmtime 提供 Rust crate `wasmtime`, 其中给出了 `Engine`, `Store`, `Component`, `Linker` 这些类型. 你的宿主程序就是用这些积木块来加载和运行客体的 WebAssembly 代码的.
 
-When the host wants to call a function inside a guest, both sides need to agree on the function's name, what parameters it takes, and what it returns. WIT is how you write that agreement down.
+在本项目里, `host.rs` 中的宿主程序直接使用 `wasmtime` crate.
 
-Think of WIT as a contract. The guest says: "I promise to export a function called `run` that returns a string." The host says: "I promise to look for a function called `run` that returns a string." If both sides follow the contract, everything works. If they disagree (the guest exports `run` returning nothing but the host expects a string), instantiation fails.
+---
 
-**What a WIT file looks like:**
+## 什么是 Pulley
+
+Pulley 是内建于 Wasmtime 的软件解释器. 要理解它为什么存在, 你得先明白 Wasmtime 平时是怎么执行 WebAssembly 的.
+
+**Wasmtime 的常规执行方式 (在你的笔记本或服务器上):**
+
+Wasmtime 用一个叫 Cranelift 的编译器, 把 WebAssembly 指令翻译成你处理器上的原生机器码 (大多数笔记本上是 x86-64, Apple Silicon Mac 上是 AArch64). 这种方式很快, 因为结果是真正的机器码, 直接在你的 CPU 上跑.
+
+**在嵌入式系统上遇到的问题:**
+
+嵌入式微控制器 (比如树莓派 Pico 2 上的 RP2350) 用的处理器, Cranelift 并不支持. RP2350 用的是 Cortex-M33 (ARMv8-M) 处理器, Cranelift 没法为它生成原生代码. 所以 Wasmtime 的常规执行方式在这里行不通.
+
+**Pulley 的解决办法:**
+
+Pulley 是 Wasmtime 内部的一个可移植解释器. Wasmtime 不再把 WebAssembly 编译成原生机器码, 而是编译成 Pulley 字节码 - 一套简单的指令集, Pulley 解释器可以在任何处理器上执行它, 包括 Cranelift 不支持的那些.
+
+代价是: Pulley 比原生编译慢, 因为 Pulley 解释器必须一条一条地读取并执行字节码指令, 而不是让 CPU 直接执行原生指令. 但它到处都能跑, 而对嵌入式来说这正是全部意义所在.
+
+**在本项目中:**
+
+我们在构建脚本和宿主里都设置了 `config.target("pulley64")`. 这是在告诉 Wasmtime: "不要编译成原生机器码, 改成编译成 Pulley 字节码." 我们用 `pulley64`, 因为运行在 64 位系统上 (你的 Mac). 如果目标像 RP2350 那样是 32 位嵌入式平台, 就要用 `pulley32`.
+
+这个项目在你的笔记本上运行, 目的是把概念讲清楚. 而这套架构 - 宿主反序列化预编译的客体组件, 再通过 Pulley 执行 - 和 [embedded-wasm-uart-rp2350](https://github.com/mytechnotalent/embedded-wasm-uart-rp2350) 项目里跑在 RP2350 这类嵌入式微控制器上的架构完全一样.
+
+---
+
+## 什么是 WIT
+
+WIT 是 WebAssembly Interface Types 的缩写. 它是一门纯文本语言, 用来定义跨越宿主与客体边界的函数签名.
+
+**它为什么存在:**
+
+当宿主想调用客体里的某个函数时, 两边必须对函数名, 参数, 返回值达成一致. WIT 就是把这些约定写下来的方式.
+
+把 WIT 看成一纸契约. 客体说: "我保证导出一个叫 `run` 的函数, 它返回字符串." 宿主说: "我会去找一个叫 `run` 的函数, 它返回字符串." 两边都遵守契约, 一切正常. 如果对不上 (客体导出的 `run` 什么都不返回, 而宿主期待一个字符串), 实例化就会失败.
+
+**一个 WIT 文件长什么样:**
 
 ```wit
 package component:guest1;
@@ -181,74 +181,74 @@ world guest1-world {
 }
 ```
 
-This says:
+这段代码的意思是:
 
-- `package component:guest1;` — This WIT file belongs to a package called `component:guest1`. The package name is just an identifier.
-- `world guest1-world` — A "world" is a complete description of what a component imports and exports. The name `guest1-world` is used by the `wit_bindgen::generate!` macro to find the right world.
-- `export run: func() -> string;` — The component promises to export a function called `run` that takes no parameters and returns a string.
-
----
-
-## What Is the Component Model
-
-The Component Model is a standard that sits on top of WebAssembly. Plain ("core") WebAssembly only understands numbers — integers and floats. It has no concept of strings, lists, records, or other high-level types. It also has no standard way to describe imports and exports beyond raw function signatures with numeric parameters.
-
-The Component Model adds:
-
-1. **Rich types**: Strings, lists, records, options, results, enums, flags, and more. When your guest function takes an `Option<String>`, the Component Model handles converting that Rust type into bytes the guest can receive.
-2. **WIT-based interfaces**: Instead of raw numbered imports/exports, components use named interfaces defined in WIT files.
-3. **Composition**: Multiple components can be wired together, with one component's exports satisfying another component's imports.
-
-**In plain terms:**
-
-Without the Component Model, you can only pass numbers between the host and guest. With the Component Model, you can pass strings, structs, options, and other complex types across the boundary, and the runtime handles all the memory layout and encoding automatically.
-
-In this project, we enable the Component Model with `config.wasm_component_model(true)` in the host, and we use `Component::deserialize` (not `Module`) to load guest artifacts. Everything flows through the Component Model.
+- `package component:guest1;` - 这个 WIT 文件属于一个叫 `component:guest1` 的包. 包名只是一个标识符.
+- `world guest1-world` - "世界" (world) 是对一个组件导入和导出什么的完整描述. `guest1-world` 这个名字会被 `wit_bindgen::generate!` 宏用来找到正确的 world.
+- `export run: func() -> string;` - 这个组件承诺导出一个叫 `run` 的函数, 它不接受参数, 返回一个字符串.
 
 ---
 
-## What Is no_std
+## 什么是组件模型
 
-In Rust, `#![no_std]` means "do not link the standard library." The Rust standard library (`std`) provides things like `println!`, file I/O, networking, threads, and other operating system features. It requires an operating system to work.
+组件模型是架在 WebAssembly 之上的一套标准. 普通的 ("核心") WebAssembly 只认识数字 - 整数和浮点数. 它没有字符串, 列表, 记录这些高层类型的概念, 也没有除了数字参数裸函数签名之外的标准方式来描述导入导出.
 
-**Why guests use no_std:**
+组件模型补上了这些东西:
 
-Our guest components target `wasm32-unknown-unknown` — a WebAssembly target with no operating system. There is no filesystem, no stdout, no network. The standard library's OS-dependent features cannot work. By using `#![no_std]`, we tell the Rust compiler: "This code runs without an OS. Do not try to link OS features."
+1. **丰富的类型**: 字符串, 列表, 记录, option, result, 枚举, 标志位等等. 当你的客体函数接受一个 `Option<String>` 时, 组件模型负责把这个 Rust 类型转换成客体能接收的字节.
+2. **基于 WIT 的接口**: 组件不再使用裸的编号导入导出, 而是使用 WIT 文件里定义的具名接口.
+3. **组合**: 多个组件可以互相连接, 一个组件的导出可以满足另一个组件的导入.
 
-**What guests still get:**
+**说得直白些:**
 
-Even without `std`, guests can use `core` (basic Rust types, traits, and math) and `alloc` (heap-allocated types like `String`, `Vec`, and `format!`). The `alloc` crate requires a global memory allocator. Since there is no OS to provide one, the guests use `dlmalloc` — a simple, portable allocator that works in freestanding environments.
+没有组件模型时, 宿主和客体之间只能传数字. 有了组件模型, 你可以跨越这条边界传字符串, 结构体, option 以及其他复杂类型, 而运行时自动处理所有的内存布局和编码.
 
-**How this differs from WASI guests:**
-
-Some WebAssembly projects target `wasm32-wasip1` (WASI Preview 1) or `wasm32-wasip2` (WASI Preview 2). Those targets provide OS-like capabilities through WASI imports, so guests can use `println!` and other `std` features. This project deliberately avoids WASI to match the embedded architecture, where no OS exists. Instead, guests return strings through WIT exports, and the host decides what to do with them (print to terminal, send over UART, etc.).
-
----
-
-## What Is AOT Precompilation
-
-AOT stands for Ahead-Of-Time. It means compiling code before it is needed, rather than at runtime.
-
-**The compilation pipeline in this project:**
-
-1. **Rust source code** (`guest1/src/lib.rs`) is compiled by `rustc` to a **core WebAssembly module** (`guest1.wasm`). This target is `wasm32-unknown-unknown`.
-2. The core module is wrapped by `ComponentEncoder` into a **WebAssembly component** (adds Component Model type metadata and the canonical ABI layer).
-3. The component is precompiled by `engine.precompile_component()` into **Pulley bytecode** (`guest1.cwasm`). This is the AOT step.
-4. The precompiled bytecode is embedded into the host binary via `include_bytes!`.
-
-**Why AOT matters:**
-
-Without AOT, the host would need to compile the WebAssembly component to Pulley bytecode every time it starts. This compilation takes time and requires the full Wasmtime compiler in the binary. With AOT, the compilation happens once (at build time on your laptop), and the result is a blob of Pulley bytecode that the host simply deserializes. No compiler needed at runtime.
-
-This is critical for embedded systems: the RP2350 microcontroller does not have enough memory or processing power to run the Wasmtime compiler. It can only deserialize precompiled Pulley bytecode. By doing AOT compilation at build time, the embedded host can be small and fast.
-
-**In this project:**
-
-The `build.rs` script performs AOT compilation. The host uses `unsafe { Component::deserialize(engine, bytes) }` to load the precompiled bytecode. The `unsafe` is required because Wasmtime trusts that the bytes are valid precompiled output (not arbitrary data). This trust is upheld by the build script, which produced those bytes using Wasmtime itself.
+在本项目里, 我们在宿主中用 `config.wasm_component_model(true)` 启用组件模型, 并用 `Component::deserialize` (而不是 `Module`) 来加载客体产物. 一切都走组件模型.
 
 ---
 
-## Project Structure
+## 什么是 no_std
+
+在 Rust 里, `#![no_std]` 的意思是 "不要链接标准库". Rust 标准库 (`std`) 提供 `println!`, 文件 I/O, 网络, 线程以及其他操作系统相关的功能, 它需要操作系统的支持才能工作.
+
+**客体为什么用 no_std:**
+
+我们的客体组件目标是 `wasm32-unknown-unknown` - 一个没有操作系统的 WebAssembly 目标. 那里没有文件系统, 没有 stdout, 没有网络. 标准库里依赖操作系统的功能全都用不了. 用 `#![no_std]`, 我们是在告诉 Rust 编译器: "这段代码在没有操作系统的环境下运行, 不要试图链接操作系统相关的功能."
+
+**客体仍然能用的东西:**
+
+即使没有 `std`, 客体仍然可以使用 `core` (Rust 的基础类型, trait 和数学运算) 和 `alloc` (`String`, `Vec`, `format!` 这类堆分配类型). `alloc` crate 需要一个全局内存分配器. 由于没有操作系统来提供, 客体就用 `dlmalloc` - 一个简单, 可移植, 能在独立环境里工作的分配器.
+
+**这和 WASI 客体有什么不同:**
+
+有些 WebAssembly 项目目标是 `wasm32-wasip1` (WASI Preview 1) 或 `wasm32-wasip2` (WASI Preview 2). 这些目标通过 WASI 导入提供类操作系统的能力, 所以客体可以用 `println!` 和其他 `std` 功能. 本项目刻意避开 WASI, 以匹配嵌入式架构 - 那里根本不存在操作系统. 客体改为通过 WIT 导出返回字符串, 由宿主决定拿它们做什么 (打印到终端, 通过 UART 发出去等等).
+
+---
+
+## 什么是 AOT 预编译
+
+AOT 是 Ahead-Of-Time (提前) 的缩写. 它指的是在需要之前就把代码编译好, 而不是等到运行时再编译.
+
+**本项目里的编译流水线:**
+
+1. **Rust 源代码** (`guest1/src/lib.rs`) 由 `rustc` 编译成一个**核心 WebAssembly 模块** (`guest1.wasm`). 目标三元组是 `wasm32-unknown-unknown`.
+2. 核心模块被 `ComponentEncoder` 包装成一个 **WebAssembly 组件** (补上组件模型的类型元数据和规范 ABI 层).
+3. 组件由 `engine.precompile_component()` 预编译成 **Pulley 字节码** (`guest1.cwasm`). 这一步就是 AOT.
+4. 预编译得到的字节码通过 `include_bytes!` 嵌进宿主二进制文件.
+
+**AOT 为什么重要:**
+
+如果没有 AOT, 宿主每次启动都得把 WebAssembly 组件编译成 Pulley 字节码. 这个编译过程既花时间, 又要求二进制文件里带着完整的 Wasmtime 编译器. 有了 AOT, 编译只在构建时 (在你的笔记本上) 发生一次, 结果是一块 Pulley 字节码, 宿主只要反序列化就行. 运行时不再需要编译器.
+
+这对嵌入式系统至关重要: RP2350 微控制器没有足够的内存和算力去跑 Wasmtime 编译器, 它只能反序列化预编译好的 Pulley 字节码. 把 AOT 编译放在构建阶段完成, 嵌入式宿主才能又小又快.
+
+**在本项目中:**
+
+`build.rs` 脚本负责执行 AOT 编译. 宿主用 `unsafe { Component::deserialize(engine, bytes) }` 加载预编译字节码. 这里需要 `unsafe`, 是因为 Wasmtime 相信这些字节是合法的预编译产物 (而不是任意数据). 这份信任由构建脚本背书, 因为那些字节正是它用 Wasmtime 自己生成的.
+
+---
+
+## 项目结构
 
 ```
 0x01_hello-world/
@@ -271,15 +271,15 @@ The `build.rs` script performs AOT compilation. The host uses `unsafe { Componen
             lib.rs          # Guest2 implementation: #![no_std], greeting + describe
 ```
 
-There are three separate Rust packages here:
+这里有三个彼此独立的 Rust 包:
 
-1. **The host** (`Cargo.toml` + `host.rs` + `build.rs`): A normal Rust binary that depends on `wasmtime`. The build script compiles the guests and precompiles them. The binary deserializes and runs them.
-2. **guest1** (`guest1/Cargo.toml` + `guest1/src/lib.rs`): A `#![no_std]` Rust library compiled to `wasm32-unknown-unknown`. Uses `wit-bindgen` and `dlmalloc`.
-3. **guest2** (`guest2/Cargo.toml` + `guest2/src/lib.rs`): Same idea, different WIT contract and implementation.
+1. **宿主** (`Cargo.toml` + `host.rs` + `build.rs`): 一个普通的 Rust 二进制程序, 依赖 `wasmtime`. 构建脚本负责编译客体并预编译它们, 二进制程序负责反序列化并运行它们.
+2. **guest1** (`guest1/Cargo.toml` + `guest1/src/lib.rs`): 一个 `#![no_std]` 的 Rust 库, 编译到 `wasm32-unknown-unknown`. 使用 `wit-bindgen` 和 `dlmalloc`.
+3. **guest2** (`guest2/Cargo.toml` + `guest2/src/lib.rs`): 思路一样, 只是 WIT 契约和实现不同.
 
 ---
 
-## The WIT Files — Line by Line
+## WIT 文件逐行讲解
 
 ### guest1/wit/world.wit
 
@@ -287,25 +287,25 @@ There are three separate Rust packages here:
 package component:guest1;
 ```
 
-This declares the WIT package name. The format is `namespace:name`. Here, `component` is the namespace and `guest1` is the name. This identifier is used by tooling to match things together. It does not affect runtime behavior.
+这一行声明了 WIT 包名. 格式是 `namespace:name`. 这里 `component` 是命名空间, `guest1` 是名字. 这个标识符供工具链把各个部分对应起来, 不影响运行时行为.
 
 ```wit
 world guest1-world {
 ```
 
-A `world` defines the complete set of imports and exports for a component. The name `guest1-world` is what the `wit_bindgen::generate!` macro uses to find the right world definition in the WIT file.
+一个 `world` 定义了一个组件完整的导入和导出集合. `guest1-world` 这个名字就是 `wit_bindgen::generate!` 宏用来在 WIT 文件里找到正确 world 定义的依据.
 
 ```wit
     export run: func() -> string;
 ```
 
-This line says: "Any component targeting this world must export a function called `run` that takes no arguments and returns a string." The host will look for this function by name and verify the signature.
+这一行的意思是: "任何以这个 world 为目标的组件都必须导出一个叫 `run` 的函数, 它不接受参数并返回一个字符串." 宿主会按名字去找这个函数, 并核对签名.
 
 ```wit
 }
 ```
 
-End of the world definition.
+world 定义到此结束.
 
 ### guest2/wit/world.wit
 
@@ -318,43 +318,43 @@ world guest2-world {
 }
 ```
 
-This is different from guest1 in two ways:
+它和 guest1 有两处不同:
 
-1. `run` takes a parameter: `name: option<string>`. In WIT, `option<string>` means the value can either be a string or nothing (null/None). The Component Model handles encoding this across the host-guest boundary. It also returns a `string`.
-2. There is a second export: `describe: func() -> string`. This function takes nothing and returns a string.
+1. `run` 带了一个参数: `name: option<string>`. 在 WIT 里, `option<string>` 表示这个值要么是字符串, 要么什么都没有 (null/None). 组件模型负责把它编码后跨过宿主-客体边界. 这个函数同样返回 `string`.
+2. 多了一个导出: `describe: func() -> string`. 这个函数不接受任何东西, 返回一个字符串.
 
-These two WIT files are why guest1 and guest2 behave differently. The WIT file is the contract. The Rust code implements the contract.
+正是这两个 WIT 文件的差异, 让 guest1 和 guest2 的行为不同. WIT 文件是契约, Rust 代码实现这个契约.
 
 ---
 
-## Guest1 — Line by Line
+## Guest1 逐行讲解
 
-File: `guest1/src/lib.rs`
+文件: `guest1/src/lib.rs`
 
 ```rust
 #![no_std]
 ```
 
-This attribute tells the Rust compiler: do not link the standard library. The guest runs on `wasm32-unknown-unknown` where there is no operating system, so `std` features like `println!`, file I/O, and threads are unavailable.
+这个属性告诉 Rust 编译器: 不要链接标准库. 客体运行在 `wasm32-unknown-unknown` 上, 那里没有操作系统, 所以 `println!`, 文件 I/O, 线程这些 `std` 功能都用不了.
 
 ```rust
 extern crate alloc;
 ```
 
-This brings in the `alloc` crate, which provides heap-allocated types (`String`, `Vec`, `Box`, etc.) without requiring `std`. The `alloc` crate works with any global allocator — it does not depend on an OS.
+这行引入了 `alloc` crate, 它提供堆分配类型 (`String`, `Vec`, `Box` 等等), 而且不依赖 `std`. `alloc` crate 可以搭配任何全局分配器使用 - 它不依赖操作系统.
 
 ```rust
 use alloc::string::String;
 ```
 
-Imports the `String` type from `alloc`. In `std` Rust, `String` comes from the standard library's prelude. In `no_std`, you import it explicitly from `alloc`.
+从 `alloc` 导入 `String` 类型. 在带 `std` 的 Rust 里, `String` 来自标准库的 prelude. 而在 `no_std` 下, 你得显式地从 `alloc` 导入它.
 
 ```rust
 #[global_allocator]
 static ALLOC: dlmalloc::GlobalDlmalloc = dlmalloc::GlobalDlmalloc;
 ```
 
-This sets `dlmalloc` as the global memory allocator. The `#[global_allocator]` attribute tells Rust: "Use this allocator for all heap allocations." `dlmalloc` is a simple, portable allocator that works in freestanding environments like WebAssembly. Without this, the guest cannot allocate `String` or any other heap type. It is also required by the canonical ABI's `cabi_realloc` function, which the Component Model uses to allocate memory for passing data (like strings) across the host-guest boundary.
+这行把 `dlmalloc` 设为全局内存分配器. `#[global_allocator]` 属性告诉 Rust: "所有堆分配都用这个分配器." `dlmalloc` 是一个简单, 可移植的分配器, 能在 WebAssembly 这样的独立环境中工作. 没有它, 客体就没法分配 `String` 或任何其他堆类型. 规范 ABI 的 `cabi_realloc` 函数也依赖它 - 组件模型正是用这个函数来分配内存, 以便在宿主-客体边界上传数据 (比如字符串).
 
 ```rust
 wit_bindgen::generate!({
@@ -363,19 +363,19 @@ wit_bindgen::generate!({
 });
 ```
 
-This macro reads `guest1/wit/world.wit`, finds the `guest1-world` world, and generates Rust code (traits, types, and glue) that matches the WIT contract. It creates the `Guest` trait with the `run()` method and the `export!` macro used below. This replaces the old `cargo-component` + `bindings.rs` approach — everything is generated inline at compile time.
+这个宏读取 `guest1/wit/world.wit`, 找到 `guest1-world` 这个 world, 然后生成与 WIT 契约匹配的 Rust 代码 (trait, 类型和胶水代码). 它会生成带 `run()` 方法的 `Guest` trait, 以及下面要用到的 `export!` 宏. 这取代了过去 `cargo-component` + `bindings.rs` 的做法 - 一切都在编译期就地生成.
 
 ```rust
 struct Component;
 ```
 
-This is a zero-sized struct. It exists only so you have a type to implement the `Guest` trait on. It holds no data.
+这是一个零大小结构体. 它存在的唯一目的, 就是给你一个类型来实现 `Guest` trait. 它不存放任何数据.
 
 ```rust
 export!(Component);
 ```
 
-This macro call registers `Component` as the implementation that the Component Model runtime should use when the host calls exported functions. Without this line, the component would have no implementation backing the WIT exports, and instantiation would fail.
+这个宏调用把 `Component` 注册为实现体, 供组件模型运行时在宿主调用导出函数时使用. 没有这一行, 组件就没有实现来支撑 WIT 导出, 实例化会失败.
 
 ```rust
 impl Guest for Component {
@@ -385,28 +385,28 @@ impl Guest for Component {
 }
 ```
 
-This implements the `Guest` trait. When the host calls the `run` export, this function executes. It returns a `String` which the canonical ABI encodes and passes back to the host. No `println!`, no WASI — just a return value.
+这里实现了 `Guest` trait. 当宿主调用 `run` 导出时, 执行的就是这个函数. 它返回一个 `String`, 由规范 ABI 编码后传回宿主. 不用 `println!`, 不用 WASI - 只是一个返回值.
 
 ---
 
-## Guest2 — Line by Line
+## Guest2 逐行讲解
 
-File: `guest2/src/lib.rs`
+文件: `guest2/src/lib.rs`
 
-The structure is identical to guest1, with these differences:
+整体结构和 guest1 一样, 差别在下面这几处:
 
 ```rust
 use alloc::format;
 use alloc::string::String;
 ```
 
-Guest2 also imports `format!` from `alloc` because its `run()` method uses string formatting.
+Guest2 还从 `alloc` 导入了 `format!`, 因为它的 `run()` 方法要用字符串格式化.
 
 ```rust
 const DEFAULT_NAME: &str = "world";
 ```
 
-A constant string used as a fallback when the host passes `None` for the `name` parameter.
+一个常量字符串, 当宿主给 `name` 参数传 `None` 时作为兜底值.
 
 ```rust
 impl Guest for Component {
@@ -416,7 +416,7 @@ impl Guest for Component {
     }
 ```
 
-The `run` method takes `name: Option<String>` because the WIT file declares `run: func(name: option<string>) -> string`. The generated `Guest` trait requires this exact signature. `as_deref()` converts `Option<String>` to `Option<&str>`, and `unwrap_or(DEFAULT_NAME)` provides `"world"` when the value is `None`. The function returns a formatted greeting string.
+`run` 方法的参数是 `name: Option<String>`, 因为 WIT 文件里声明的是 `run: func(name: option<string>) -> string`. 生成的 `Guest` trait 要求签名完全一致. `as_deref()` 把 `Option<String>` 转成 `Option<&str>`, `unwrap_or(DEFAULT_NAME)` 在值为 `None` 时提供 `"world"`. 这个函数返回格式化好的问候字符串.
 
 ```rust
     fn describe() -> String {
@@ -425,40 +425,40 @@ The `run` method takes `name: Option<String>` because the WIT file declares `run
 }
 ```
 
-The second export. The host looks for this function by name. If found, it calls it and prints the returned string. Guest1 does not have this, so the host does not try to call it for guest1.
+第二个导出. 宿主按名字查找这个函数, 找到就调用它并打印返回的字符串. Guest1 没有它, 所以宿主不会对 guest1 调用它.
 
 ---
 
-## The Build Script — Line by Line
+## 构建脚本逐行讲解
 
-File: `build.rs`
+文件: `build.rs`
 
-The build script runs at `cargo build` time, before compiling `host.rs`. It compiles both guest crates, encodes them as WebAssembly components, AOT-precompiles them to Pulley bytecode, and writes the results to `OUT_DIR` for the host to embed.
+构建脚本在 `cargo build` 阶段运行, 早于编译 `host.rs`. 它编译两个客体 crate, 把它们编码成 WebAssembly 组件, AOT 预编译成 Pulley 字节码, 并把结果写到 `OUT_DIR`, 供宿主嵌入.
 
-### Constants
+### 常量
 
 ```rust
 const GUEST1_CORE_WASM_PATH: &str = "guest1/target/wasm32-unknown-unknown/release/guest1.wasm";
 const GUEST2_CORE_WASM_PATH: &str = "guest2/target/wasm32-unknown-unknown/release/guest2.wasm";
 ```
 
-Paths to the core WebAssembly modules produced by compiling each guest crate.
+这两个路径指向编译各客体 crate 后得到的核心 WebAssembly 模块.
 
 ```rust
 const GUEST1_SERIALIZED_NAME: &str = "guest1.cwasm";
 const GUEST2_SERIALIZED_NAME: &str = "guest2.cwasm";
 ```
 
-Filenames for the AOT-precompiled Pulley bytecode artifacts written to `OUT_DIR`.
+AOT 预编译得到的 Pulley 字节码产物写入 `OUT_DIR` 时使用的文件名.
 
 ```rust
 const GUEST1_COMPONENT_NAME: &str = "guest1.component.wasm";
 const GUEST2_COMPONENT_NAME: &str = "guest2.component.wasm";
 ```
 
-Filenames for the encoded component bytes (before AOT precompilation), also written to `OUT_DIR`. These are used by integration tests, which load components with `Component::new()` instead of `Component::deserialize()`.
+编码后的组件字节 (AOT 预编译之前) 使用的文件名, 同样写入 `OUT_DIR`. 集成测试会用它们 - 测试里用 `Component::new()` 加载组件, 而不是 `Component::deserialize()`.
 
-### The compilation pipeline
+### 编译流水线
 
 ```rust
 fn compile_guest_wasm(guest_dir: &str) {
@@ -472,7 +472,7 @@ fn compile_guest_wasm(guest_dir: &str) {
 }
 ```
 
-Runs `cargo build` inside the guest directory targeting `wasm32-unknown-unknown`. The `--release` flag produces optimized output. `.env_remove("CARGO_ENCODED_RUSTFLAGS")` prevents the host's Rust flags from leaking into the guest build (they target different architectures).
+在客体目录里运行 `cargo build`, 目标是 `wasm32-unknown-unknown`. `--release` 开关生成优化后的产物. `.env_remove("CARGO_ENCODED_RUSTFLAGS")` 防止宿主的 Rust 编译参数泄漏到客体构建里 (它们针对的是不同的架构).
 
 ```rust
 fn pulley_engine() -> Engine {
@@ -483,7 +483,7 @@ fn pulley_engine() -> Engine {
 }
 ```
 
-Creates a Wasmtime Engine configured identically to the runtime Engine in `host.rs`. This is critical: the precompiled bytecode is only valid if the runtime Engine has the same configuration as the build-time Engine. Any mismatch (different target, different features) causes `Component::deserialize` to fail.
+创建一个 Wasmtime Engine, 配置与 `host.rs` 里运行时的 Engine 完全相同. 这一点至关重要: 只有当运行时的 Engine 与构建时的 Engine 配置一致时, 预编译字节码才是有效的. 任何不一致 (目标不同, 特性开关不同) 都会让 `Component::deserialize` 失败.
 
 ```rust
 fn encode_component(wasm_bytes: &[u8]) -> Vec<u8> {
@@ -496,7 +496,7 @@ fn encode_component(wasm_bytes: &[u8]) -> Vec<u8> {
 }
 ```
 
-Takes raw core WebAssembly bytes and wraps them as a Component Model component. The `ComponentEncoder` reads the `wit-bindgen` metadata embedded in the core module, adds the canonical ABI layer, and produces a valid component binary. `.validate(true)` runs validation to catch encoding errors early.
+接收原始的核心 WebAssembly 字节, 把它们包装成一个组件模型组件. `ComponentEncoder` 读取核心模块里嵌入的 `wit-bindgen` 元数据, 补上规范 ABI 层, 生成一个合法的组件二进制. `.validate(true)` 会做校验, 尽早发现编码错误.
 
 ```rust
 fn precompile_component(engine: &Engine, component_bytes: &[u8]) -> Vec<u8> {
@@ -506,7 +506,7 @@ fn precompile_component(engine: &Engine, component_bytes: &[u8]) -> Vec<u8> {
 }
 ```
 
-The AOT step. Takes encoded component bytes and compiles them to Pulley bytecode. The output is a serialized blob that can be deserialized later with `Component::deserialize`. This is what makes runtime startup fast — no compilation needed.
+这就是 AOT 那一步. 接收编码后的组件字节, 把它们编译成 Pulley 字节码. 输出是一块序列化数据, 之后可以用 `Component::deserialize` 反序列化. 正是这一步让运行时启动变得很快 - 不需要任何编译.
 
 ```rust
 fn compile_guest_to_pulley(...) {
@@ -519,9 +519,9 @@ fn compile_guest_to_pulley(...) {
 }
 ```
 
-The full pipeline for one guest: compile, read, encode, write component (for tests), precompile, write serialized (for host). This function is called once for each guest.
+一个客体的完整流水线: 编译, 读取, 编码, 写出组件 (给测试用), 预编译, 写出序列化结果 (给宿主用). 每个客体都会调用一次这个函数.
 
-### Rerun triggers
+### 重跑触发条件
 
 ```rust
 fn print_rerun_triggers() {
@@ -532,50 +532,50 @@ fn print_rerun_triggers() {
 }
 ```
 
-Tells Cargo to re-run the build script only if these specific files change. Without these lines, the build script would run on every `cargo build`, recompiling both guests even if nothing changed.
+告诉 Cargo 只有这些特定文件发生变化时才重新运行构建脚本. 没有这几行, 每次 `cargo build` 都会跑一遍构建脚本, 即使什么都没改也要重新编译两个客体.
 
 ---
 
-## The Host — Line by Line
+## 宿主逐行讲解
 
-File: `host.rs`
+文件: `host.rs`
 
-This is the heart of the project. Every line is explained below.
+这里是整个项目的核心. 下面逐行解释.
 
-### Imports
+### 导入
 
 ```rust
 use wasmtime::component::{Component, Linker};
 ```
 
-- `Component`: Represents a compiled or deserialized WebAssembly component.
-- `Linker`: Connects a component's imports (if any) to implementations the host provides. Our `#![no_std]` guests have no imports, so the Linker is empty.
+- `Component`: 表示一个已编译或已反序列化的 WebAssembly 组件.
+- `Linker`: 把组件的导入 (如果有) 与宿主提供的实现连接起来. 我们的 `#![no_std]` 客体没有任何导入, 所以 Linker 是空的.
 
 ```rust
 use wasmtime::{Config, Engine, Result, Store};
 ```
 
-- `Config`: A configuration builder for the Engine. You set options like target architecture and feature flags.
-- `Engine`: The compiled-code cache and configuration holder. Deserialization requires an Engine with the same configuration used during precompilation.
-- `Result`: Wasmtime's result type (`Result<T, wasmtime::Error>`).
-- `Store`: The runtime state container. Holds your host state, WebAssembly memory, and instance data.
+- `Config`: Engine 的配置构建器. 你可以设置目标架构, 特性开关这类选项.
+- `Engine`: 编译代码的缓存与配置的持有者. 反序列化要求 Engine 的配置与预编译时使用的一致.
+- `Result`: Wasmtime 的结果类型 (`Result<T, wasmtime::Error>`).
+- `Store`: 运行时状态容器. 存放你的宿主状态, WebAssembly 内存和实例数据.
 
-### Constants
+### 常量
 
 ```rust
 const GUEST1_PRECOMPILED: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/guest1.cwasm"));
 const GUEST2_PRECOMPILED: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/guest2.cwasm"));
 ```
 
-These embed the precompiled Pulley bytecode directly into the host binary at compile time. `include_bytes!` reads the file that `build.rs` wrote to `OUT_DIR` and includes its contents as a `&[u8]` byte slice. At runtime, there is no file I/O — the bytes are already in memory.
+这两行在编译期把预编译的 Pulley 字节码直接嵌进宿主二进制文件. `include_bytes!` 读取 `build.rs` 写入 `OUT_DIR` 的文件, 把内容作为一个 `&[u8]` 字节切片包含进来. 运行时没有任何文件 I/O - 字节已经在内存里了.
 
 ```rust
 const DEFAULT_GUEST_NAME: &str = "Pulley";
 ```
 
-The default value passed to guest2's `run` when no CLI argument is provided.
+没有提供命令行参数时, 传给 guest2 的 `run` 的默认值.
 
-### Functions
+### 函数
 
 ```rust
 fn build_engine() -> Result<Engine> {
@@ -586,7 +586,7 @@ fn build_engine() -> Result<Engine> {
 }
 ```
 
-Creates a Wasmtime Engine at runtime. The configuration **must match** what `build.rs` used during precompilation. If you change the target here but not in `build.rs` (or vice versa), `Component::deserialize` will fail.
+在运行时创建一个 Wasmtime Engine. 这里的配置**必须和** `build.rs` 预编译时使用的一致. 如果你只在这里改了目标, 却没改 `build.rs` (或者反过来), `Component::deserialize` 就会失败.
 
 ```rust
 fn load_component(engine: &Engine, bytes: &[u8]) -> Result<Component> {
@@ -594,9 +594,9 @@ fn load_component(engine: &Engine, bytes: &[u8]) -> Result<Component> {
 }
 ```
 
-Deserializes precompiled Pulley bytecode into a `Component`. The `unsafe` is required because Wasmtime trusts that the bytes are valid precompiled output. If you passed arbitrary bytes, Wasmtime could exhibit undefined behavior. This invariant is upheld by `build.rs`, which produced these bytes using Wasmtime's own `precompile_component`.
+把预编译的 Pulley 字节码反序列化成一个 `Component`. 这里需要 `unsafe`, 是因为 Wasmtime 相信这些字节是合法的预编译产物. 如果你传进去的是任意字节, Wasmtime 可能会表现出未定义行为. 这个不变量由 `build.rs` 保证 - 那些字节正是它用 Wasmtime 自己的 `precompile_component` 生成的.
 
-This is the key difference from the older architecture: instead of `Component::from_file()` (which reads a `.wasm` file and compiles it at runtime), we use `Component::deserialize()` (which loads already-compiled bytecode). No compilation happens at runtime.
+这也是与旧架构的关键区别: 我们不再用 `Component::from_file()` (它读取 `.wasm` 文件并在运行时编译), 而是用 `Component::deserialize()` (加载已经编译好的字节码). 运行时不再发生任何编译.
 
 ```rust
 fn run_guest1(engine: &Engine, component: &Component) -> Result<String> {
@@ -609,9 +609,9 @@ fn run_guest1(engine: &Engine, component: &Component) -> Result<String> {
 }
 ```
 
-Creates an empty Linker (our guests have no imports), creates a Store with `()` as the host state (no WASI context needed), instantiates the component, looks up the `run` export, calls it, and returns the result string.
+创建一个空的 Linker (我们的客体没有导入), 创建一个宿主状态为 `()` 的 Store (不需要 WASI 上下文), 实例化组件, 取出 `run` 导出, 调用它, 返回结果字符串.
 
-Note the type parameter `(String,)` — that is a one-element tuple. The Component Model returns values as tuples. The `run` function returns one `string`, so the Rust side receives `(String,)`.
+注意类型参数 `(String,)` - 这是一个单元素元组. 组件模型用元组来返回多个值. `run` 函数返回一个 `string`, 所以 Rust 这边收到的是 `(String,)`.
 
 ```rust
 fn run_guest2(engine: &Engine, component: &Component, name: &str) -> Result<(String, String)> {
@@ -626,7 +626,7 @@ fn run_guest2(engine: &Engine, component: &Component, name: &str) -> Result<(Str
 }
 ```
 
-Same pattern but for guest2, which has two exports. `run` takes `(Option<String>,)` as input and returns `(String,)`. `describe` takes no input and returns `(String,)`.
+模式相同, 只是针对有两个导出的 guest2. `run` 接收 `(Option<String>,)` 作为输入, 返回 `(String,)`. `describe` 不接受输入, 返回 `(String,)`.
 
 ```rust
 fn parse_name() -> String {
@@ -634,19 +634,19 @@ fn parse_name() -> String {
 }
 ```
 
-Reads the first CLI argument. If none is provided, defaults to `"Pulley"`.
+读取第一个命令行参数. 如果没提供, 就用默认值 `"Pulley"`.
 
 ```rust
 fn run() -> Result<()> {
     let name = parse_name();
     println!("Building Pulley component engine...");
     let engine = build_engine()?;
-    // ... deserialize guests, call exports, print results
+    // ... 反序列化客体, 调用导出, 打印结果
     Ok(())
 }
 ```
 
-The main logic function. Called by `main()`.
+主逻辑函数, 由 `main()` 调用.
 
 ```rust
 fn main() -> Result<()> {
@@ -654,152 +654,152 @@ fn main() -> Result<()> {
 }
 ```
 
-The program entry point. Returns `wasmtime::Result<()>` so errors are printed automatically.
+程序入口. 返回 `wasmtime::Result<()>`, 这样错误会被自动打印出来.
 
 ---
 
-## The Engine — In Depth
+## 深入 Engine
 
-The `Engine` is the most foundational object in Wasmtime. It is created once and reused for every component you load.
+`Engine` 是 Wasmtime 里最基础的对象. 它只创建一次, 之后加载每个组件都复用它.
 
-### What the Engine does
+### Engine 做什么
 
-1. **Holds configuration**: The Engine preserves the `Config` settings (target architecture, feature flags) and enforces them on every operation.
+1. **持有配置**: Engine 保存 `Config` 的设置 (目标架构, 特性开关), 并在每次操作时强制执行它们.
 
-2. **Validates precompiled code**: When you call `Component::deserialize`, the Engine checks that the precompiled bytes were produced with a compatible configuration.
+2. **校验预编译代码**: 当你调用 `Component::deserialize` 时, Engine 会检查这些预编译字节是否由兼容的配置产生.
 
-3. **Caches compiled code**: If you load the same component twice with the same Engine, the compilation result can be reused.
+3. **缓存已编译代码**: 如果你用同一个 Engine 两次加载同一个组件, 编译结果可以被复用.
 
-### The configuration lines
+### 那几行配置
 
-**`config.wasm_component_model(true)`** — Enables Component Model support. Without this, Wasmtime can only load core WebAssembly modules (the old, number-only kind). With this enabled, Wasmtime understands components, WIT types, and the canonical ABI.
+**`config.wasm_component_model(true)`** - 启用组件模型支持. 没有它, Wasmtime 只能加载核心 WebAssembly 模块 (那种旧的, 只有数字的类型). 启用之后, Wasmtime 才看得懂组件, WIT 类型和规范 ABI.
 
-**`config.target("pulley64")?`** — Sets the target to `pulley64`. This tells the Engine that all components were compiled (or should be compiled) for the Pulley64 bytecode format. This must match what `build.rs` used.
+**`config.target("pulley64")?`** - 把目标设为 `pulley64`. 这告诉 Engine: 所有组件都是 (或者都应该是) 按 Pulley64 字节码格式编译的. 这必须和 `build.rs` 里用的一致.
 
-**`Engine::new(&config)`** — Creates the Engine from the configuration.
+**`Engine::new(&config)`** - 根据配置创建 Engine.
 
-### Why the build-time and runtime engines must match
+### 为什么构建时和运行时的 Engine 必须一致
 
-`Component::deserialize` does not re-compile anything. It takes bytes that were precompiled by `engine.precompile_component()`. If the runtime Engine has a different configuration than the build-time Engine, the precompiled bytes are invalid. Wasmtime checks this and returns an error.
+`Component::deserialize` 不会重新编译任何东西. 它接收的是由 `engine.precompile_component()` 预编译出来的字节. 如果运行时的 Engine 配置与构建时的 Engine 不同, 这些预编译字节就是无效的. Wasmtime 会检查这一点并返回错误.
 
 ---
 
-## The Linker — In Depth
+## 深入 Linker
 
 ```rust
 let linker = Linker::<()>::new(engine);
 ```
 
-The `Linker` connects a component's imports to host-side implementations.
+`Linker` 负责把组件的导入连接到宿主侧的实现.
 
-### What imports are
+### 什么是导入
 
-When a WebAssembly component is compiled, it may contain import declarations. These are functions the component needs but does not implement itself. It expects the host to provide them.
+WebAssembly 组件被编译出来时, 可能带有导入声明. 这些是组件需要但自己并未实现的函数, 它指望宿主来提供.
 
-### Our guests have no imports
+### 我们的客体没有导入
 
-Because our guests use `#![no_std]` and target `wasm32-unknown-unknown`, they have no WASI imports. They do not call `println!`, do not access files, and do not need any host-provided functions. They only export functions and return values through the canonical ABI.
+因为我们的客体使用 `#![no_std]` 并以 `wasm32-unknown-unknown` 为目标, 它们没有任何 WASI 导入. 它们不调用 `println!`, 不访问文件, 也不需要任何宿主提供的函数. 它们只导出函数, 通过规范 ABI 返回值.
 
-This means the Linker is empty — `Linker::<()>::new(engine)` creates a Linker with nothing registered, and that is sufficient. The type parameter `()` means the Store holds no host state (just the unit type).
+也就是说 Linker 是空的 - `Linker::<()>::new(engine)` 创建了一个什么都没注册的 Linker, 而这已经足够了. 类型参数 `()` 表示 Store 不持有宿主状态 (就是单元类型).
 
-### When you would need a non-empty Linker
+### 什么情况下需要非空的 Linker
 
-If you added WIT imports to a guest's `world.wit` (for example, `import log: func(msg: string);`), you would need to register that function in the Linker before instantiation. The Linker maps import names to Rust closures or functions that implement them.
+如果你在客体的 `world.wit` 里加了 WIT 导入 (例如 `import log: func(msg: string);`), 那你就得在实例化之前把这个函数注册到 Linker 里. Linker 负责把导入名映射到实现它们的 Rust 闭包或函数.
 
 ---
 
-## The Store — In Depth
+## 深入 Store
 
 ```rust
 let mut store = Store::new(engine, ());
 ```
 
-The `Store` is the runtime state container.
+`Store` 是运行时状态容器.
 
-### What the Store holds
+### Store 里装了什么
 
-1. **Your host state** (`()`): The type parameter. In this project, it is the unit type because we have no WASI context to store.
-2. **WebAssembly linear memory**: When a guest allocates memory (via `dlmalloc`), it lives inside the Store.
-3. **Global variables**: WebAssembly global values are stored here.
-4. **Function handles**: Typed function references retrieved from instances live in the Store.
-5. **Instance data**: After instantiation, the running instance's state lives in the Store.
+1. **你的宿主状态** (`()`): 也就是那个类型参数. 在本项目里它是单元类型, 因为我们没有 WASI 上下文要存.
+2. **WebAssembly 线性内存**: 客体分配内存时 (通过 `dlmalloc`), 这些内存就活在 Store 里.
+3. **全局变量**: WebAssembly 的全局值存在这里.
+4. **函数句柄**: 从实例取出的带类型函数引用存放在 Store 里.
+5. **实例数据**: 实例化之后, 正在运行的实例的状态就活在 Store 里.
 
-### Why Store<()> instead of a custom struct
+### 为什么用 Store<()> 而不是自定义结构体
 
-In the older WASI-based architecture, the Store held a `HostState` struct containing `WasiCtx` and `ResourceTable`. Since our guests no longer use WASI, there is nothing for the host to provide. The unit type `()` is the simplest possible state — it holds no data.
+在更早那套基于 WASI 的架构里, Store 里放的是一个 `HostState` 结构体, 内含 `WasiCtx` 和 `ResourceTable`. 既然我们的客体不再使用 WASI, 宿主就没有什么需要提供的了. 单元类型 `()` 是最简单的状态 - 它不存放任何数据.
 
-### A new Store per component
+### 每个组件一个全新的 Store
 
-Each guest component gets its own fresh Store. This means each component has its own isolated memory space. One guest cannot interfere with another guest's memory or state.
+每个客体组件都有自己全新的 Store. 这意味着每个组件拥有彼此隔离的内存空间. 一个客体无法干扰另一个客体的内存或状态.
 
 ---
 
-## The Component — In Depth
+## 深入 Component
 
 ```rust
 unsafe { Component::deserialize(engine, bytes) }
 ```
 
-A `Component` represents a compiled WebAssembly component. It contains the compiled Pulley bytecode and type metadata (what it imports and exports), ready to be instantiated.
+`Component` 表示一个已编译的 WebAssembly 组件. 它包含编译好的 Pulley 字节码和类型元数据 (它导入和导出什么), 随时可以实例化.
 
-### Component::deserialize vs Component::new vs Component::from_file
+### Component::deserialize, Component::new 与 Component::from_file 的区别
 
-There are several ways to create a Component:
+创建 Component 有几种方式:
 
-- **`Component::from_file(engine, path)`** — Reads a `.wasm` file from disk and compiles it at runtime. Used in the integration tests (which compile components with `Component::new` from embedded bytes). Not used in the host binary.
-- **`Component::new(engine, bytes)`** — Takes raw component bytes and compiles them at runtime. Used in the integration tests.
-- **`Component::deserialize(engine, bytes)`** — Takes precompiled Pulley bytecode and loads it without any compilation. Used in the host binary. This is the fastest option and the only one suitable for embedded targets.
+- **`Component::from_file(engine, path)`** - 从磁盘读取 `.wasm` 文件并在运行时编译. 集成测试里用的是它 (测试用 `Component::new` 从内嵌字节编译组件). 宿主二进制程序不用它.
+- **`Component::new(engine, bytes)`** - 接收原始的组件字节并在运行时编译. 集成测试里用它.
+- **`Component::deserialize(engine, bytes)`** - 接收预编译的 Pulley 字节码, 不做任何编译直接加载. 宿主二进制程序用它. 这是最快的方式, 也是唯一适合嵌入式目标的方式.
 
-### Why deserialize is unsafe
+### 为什么 deserialize 是 unsafe 的
 
-`Component::deserialize` trusts that the bytes are valid precompiled Wasmtime output. If you pass random or malicious bytes, Wasmtime could execute invalid code, leading to undefined behavior. The `unsafe` annotation makes this trust explicit. In this project, the trust is justified because `build.rs` produced the bytes using `engine.precompile_component()`, and the bytes are embedded in the binary via `include_bytes!`.
+`Component::deserialize` 相信这些字节是合法的 Wasmtime 预编译产物. 如果你传进去的是随机字节或恶意字节, Wasmtime 可能会执行非法代码, 导致未定义行为. `unsafe` 标注把这份信任显式化. 在本项目里, 这份信任是有依据的: `build.rs` 用 `engine.precompile_component()` 生成了这些字节, 而且它们通过 `include_bytes!` 被嵌进了二进制文件.
 
 ---
 
-## The Instance — In Depth
+## 深入 Instance
 
 ```rust
 let instance = linker.instantiate(&mut store, &component)?;
 ```
 
-An `Instance` is a running component. Instantiation connects a compiled Component to a Store and a Linker, resolving all imports.
+`Instance` 是一个正在运行的组件. 实例化把编译好的 Component 与一个 Store 和一个 Linker 连接起来, 并解析所有导入.
 
-### What instantiation does
+### 实例化做了哪些事
 
-1. **Resolves imports**: If the component has imports, the Linker provides them. Our guests have no imports, so this step is a no-op.
-2. **Allocates memory**: The component's linear memory is allocated inside the Store.
-3. **Runs start functions**: If the component has initialization code, it runs now.
-4. **Returns the Instance**: An object you can use to look up and call exported functions.
+1. **解析导入**: 如果组件有导入, 由 Linker 提供. 我们的客体没有导入, 所以这一步什么都不做.
+2. **分配内存**: 组件的线性内存在 Store 内部完成分配.
+3. **运行启动函数**: 如果组件有初始化代码, 现在运行.
+4. **返回 Instance**: 你可以用这个对象来查找并调用导出函数.
 
-### Calling exports
+### 调用导出
 
-After instantiation, you call exports through the Instance:
+实例化之后, 你通过 Instance 调用导出:
 
 ```rust
 let run = instance.get_typed_func::<(), (String,)>(&mut store, "run")?;
 let (result,) = run.call(&mut store, ())?;
 ```
 
-**`get_typed_func::<(), (String,)>(&mut store, "run")`** — Look up an exported function named `"run"` and verify that it takes no parameters (`()`) and returns one string (`(String,)`). The type parameters are checked at this point. If the function's actual signature does not match, this call returns an error.
+**`get_typed_func::<(), (String,)>(&mut store, "run")`** - 查找一个名为 `"run"` 的导出函数, 并核对它不接受参数 (`()`), 返回一个字符串 (`(String,)`). 类型参数就在这一步被检查. 如果函数的真实签名对不上, 这个调用会返回错误.
 
-**`run.call(&mut store, ())`** — Execute the function. The `&mut store` is needed because the function may modify memory or trap. The result is `(String,)` — a one-element tuple containing the returned string.
+**`run.call(&mut store, ())`** - 执行这个函数. 需要 `&mut store`, 因为函数可能会改动内存或触发陷阱. 结果是 `(String,)` - 一个单元素元组, 装着返回的字符串.
 
-For guest2, the signature is different:
+对 guest2 来说, 签名不一样:
 
 ```rust
 let run = instance.get_typed_func::<(Option<String>,), (String,)>(&mut store, "run")?;
 let (result,) = run.call(&mut store, (Some(name.to_string()),))?;
 ```
 
-`(Option<String>,)` is a one-element tuple for input. The Component Model's canonical ABI handles encoding the Rust `Option<String>` into the WebAssembly linear memory format that the guest expects. The return type `(String,)` is decoded automatically. You write normal Rust types and the runtime handles the conversion.
+`(Option<String>,)` 是输入用的单元素元组. 组件模型的规范 ABI 负责把 Rust 的 `Option<String>` 编码成客体期待的 WebAssembly 线性内存格式. 返回类型 `(String,)` 会被自动解码. 你写的是普通的 Rust 类型, 转换由运行时处理.
 
 ---
 
-## How They All Connect
+## 它们如何串在一起
 
-Here is the dependency chain, top to bottom:
+下面是从上到下的依赖链条:
 
-**Build time (build.rs):**
+**构建时 (build.rs):**
 
 ```
 Guest Rust source (lib.rs)
@@ -817,7 +817,7 @@ Engine (pulley64) -> engine.precompile_component() -> .cwasm (Pulley bytecode)
 include_bytes! embeds .cwasm into host binary
 ```
 
-**Runtime (host.rs):**
+**运行时 (host.rs):**
 
 ```
 Config
@@ -839,92 +839,92 @@ Engine (holds configuration, validates precompiled code)
                                   (Pulley interprets guest bytecode)
 ```
 
-The Engine is the root of everything. You cannot create a Store, Linker, or Component without one. The Engine's configuration must match between build time and runtime.
+Engine 是一切的本源. 没有它, 你连 Store, Linker 或 Component 都创建不了. Engine 的配置在构建时与运行时必须一致.
 
 ---
 
-## The Integration Tests — Line by Line
+## 集成测试逐行讲解
 
-File: `tests/integration.rs`
+文件: `tests/integration.rs`
 
-The integration tests verify that the guest components work correctly without running the full host binary. They use the same Wasmtime APIs as `host.rs`, but load components via `Component::new()` (runtime compilation) instead of `Component::deserialize()` (AOT precompiled).
+集成测试用来验证客体组件工作正常, 而不必运行整个宿主二进制程序. 它们使用与 `host.rs` 相同的 Wasmtime API, 但通过 `Component::new()` (运行时编译) 加载组件, 而不是 `Component::deserialize()` (AOT 预编译).
 
-### Test infrastructure
+### 测试基础设施
 
-The tests define helper functions:
+测试里定义了这些辅助函数:
 
-- **`create_engine()`** — Creates a default Engine (no Pulley target, since tests compile at runtime).
-- **`compile_component(engine, wasm)`** — Compiles raw component bytes into a Component via `Component::new`.
-- **`call_run_no_args(engine, component)`** — Instantiates and calls `run()` returning a String.
-- **`call_run_with_name(engine, component, name)`** — Instantiates and calls `run(Option<String>)`.
-- **`call_describe(engine, component)`** — Instantiates and calls `describe()`.
+- **`create_engine()`** - 创建一个默认配置的 Engine (不带 Pulley 目标, 因为测试是在运行时编译的).
+- **`compile_component(engine, wasm)`** - 通过 `Component::new` 把原始组件字节编译成 Component.
+- **`call_run_no_args(engine, component)`** - 实例化并调用 `run()`, 返回 String.
+- **`call_run_with_name(engine, component, name)`** - 实例化并调用 `run(Option<String>)`.
+- **`call_describe(engine, component)`** - 实例化并调用 `describe()`.
 
-### Component bytes
+### 组件字节
 
 ```rust
 const GUEST1_WASM: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/guest1.component.wasm"));
 const GUEST2_WASM: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/guest2.component.wasm"));
 ```
 
-The tests use the encoded component bytes (not the AOT-precompiled `.cwasm` files). These are the same bytes that `build.rs` wrote before the precompilation step. `Component::new()` compiles them at test time using the default engine configuration (native code, not Pulley), which is fine for testing on your laptop.
+测试用的是编码后的组件字节 (不是 AOT 预编译出来的 `.cwasm` 文件). 这些字节与 `build.rs` 在预编译那一步之前写出的一致. `Component::new()` 在测试时用默认的 Engine 配置 (原生代码, 不是 Pulley) 编译它们, 在你的笔记本上测试这样完全够用.
 
-### What each test verifies
+### 每个测试验证什么
 
-| Test                                           | What it checks                                                       |
+| 测试                                           | 检查内容                                                             |
 | ---------------------------------------------- | -------------------------------------------------------------------- |
-| `test_guest1_component_loads`                  | guest1 component bytes are valid                                     |
-| `test_guest2_component_loads`                  | guest2 component bytes are valid                                     |
-| `test_guest1_exports_run_function`             | guest1 exports `run` with signature `() -> (String,)`                |
-| `test_guest2_exports_run_function`             | guest2 exports `run` with signature `(Option<String>,) -> (String,)` |
-| `test_guest2_exports_describe_function`        | guest2 exports `describe` with signature `() -> (String,)`           |
-| `test_guest1_does_not_export_describe`         | guest1 does NOT have a `describe` export                             |
-| `test_guest1_run_returns_expected_string`      | `run()` returns a string containing "guest1"                         |
-| `test_guest2_run_returns_expected_string`      | `run(Some("Pulley"))` returns a string containing "guest2"           |
-| `test_guest2_describe_returns_expected_string` | `describe()` returns the exact expected string                       |
-| `test_guest1_has_no_wasi_imports`              | guest1 has no WASI-related imports                                   |
-| `test_guest2_has_no_wasi_imports`              | guest2 has no WASI-related imports                                   |
-| `test_guest2_run_default_name`                 | `run(None)` returns a string containing "world"                      |
-| `test_guest2_run_custom_name`                  | `run(Some("Pulley"))` returns a string containing "Pulley"           |
-| `test_guest1_run_exact_message`                | `run()` returns exactly "guest1 run() called"                        |
-| `test_guest2_run_exact_greeting`               | `run(Some("Pulley"))` returns exactly the expected greeting          |
+| `test_guest1_component_loads`                  | guest1 组件字节是否合法                                              |
+| `test_guest2_component_loads`                  | guest2 组件字节是否合法                                              |
+| `test_guest1_exports_run_function`             | guest1 是否导出签名为 `() -> (String,)` 的 `run`                     |
+| `test_guest2_exports_run_function`             | guest2 是否导出签名为 `(Option<String>,) -> (String,)` 的 `run`      |
+| `test_guest2_exports_describe_function`        | guest2 是否导出签名为 `() -> (String,)` 的 `describe`                |
+| `test_guest1_does_not_export_describe`         | guest1 没有 `describe` 导出                                          |
+| `test_guest1_run_returns_expected_string`      | `run()` 返回的字符串包含 "guest1"                                    |
+| `test_guest2_run_returns_expected_string`      | `run(Some("Pulley"))` 返回的字符串包含 "guest2"                      |
+| `test_guest2_describe_returns_expected_string` | `describe()` 返回的字符串与预期完全一致                              |
+| `test_guest1_has_no_wasi_imports`              | guest1 没有与 WASI 相关的导入                                        |
+| `test_guest2_has_no_wasi_imports`              | guest2 没有与 WASI 相关的导入                                        |
+| `test_guest2_run_default_name`                 | `run(None)` 返回的字符串包含 "world"                                 |
+| `test_guest2_run_custom_name`                  | `run(Some("Pulley"))` 返回的字符串包含 "Pulley"                      |
+| `test_guest1_run_exact_message`                | `run()` 返回的正好是 "guest1 run() called"                           |
+| `test_guest2_run_exact_greeting`               | `run(Some("Pulley"))` 返回的正好是预期的问候语                       |
 
-### Why tests use Component::new instead of Component::deserialize
+### 测试为什么用 Component::new 而不是 Component::deserialize
 
-The AOT-precompiled `.cwasm` files target `pulley64`. Test code runs natively on your laptop (x86-64 or AArch64). To execute guest code natively in tests, you need the default engine (which compiles to native machine code), not a Pulley-targeting engine. The encoded component bytes (`.component.wasm`) work with any engine configuration since `Component::new()` compiles them at runtime.
+AOT 预编译出来的 `.cwasm` 文件目标是 `pulley64`. 测试代码在你的笔记本上以原生方式运行 (x86-64 或 AArch64). 要在测试里原生执行客体代码, 你需要默认配置的 Engine (它编译成原生机器码), 而不是以 Pulley 为目标的 Engine. 编码后的组件字节 (`.component.wasm`) 与任何 Engine 配置都能配合, 因为 `Component::new()` 是在运行时编译它们的.
 
 ---
 
-## How to Build and Run
+## 如何构建和运行
 
-### Prerequisites
+### 前置条件
 
-Install Rust with the `wasm32-unknown-unknown` target:
+安装 Rust 并加上 `wasm32-unknown-unknown` 目标:
 
 ```
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 rustup target add wasm32-unknown-unknown
 ```
 
-### Build everything
+### 构建全部
 
 ```
 cargo build
 ```
 
-This single command:
+这一条命令就完成了:
 
-1. Runs `build.rs`, which compiles both guest crates, encodes them as components, and AOT-precompiles them to Pulley bytecode.
-2. Compiles `host.rs` with the precompiled guest artifacts embedded via `include_bytes!`.
+1. 运行 `build.rs`, 它编译两个客体 crate, 把它们编码成组件, 并 AOT 预编译成 Pulley 字节码.
+2. 编译 `host.rs`, 其中通过 `include_bytes!` 嵌入了预编译的客体产物.
 
-No separate guest build step. No `cargo-component`. Just `cargo build`.
+不需要单独构建客体, 不需要 `cargo-component`, 只要 `cargo build`.
 
-### Run the host (default name)
+### 运行宿主 (使用默认名字)
 
 ```
 cargo run --bin hello
 ```
 
-Output:
+输出:
 
 ```
 Building Pulley component engine...
@@ -936,13 +936,13 @@ describe: guest2 has an extra `describe` export
 Done.
 ```
 
-### Run the host with a custom name
+### 用自定义名字运行宿主
 
 ```
 cargo run --bin hello -- "Kevin"
 ```
 
-Output:
+输出:
 
 ```
 Building Pulley component engine...
@@ -954,85 +954,85 @@ describe: guest2 has an extra `describe` export
 Done.
 ```
 
-The `--` separates `cargo` arguments from your program's arguments. `"Kevin"` becomes `args[1]` in host.rs.
+`--` 把 `cargo` 自己的参数和你程序的参数分开. `"Kevin"` 会成为 host.rs 里的 `args[1]`.
 
-### Run tests
+### 运行测试
 
 ```
 cargo test
 ```
 
-This compiles the test binary and runs all 15 integration tests.
+这会编译测试二进制程序, 并运行全部 15 个集成测试.
 
 ---
 
-## Why This Matters for Embedded Systems
+## 这对嵌入式系统为什么重要
 
-### The problem
+### 问题所在
 
-Embedded microcontrollers (RP2350, ESP32, STM32, etc.) run bare-metal — no operating system, no process isolation, no memory protection. Every piece of firmware has full access to all hardware. If you load untrusted code, it can overwrite memory, corrupt peripherals, or brick the device.
+嵌入式微控制器 (RP2350, ESP32, STM32 等等) 跑的是裸机 - 没有操作系统, 没有进程隔离, 没有内存保护. 每一段固件都能完全访问所有硬件. 如果你加载了不受信任的代码, 它可以覆写内存, 弄坏外设, 甚至把设备变砖.
 
-### The WebAssembly solution
+### WebAssembly 的解法
 
-WebAssembly runs in a sandbox. A guest component:
+WebAssembly 运行在沙箱里. 一个客体组件:
 
-- Cannot access hardware registers unless the host explicitly exposes them through WIT interfaces.
-- Cannot read or write memory outside its own linear memory.
-- Cannot call any function unless the host links it in through the Linker.
-- Can be updated independently of the host firmware by replacing the `.wasm` file.
+- 除非宿主通过 WIT 接口显式暴露, 否则碰不到硬件寄存器.
+- 读写不了自己线性内存之外的内存.
+- 除非宿主通过 Linker 把它链接进来, 否则调用不了任何函数.
+- 可以通过替换 `.wasm` 文件独立于宿主固件进行更新.
 
-### How Pulley enables it
+### Pulley 如何让它成为可能
 
-Microcontrollers like the RP2350 (Cortex-M33, ARMv8-M) use processor architectures that Cranelift's native code generator does not support. Pulley solves this by providing a portable interpreter that runs on any processor. The host firmware includes the Pulley interpreter, and guest components are precompiled to Pulley bytecode at build time.
+RP2350 (Cortex-M33, ARMv8-M) 这类微控制器所用的处理器架构, 是 Cranelift 的原生代码生成器不支持的. Pulley 的解决办法是提供一个可移植的解释器, 它能在任何处理器上运行. 宿主固件里包含 Pulley 解释器, 而客体组件在构建时就被预编译成 Pulley 字节码.
 
-### What the embedded version looks like
+### 嵌入式版本长什么样
 
-The [embedded-wasm-uart-rp2350](https://github.com/mytechnotalent/embedded-wasm-uart-rp2350) project uses the exact same architecture as this tutorial:
+[embedded-wasm-uart-rp2350](https://github.com/mytechnotalent/embedded-wasm-uart-rp2350) 项目用的架构与本教程完全一样:
 
-| This tutorial (laptop)                        | Embedded version (RP2350)                                   |
+| 本教程 (笔记本)                               | 嵌入式版本 (RP2350)                                         |
 | --------------------------------------------- | ----------------------------------------------------------- |
-| `host.rs` runs on your Mac/Linux/Windows      | `src/main.rs` runs bare-metal on the RP2350                 |
-| Config targets `pulley64`                     | Config targets `pulley32`                                   |
-| `build.rs` precompiles to Pulley bytecode     | `build.rs` precompiles to Pulley bytecode                   |
+| `host.rs` 运行在你的 Mac/Linux/Windows 上     | `src/main.rs` 在 RP2350 上以裸机方式运行                    |
+| Config 的目标是 `pulley64`                    | Config 的目标是 `pulley32`                                  |
+| `build.rs` 预编译成 Pulley 字节码             | `build.rs` 预编译成 Pulley 字节码                           |
 | `Component::deserialize(include_bytes!(...))` | `Component::deserialize(include_bytes!(...))`               |
-| Guests use `#![no_std]` + `dlmalloc`          | Guests use `#![no_std]` + `dlmalloc`                        |
-| Guests return strings via WIT exports         | Guests call host-provided WIT imports (UART `write_byte()`) |
-| `Linker<()>` — empty, no imports              | `Linker<Host>` — registers UART hardware functions          |
-| `Store<()>` — no host state                   | `Store<Host>` — holds UART peripheral state                 |
+| 客体使用 `#![no_std]` + `dlmalloc`            | 客体使用 `#![no_std]` + `dlmalloc`                          |
+| 客体通过 WIT 导出返回字符串                   | 客体调用宿主提供的 WIT 导入 (UART 的 `write_byte()`)        |
+| `Linker<()>` - 空的, 没有导入                 | `Linker<Host>` - 注册 UART 硬件函数                         |
+| `Store<()>` - 没有宿主状态                    | `Store<Host>` - 持有 UART 外设状态                          |
 
-The mental model is identical. The host creates an Engine, deserializes precompiled Components, builds a Linker, creates a Store, instantiates, and calls exports. The only differences are the target (`pulley32` vs `pulley64`) and the imports (UART hardware vs nothing in this tutorial).
+心智模型是完全一致的. 宿主创建 Engine, 反序列化预编译的 Component, 构建 Linker, 创建 Store, 实例化, 然后调用导出. 唯一的差别是目标 (`pulley32` 与 `pulley64`) 和导入 (UART 硬件与本教程里的什么都没有).
 
-### The key insight
+### 关键洞察
 
-This tutorial project teaches you the architecture. Once you understand Engine, Store, Linker, Component, and Instance here on your laptop, you understand exactly how it works on an embedded microcontroller. The concepts are the same. The only thing that changes is what hardware the host provides to the guest through WIT interfaces.
+这个教程项目教的是架构. 一旦你在笔记本上弄懂了 Engine, Store, Linker, Component 和 Instance, 你也就确切知道了它们在嵌入式微控制器上是如何运作的. 概念完全相同, 唯一变化的是宿主通过 WIT 接口向客体提供什么硬件.
 
 ---
 
-## Glossary
+## 术语表
 
-| Term                         | Definition                                                                                                                        |
+| 术语                         | 定义                                                                                                                              |
 | ---------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
-| **WebAssembly (Wasm)**       | A portable binary instruction format that runs inside a sandboxed virtual machine.                                                |
-| **Wasmtime**                 | A production WebAssembly runtime written in Rust by the Bytecode Alliance.                                                        |
-| **Pulley**                   | A portable interpreter inside Wasmtime that executes Pulley bytecode on any CPU, including embedded microcontrollers.             |
-| **WIT**                      | WebAssembly Interface Types. A language for defining function signatures between host and guest.                                  |
-| **Component Model**          | A standard on top of Wasm that adds rich types (strings, records, options) and WIT-based interfaces.                              |
-| **`#![no_std]`**             | Rust attribute that disables the standard library. Required for `wasm32-unknown-unknown` targets without OS support.              |
-| **`dlmalloc`**               | A portable memory allocator used as the global allocator in `no_std` guests. Required for `String`, `Vec`, and the canonical ABI. |
-| **`wit-bindgen`**            | A Rust crate whose `generate!` macro produces Rust traits and types from WIT definitions at compile time.                         |
-| **AOT**                      | Ahead-Of-Time compilation. Compiling WebAssembly to Pulley bytecode at build time so no compiler is needed at runtime.            |
-| **`ComponentEncoder`**       | A type from `wit-component` that wraps a core WebAssembly module as a Component Model component.                                  |
-| **Engine**                   | The Wasmtime object that holds configuration and validates precompiled code. Created once, reused for all components.             |
-| **Config**                   | Builder for Engine settings: target architecture, feature flags, memory limits.                                                   |
-| **Store**                    | The runtime state container. Holds your host state, WebAssembly memory, globals, and instance data. One per component instance.   |
-| **Linker**                   | A registry of host-provided functions. Maps import names to implementations. Empty when guests have no imports.                   |
-| **Component**                | A compiled or deserialized WebAssembly component. Contains code and type metadata but is not yet running.                         |
-| **Instance**                 | A running component. Created by `linker.instantiate()`. You call exported functions through the Instance.                         |
-| **`get_typed_func`**         | Looks up an exported function by name and verifies its parameter/return types at lookup time.                                     |
-| **`call`**                   | Executes a typed function. The Pulley interpreter runs the guest code.                                                            |
-| **`include_bytes!`**         | Rust macro that embeds a file's bytes into the binary at compile time.                                                            |
-| **`Component::deserialize`** | Loads precompiled Pulley bytecode without any runtime compilation. The fastest way to load a component.                           |
-| **Canonical ABI**            | The encoding format the Component Model uses to convert high-level types (strings, options, records) into bytes in linear memory. |
-| **Linear memory**            | A contiguous byte array inside the Store that the guest uses for heap allocations. Isolated from host memory.                     |
-| **Cranelift**                | Wasmtime's native code compiler. Generates machine code for x86-64, AArch64, etc. Does not support embedded Cortex-M.             |
-| **`cabi_realloc`**           | A function the canonical ABI requires guests to export for memory allocation. Provided by `dlmalloc`.                             |
+| **WebAssembly (Wasm)**       | 一种可移植的二进制指令格式, 运行在沙箱化的虚拟机里.                                                                               |
+| **Wasmtime**                 | 由 Bytecode Alliance 用 Rust 编写的生产级 WebAssembly 运行时.                                                                     |
+| **Pulley**                   | Wasmtime 内部的可移植解释器, 能在任何 CPU 上执行 Pulley 字节码, 包括嵌入式微控制器.                                               |
+| **WIT**                      | WebAssembly Interface Types. 一门用于定义宿主与客体之间函数签名的语言.                                                            |
+| **Component Model**          | 架在 Wasm 之上的一套标准, 增加了丰富类型 (字符串, 记录, option) 和基于 WIT 的接口.                                                |
+| **`#![no_std]`**             | 禁用标准库的 Rust 属性. 对没有操作系统支持的 `wasm32-unknown-unknown` 目标是必需的.                                               |
+| **`dlmalloc`**               | 一个可移植的内存分配器, 在 `no_std` 客体中作为全局分配器使用. `String`, `Vec` 和规范 ABI 都需要它.                                |
+| **`wit-bindgen`**            | 一个 Rust crate, 它的 `generate!` 宏在编译期从 WIT 定义生成 Rust trait 和类型.                                                    |
+| **AOT**                      | Ahead-Of-Time 编译. 在构建时把 WebAssembly 编译成 Pulley 字节码, 这样运行时就不需要编译器了.                                      |
+| **`ComponentEncoder`**       | `wit-component` 里的一个类型, 把核心 WebAssembly 模块包装成组件模型组件.                                                          |
+| **Engine**                   | 持有配置并校验预编译代码的 Wasmtime 对象. 只创建一次, 所有组件复用.                                                               |
+| **Config**                   | Engine 各项设置的构建器: 目标架构, 特性开关, 内存限制.                                                                            |
+| **Store**                    | 运行时状态容器. 持有宿主状态, WebAssembly 内存, 全局变量和实例数据. 每个组件实例一个.                                             |
+| **Linker**                   | 宿主提供函数的注册表. 把导入名映射到实现. 客体没有导入时它就是空的.                                                               |
+| **Component**                | 一个已编译或已反序列化的 WebAssembly 组件. 包含代码和类型元数据, 但还没有运行.                                                    |
+| **Instance**                 | 正在运行的组件. 由 `linker.instantiate()` 创建. 你通过 Instance 调用导出函数.                                                     |
+| **`get_typed_func`**         | 按名字查找导出函数, 并在查找时核对其参数和返回类型.                                                                               |
+| **`call`**                   | 执行一个带类型的函数. Pulley 解释器负责运行客体代码.                                                                              |
+| **`include_bytes!`**         | Rust 宏, 在编译期把文件的字节嵌入二进制文件.                                                                                      |
+| **`Component::deserialize`** | 加载预编译的 Pulley 字节码, 不做任何运行时编译. 加载组件最快的方式.                                                               |
+| **Canonical ABI**            | 组件模型用来把高层类型 (字符串, option, 记录) 转换成线性内存中字节的编码格式.                                                     |
+| **Linear memory**            | Store 内部一段连续的字节数组, 客体用它做堆分配. 与宿主内存隔离.                                                                   |
+| **Cranelift**                | Wasmtime 的原生代码编译器. 为 x86-64, AArch64 等生成机器码. 不支持嵌入式 Cortex-M.                                                |
+| **`cabi_realloc`**           | 规范要求客体导出的内存分配函数, 规范 ABI 需要它. 由 `dlmalloc` 提供.                                                              |

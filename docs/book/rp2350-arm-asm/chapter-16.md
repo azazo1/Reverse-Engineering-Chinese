@@ -1,160 +1,160 @@
-# Chapter 16: System Registers and Coprocessor Interface
+# Chapter 16: 系统寄存器与协处理器接口
 
-## Introduction
+## 引言
 
-Beyond the sixteen general-purpose registers and the APSR, the Cortex-M33 provides system-level special registers and a coprocessor interface.  Our blink driver uses `msr` to configure the stack pointers, `dsb`/`isb` to synchronize processor state, and `mcrr` to control GPIO through the RP2350's SIO coprocessor.  This chapter covers these system-level instructions and the hardware interface they expose.
+除了十六个通用寄存器和 APSR 之外, Cortex-M33 还提供系统级的特殊寄存器和一套协处理器接口. 我们的闪烁驱动用 `msr` 配置栈指针, 用 `dsb`/`isb` 同步处理器状态, 用 `mcrr` 经由 RP2350 的 SIO 协处理器控制 GPIO. 本章讲解这些系统级指令, 以及它们暴露出来的硬件接口.
 
-## Special-Purpose Registers
+## 特殊功能寄存器
 
-The Cortex-M33 has several special-purpose registers accessed via `msr` (write) and `mrs` (read):
+Cortex-M33 有几个特殊功能寄存器, 通过 `msr` (写) 和 `mrs` (读) 访问:
 
-| Register | Purpose | Used In |
+| 寄存器 | 用途 | 使用位置 |
 |----------|---------|---------|
-| MSP | Main Stack Pointer | stack.s |
-| PSP | Process Stack Pointer | stack.s |
-| MSPLIM | Main Stack Pointer Limit | stack.s |
-| PSPLIM | Process Stack Pointer Limit | stack.s |
-| PRIMASK | Interrupt mask | (not used) |
-| CONTROL | Execution mode / stack select | (not used) |
+| MSP | 主栈指针 | stack.s |
+| PSP | 进程栈指针 | stack.s |
+| MSPLIM | 主栈指针上限 | stack.s |
+| PSPLIM | 进程栈指针上限 | stack.s |
+| PRIMASK | 中断屏蔽 | (未使用) |
+| CONTROL | 执行模式 / 栈选择 | (未使用) |
 
-### Stack Pointer Initialization
+### 栈指针初始化
 
-stack.s configures all stack registers:
+stack.s 把所有栈相关的寄存器都配置了一遍:
 
 ```asm
 Init_Stack:
   ldr   r0, =STACK_TOP                           // r0 = 0x20082000
-  msr   PSP, r0                                  // process stack pointer
+  msr   PSP, r0                                  // 进程栈指针
   ldr   r0, =STACK_LIMIT                         // r0 = 0x2007a000
-  msr   MSPLIM, r0                               // main stack limit
-  msr   PSPLIM, r0                               // process stack limit
+  msr   MSPLIM, r0                               // 主栈上限
+  msr   PSPLIM, r0                               // 进程栈上限
   ldr   r0, =STACK_TOP                           // r0 = 0x20082000
-  msr   MSP, r0                                  // main stack pointer
-  bx    lr                                       // return
+  msr   MSP, r0                                  // 主栈指针
+  bx    lr                                       // 返回
 ```
 
-**MSP** is the active stack pointer after reset.  **MSPLIM** and **PSPLIM** are ARMv8-M features that trigger a fault if the stack pointer goes below the limit, preventing silent stack overflow.
+**MSP** 是复位之后生效的栈指针. **MSPLIM** 和 **PSPLIM** 是 ARMv8-M 的特性: 一旦栈指针掉到上限以下就触发 fault, 从而杜绝了悄无声息的栈溢出.
 
-## Memory-Mapped System Registers
+## 内存映射的系统寄存器
 
-Some system configuration is done through memory-mapped registers in the Private Peripheral Bus (PPB) region at `0xE000_0000`:
+有些系统配置是通过内存映射寄存器完成的, 它们位于 `0xE000_0000` 处的私有外设总线 (PPB) 区域:
 
-### CPACR — Coprocessor Access Control Register
+### CPACR - 协处理器访问控制寄存器
 
-Address: `PPB_BASE + 0x0ED88` = `0xE000ED88`
+地址: `PPB_BASE + 0x0ED88` = `0xE000ED88`
 
-The CPACR controls access to coprocessors.  Our firmware enables coprocessor 0 (CP0), which provides access to the RP2350's SIO GPIO interface:
+CPACR 控制对协处理器的访问. 我们的固件使能了协处理器 0 (CP0), 它提供了通往 RP2350 SIO GPIO 接口的访问路径:
 
 ```asm
 Enable_Coprocessor:
   ldr   r0, =CPACR                               // r0 = 0xE000ED88
-  ldr   r1, [r0]                                 // read current CPACR
-  orr   r1, r1, #(1<<1)                          // set CP0 full access bit 1
-  orr   r1, r1, #(1<<0)                          // set CP0 full access bit 0
-  str   r1, [r0]                                 // write back
-  dsb                                            // synchronize
-  isb                                            // flush pipeline
-  bx    lr                                       // return
+  ldr   r1, [r0]                                 // 读取当前的 CPACR
+  orr   r1, r1, #(1<<1)                          // 置 CP0 完全访问位 1
+  orr   r1, r1, #(1<<0)                          // 置 CP0 完全访问位 0
+  str   r1, [r0]                                 // 写回
+  dsb                                            // 同步
+  isb                                            // 冲刷流水线
+  bx    lr                                       // 返回
 ```
 
-Bits [1:0] of CPACR control CP0 access:
+CPACR 的 bits [1:0] 控制 CP0 的访问权限:
 
-| Bits [1:0] | Access Level |
+| Bits [1:0] | 访问级别 |
 |------------|-------------|
-| `00` | No access (default) |
-| `01` | Privileged access only |
-| `11` | Full access (our setting) |
+| `00` | 禁止访问 (默认) |
+| `01` | 仅特权模式可访问 |
+| `11` | 完全访问 (我们的设置) |
 
-## Barrier Instructions
+## 屏障指令
 
-### `dsb` — Data Synchronization Barrier
-
-```asm
-  dsb                                            // wait for all memory accesses to complete
-```
-
-`dsb` ensures that all preceding memory accesses (loads and stores) have completed before any subsequent instruction executes.  This is critical after modifying the CPACR because the processor must see the new coprocessor configuration before attempting a coprocessor instruction.
-
-### `isb` — Instruction Synchronization Barrier
+### `dsb` - 数据同步屏障
 
 ```asm
-  isb                                            // flush pipeline
+  dsb                                            // 等待所有内存访问完成
 ```
 
-`isb` flushes the processor pipeline, ensuring that all subsequent instructions are fetched and decoded using the current system state.  After changing CPACR, any `mcrr` instructions in the pipeline must be re-fetched with the new access permissions.
+`dsb` 保证前面所有的内存访问 (加载和存储) 都已完成, 之后才开始执行后续指令. 在修改 CPACR 之后这一点很关键, 因为处理器必须先看到新的协处理器配置, 才能执行协处理器指令.
 
-The `dsb` + `isb` sequence is an ARM-mandated pattern after modifying system control registers:
+### `isb` - 指令同步屏障
+
+```asm
+  isb                                            // 冲刷流水线
+```
+
+`isb` 冲刷处理器流水线, 保证后续指令都按当前系统状态重新取指和译码. 改过 CPACR 之后, 流水线里任何 `mcrr` 指令都必须按新的访问权限重新取指.
+
+`dsb` + `isb` 这个组合是 ARM 规定的固定套路, 凡是修改系统控制寄存器之后都要照做:
 
 ```
 str  → dsb → isb → (now safe to use CP0)
 ```
 
-## The Coprocessor Interface
+## 协处理器接口
 
-### What Is a Coprocessor?
+### 什么是协处理器?
 
-On the RP2350, coprocessor 0 (CP0) provides fast access to the Single-cycle IO (SIO) block.  The SIO contains GPIO set/clear/toggle registers that bypass the normal peripheral bus — providing faster GPIO control.
+在 RP2350 上, 协处理器 0 (CP0) 提供对单周期 IO (SIO) 块的快速访问. SIO 里有 GPIO 的置位/清除/翻转寄存器, 它们绕过了常规的外设总线 - 因而 GPIO 控制更快.
 
-### `mcrr` — Move to Coprocessor from Two Registers
+### `mcrr` - 从两个寄存器移动到协处理器
 
-The `mcrr` instruction transfers data from two ARM registers to a coprocessor:
+`mcrr` 指令把两个 ARM 寄存器里的数据传送给协处理器:
 
 ```asm
-  mcrr  p0, #4, r2, r4, c4                      // CP0: enable OE for GPIO
+  mcrr  p0, #4, r2, r4, c4                      // CP0: 为 GPIO 使能 OE
 ```
 
-The instruction format is:
+指令格式是:
 
 ```
 mcrr  pN, #opc, Rt, Rt2, CRm
 ```
 
-| Field | Meaning | In Our Firmware |
+| 字段 | 含义 | 在我们的固件里 |
 |-------|---------|-----------------|
-| `pN` | Coprocessor number | `p0` (SIO) |
-| `#opc` | Operation code | `#4` (GPIO operation) |
-| `Rt` | First source register | GPIO number or value |
-| `Rt2` | Second source register | Value or mask |
-| `CRm` | Coprocessor register | Operation selector |
+| `pN` | 协处理器编号 | `p0` (SIO) |
+| `#opc` | 操作码 | `#4` (GPIO 操作) |
+| `Rt` | 第一个源寄存器 | GPIO 编号或数值 |
+| `Rt2` | 第二个源寄存器 | 数值或掩码 |
+| `CRm` | 协处理器寄存器 | 操作选择器 |
 
-### GPIO Operations via CP0
+### 经由 CP0 的 GPIO 操作
 
-Our firmware uses `mcrr` for three distinct GPIO operations:
+固件用 `mcrr` 完成三种不同的 GPIO 操作:
 
-**1. Enable Output (gpio.s — GPIO_Config):**
-
-```asm
-  mov   r4, #1                                   // r4 = 1 (enable)
-  mcrr  p0, #4, r2, r4, c4                      // OE enable for GPIO r2
-```
-
-This sets the output enable bit for the specified GPIO pin.
-
-**2. Set GPIO High (gpio.s — GPIO_Set):**
+**1. 使能输出 (gpio.s - GPIO_Config):**
 
 ```asm
-  mov   r4, #1                                   // r4 = 1 (set high)
-  mcrr  p0, #4, r0, r4, c0                      // set GPIO r0 high
+  mov   r4, #1                                   // r4 = 1 (使能)
+  mcrr  p0, #4, r2, r4, c4                      // 为 GPIO r2 使能 OE
 ```
 
-This drives the GPIO pin to logic high (3.3V), turning the LED on.
+它把指定 GPIO 引脚对应的输出使能位置起来.
 
-**3. Clear GPIO Low (gpio.s — GPIO_Clear):**
+**2. 把 GPIO 置高 (gpio.s - GPIO_Set):**
 
 ```asm
-  mov   r4, #0                                   // r4 = 0 (set low)
-  mcrr  p0, #4, r0, r4, c0                      // set GPIO r0 low
+  mov   r4, #1                                   // r4 = 1 (置高)
+  mcrr  p0, #4, r0, r4, c0                      // 把 GPIO r0 置高
 ```
 
-This drives the GPIO pin to logic low (0V), turning the LED off.
+它把 GPIO 引脚驱动到逻辑高电平 (3.3V), LED 点亮.
 
-### Why Use a Coprocessor for GPIO?
+**3. 把 GPIO 拉低 (gpio.s - GPIO_Clear):**
 
-Direct register writes through the peripheral bus take multiple clock cycles due to bus arbitration.  The coprocessor interface provides a dedicated path to the SIO block, enabling single-cycle GPIO operations.  For a blink driver this performance difference is negligible, but for high-speed bit-banging it is significant.
+```asm
+  mov   r4, #0                                   // r4 = 0 (拉低)
+  mcrr  p0, #4, r0, r4, c0                      // 把 GPIO r0 拉低
+```
 
-## The Complete Coprocessor Flow
+它把 GPIO 引脚驱动到逻辑低电平 (0V), LED 熄灭.
 
-Before any `mcrr` instruction can execute:
+### 为什么 GPIO 要用协处理器?
+
+直接通过外设总线写寄存器, 会因为总线仲裁而耗费多个时钟周期. 协处理器接口提供了一条通往 SIO 块的专用通路, 让 GPIO 操作能在单周期内完成. 对一个闪烁驱动来说这点性能差异可以忽略, 但对高速位翻转来说就很可观了.
+
+## 完整的协处理器流程
+
+任何 `mcrr` 指令能够执行之前, 必须先完成:
 
 ```
 1. Enable_Coprocessor: CPACR |= 0x3 → dsb → isb
@@ -162,13 +162,13 @@ Before any `mcrr` instruction can execute:
 3. Main loop: mcrr set → delay → mcrr clear → delay → repeat
 ```
 
-If step 1 is omitted, any `mcrr` instruction triggers a UsageFault because CP0 access is denied by default.
+如果漏掉第 1 步, 任何 `mcrr` 指令都会触发 UsageFault, 因为 CP0 的访问默认是被拒绝的.
 
-## Summary
+## 小结
 
-- `msr`/`mrs` access special-purpose registers like MSP, PSP, and their limits.
-- The CPACR (memory-mapped at 0xE000ED88) controls coprocessor access permissions.
-- `dsb` and `isb` synchronize memory and pipeline state after system register changes.
-- `mcrr` transfers data to coprocessor 0, providing fast access to the SIO GPIO interface.
-- Three `mcrr` operations control GPIO: output enable, set high, and clear low.
-- Coprocessor access must be enabled before any `mcrr` instruction, or a fault occurs.
+- `msr`/`mrs` 用于访问 MSP, PSP 及其上限之类的特殊功能寄存器.
+- CPACR (内存映射在 0xE000ED88) 控制协处理器的访问权限.
+- `dsb` 与 `isb` 在系统寄存器改动之后同步内存与流水线状态.
+- `mcrr` 把数据传给协处理器 0, 从而快速访问 SIO 的 GPIO 接口.
+- 三种 `mcrr` 操作控制 GPIO: 使能输出, 置高, 拉低.
+- 使用任何 `mcrr` 指令之前都必须先使能协处理器访问, 否则会触发 fault.

@@ -1,54 +1,54 @@
-# Lesson 022 - Relay Module
+# Lesson 022 - 继电器模块
 
-## What Are We Building Today?
+## 今天我们要做什么?
 
-Sometimes, you need to control a device that uses a completely different power source. What if you want your tiny 5V microcontroller to turn on a giant 12V water pump, or a 120V desk lamp? 
+有时候, 你要控制的设备用的是完全不同的电源. 要是你想让自己那颗小小的 5V 单片机去打开一台巨大的 12V 水泵, 或者一盏 120V 的台灯呢?
 
-If you connect 12V or 120V to your ATmega328P, it will literally explode. 
-To safely control massive voltages, we use an ancient but incredibly reliable component: **The Electromechanical Relay**.
+你要是把 12V 或者 120V 接到 ATmega328P 上, 它真的会炸.
+要安全地控制大电压, 我们用一个古老却极其可靠的元件: **电磁继电器**.
 
 [CODE](https://github.com/mytechnotalent/Assembler/blob/main/lessons/022/lesson.s)
 
 ---
 
-## Hardware Check: The Relay
-A Relay is literally just a physical light switch... but instead of a plastic lever that you flip with your finger, the lever is made of magnetic metal, and it is flipped by an **Electromagnet**!
+## 硬件检查: 继电器
+继电器说白了就是一个物理的灯开关... 只不过那个拨杆不是塑料的, 不用你的手指去拨; 它由磁性金属做成, 靠一个**电磁铁**来拨动!
 
-The Relay Module has two completely separate, isolated sides:
-1. **The Low Voltage Side (Control)**: Connects to your Microcontroller. We connect `IN` to `PD5`, `VCC` to 5V, and `GND` to Ground.
-2. **The High Voltage Side (Load)**: Connects to your giant motor or appliance. It has three terminals:
-   - **COM (Common)**: The power source (e.g. 12V battery).
-   - **NO (Normally Open)**: The device that should be off until the relay clicks.
-   - **NC (Normally Closed)**: The device that should be on until the relay clicks.
+继电器模块有两边完全分开, 彼此隔离的电路:
+1. **低压侧 (控制)**: 接你的单片机. 我们把 `IN` 接到 `PD5`, `VCC` 接 5V, `GND` 接地.
+2. **高压侧 (负载)**: 接你那台大电机或者家电. 它有三个端子:
+   - **COM (公共端)**: 电源 (比如 12V 电池).
+   - **NO (常开)**: 在继电器"咔"一声之前应该保持关闭的设备.
+   - **NC (常闭)**: 在继电器"咔"一声之前应该保持开启的设备.
 
-When we send a `HIGH` logic signal to `PD5`, current flows through the electromagnet. The magnet activates and *physically pulls* the metal switch inside the box! You will hear a loud physical *CLICK* when this happens!
+当我们给 `PD5` 送一个 `HIGH` 逻辑信号, 电流就流过电磁铁. 磁铁被激活, 把盒子里的金属开关*物理地拉过去*! 这时候你会听到响亮的一声 *咔哒*!
 
-## The Code Walkthrough
+## 代码讲解
 
-Because a Relay Module expects a simple logic `HIGH` or `LOW` to turn on or off, the Assembly code is identical to turning on an LED! 
+因为继电器模块只期待一个简单的逻辑 `HIGH` 或者 `LOW` 来开关, 汇编代码和点亮一颗 LED 一模一样!
 
 ```assembly
-  ; Set PD5 as output for the Relay Module
-  SBI    DDRD, PD5                     
+  ; 把 PD5 设为输出, 给继电器模块用
+  SBI    DDRD, PD5
 
 .loop:
-  ; --- Turn Relay ON ---
-  ; This energizes the electromagnet, closing the circuit!
-  SBI    PORTD, PD5                    
-  RCALL  delay_2000ms                  
+  ; --- 打开继电器 ---
+  ; 这给电磁铁通电, 把电路合上!
+  SBI    PORTD, PD5
+  RCALL  delay_2000ms
 
-  ; --- Turn Relay OFF ---
-  ; This de-energizes the electromagnet, opening the circuit!
-  CBI    PORTD, PD5                    
-  RCALL  delay_2000ms                  
+  ; --- 关闭继电器 ---
+  ; 这给电磁铁断电, 把电路断开!
+  CBI    PORTD, PD5
+  RCALL  delay_2000ms
 
   RJMP   .loop
 ```
 
-- We use `SBI` (Set Bit in I/O Register) to configure the pin as an output.
-- We use `SBI` again on the `PORT` register to send 5V to the electromagnet, generating a magnetic field that closes the high-voltage switch!
-- We use `CBI` (Clear Bit in I/O Register) to drop the pin to 0V. The magnetic field collapses, and a mechanical spring violently pulls the switch back open!
+- 我们用 `SBI` (置位 I/O 寄存器中的某一位) 把这个引脚配成输出.
+- 我们再次对 `PORT` 寄存器用 `SBI`, 把 5V 送给电磁铁, 产生磁场, 合上高压开关!
+- 我们用 `CBI` (清零 I/O 寄存器中的某一位) 把引脚降到 0V. 磁场塌掉, 一根机械弹簧猛地一下把开关拉回断开!
 
 ---
 
-Congratulations! You have successfully mastered Electromechanical Relays and Galvanic Isolation in bare metal assembly!
+恭喜! 你已经在裸机汇编里掌握了电磁继电器和电气隔离!

@@ -1,211 +1,211 @@
-# Chapter 9: RISC-V Arithmetic and Logic Instructions
+# Chapter 9: RISC-V 算术与逻辑指令
 
-## Introduction
+## 引言
 
-Arithmetic and logic instructions form the computational core of any processor.  On the Hazard3 core, these instructions operate exclusively on registers — never directly on memory — consistent with the load-store philosophy.  Our blink driver uses arithmetic for delay timing and address calculation, and logic for bit manipulation of hardware registers.  This chapter examines every arithmetic and logic instruction that appears in our firmware.
+算术和逻辑指令构成了任何处理器的运算核心. 在 Hazard3 内核上, 这些指令只在寄存器上操作 - 从不直接操作内存 - 这与加载-存储的设计理念一致. 我们的闪烁驱动用算术指令做延时计时和地址计算, 用逻辑指令操作硬件寄存器的各个位. 本章考察固件里出现的每一条算术和逻辑指令.
 
-## Arithmetic Instructions
+## 算术指令
 
-### `add` — Addition
+### `add` - 加法
 
 ```asm
   add   t0, t0, a0                               # t0 = t0 + a0
 ```
 
-`add` is an R-type instruction that adds two source registers and stores the result in the destination.  In gpio.s, it computes the pad register address:
+`add` 是 R-type 指令, 把两个源寄存器相加, 结果放进目标寄存器. 在 gpio.s 里, 它用来算出 pad 寄存器的地址:
 
 ```asm
   li    t0, PADS_BANK0_BASE                      # t0 = 0x40038000
-  add   t0, t0, a0                               # t0 = base + PAD_OFFSET
+  add   t0, t0, a0                               # t0 = 基地址 + PAD_OFFSET
 ```
 
-This is how GPIO_Config reaches the pad control register for GPIO16.
+GPIO_Config 就是这样找到 GPIO16 的 pad 控制寄存器的.
 
-### `addi` — Add Immediate
+### `addi` - 加立即数
 
 ```asm
   addi  t1, t1, -1                               # t1 = t1 - 1
 ```
 
-`addi` adds a signed 12-bit immediate to a register.  It is one of the most versatile instructions in RISC-V because subtraction is just addition with a negative immediate.  There is no separate `sub immediate` instruction.
+`addi` 把一个有符号 12 位立即数加到寄存器上. 它是 RISC-V 里最万能的指令之一, 因为减法不过就是加一个负的立即数. RISC-V 里没有单独的 "减立即数" 指令.
 
-In delay.s, `addi` decrements the loop counter:
+在 delay.s 里, `addi` 用来给循环计数器减一:
 
 ```asm
 .Delay_MS_Loop:
-  addi  t1, t1, -1                               # decrement counter
-  bnez  t1, .Delay_MS_Loop                       # branch until zero
+  addi  t1, t1, -1                               # 计数器减一
+  bnez  t1, .Delay_MS_Loop                       # 循环直到为零
 ```
 
-In gpio.s, `addi` adjusts the stack pointer:
+在 gpio.s 里, `addi` 用来调整栈指针:
 
 ```asm
-  addi  sp, sp, -4                               # allocate stack frame
-  addi  sp, sp, 4                                # deallocate stack frame
+  addi  sp, sp, -4                               # 分配栈帧
+  addi  sp, sp, 4                                # 释放栈帧
 ```
 
-### `mul` — Multiplication
+### `mul` - 乘法
 
 ```asm
   mul   t1, a0, t0                               # t1 = a0 * t0
 ```
 
-`mul` is an R-type instruction from the M extension.  In delay.s, it computes the total number of loop iterations:
+`mul` 是来自 M 扩展的 R-type 指令. 在 delay.s 里, 它算出循环迭代的总次数:
 
 ```asm
-  li    t0, 3600                                 # loops per millisecond
-  mul   t1, a0, t0                               # total = ms * 3600
+  li    t0, 3600                                 # 每毫秒的循环数
+  mul   t1, a0, t0                               # 总数 = 毫秒数 * 3600
 ```
 
-At 12 MHz XOSC clock (approximately 14.5 MHz with internal tolerances), 3,600 inner iterations approximate one millisecond.
+在 12 MHz 的 XOSC 时钟下 (算上内部容差大约是 14.5 MHz), 3,600 次内层迭代大致相当于一毫秒.
 
-## Logic Instructions
+## 逻辑指令
 
-### `and` — Bitwise AND
+### `and` - 按位与
 
 ```asm
   and   t1, t1, t2                               # t1 = t1 & t2
 ```
 
-`and` is an R-type instruction that performs bitwise AND.  In gpio.s, it clears specific bits using a precomputed mask:
+`and` 是执行按位与的 R-type 指令. 在 gpio.s 里, 它用一个预先算好的掩码清除特定的位:
 
 ```asm
-  li    t2, ~(1<<7)                              # mask = 0xFFFFFF7F
-  and   t1, t1, t2                               # clear OD bit 7
+  li    t2, ~(1<<7)                              # 掩码 = 0xFFFFFF7F
+  and   t1, t1, t2                               # 清除 OD 位 7
 ```
 
-And in reset.s, it clears the IO_BANK0 reset bit:
+在 reset.s 里, 它清除 IO_BANK0 的复位位:
 
 ```asm
-  li    t2, (1<<6)                               # IO_BANK0 reset mask
-  not   t2, t2                                   # invert: 0xFFFFFFBF
-  and   t1, t1, t2                               # clear IO_BANK0 bit
+  li    t2, (1<<6)                               # IO_BANK0 复位掩码
+  not   t2, t2                                   # 取反: 0xFFFFFFBF
+  and   t1, t1, t2                               # 清除 IO_BANK0 位
 ```
 
-### `andi` — AND Immediate
+### `andi` - 与立即数
 
 ```asm
   andi  t1, t1, (1<<6)                           # t1 = t1 & 0x40
 ```
 
-`andi` performs bitwise AND with a sign-extended 12-bit immediate.  In reset.s, it tests whether IO_BANK0 reset is done:
+`andi` 用一个经过符号扩展的 12 位立即数做按位与. 在 reset.s 里, 它检测 IO_BANK0 的复位是否完成:
 
 ```asm
-  andi  t1, t1, (1<<6)                           # test IO_BANK0 reset done
-  beqz  t1, .GPIO_Subsystem_Reset_Wait           # wait until done
+  andi  t1, t1, (1<<6)                           # 测试 IO_BANK0 复位是否完成
+  beqz  t1, .GPIO_Subsystem_Reset_Wait           # 等待直到完成
 ```
 
-In gpio.s, it clears the FUNCSEL field:
+在 gpio.s 里, 它清除 FUNCSEL 字段:
 
 ```asm
-  andi  t1, t1, ~0x1f                            # clear FUNCSEL [4:0]
+  andi  t1, t1, ~0x1f                            # 清除 FUNCSEL [4:0]
 ```
 
-Here `~0x1f` = `0xFFFFFFE0`, but since `andi` sign-extends a 12-bit immediate, the assembler encodes this as -32 (which sign-extends to 0xFFFFFFE0).
+这里 `~0x1f` = `0xFFFFFFE0`, 但因为 `andi` 会对 12 位立即数做符号扩展, 汇编器把它编码成 -32 (符号扩展后正是 0xFFFFFFE0).
 
-### `or` — Bitwise OR
+### `or` - 按位或
 
 ```asm
   or    t1, t1, t2                               # t1 = t1 | t2
 ```
 
-`or` is an R-type instruction that sets bits.  In xosc.s, it enables the peripheral clock:
+`or` 是用于置位的 R-type 指令. 在 xosc.s 里, 它使能外设时钟:
 
 ```asm
-  li    t2, (1<<11)                              # ENABLE bit mask
-  or    t1, t1, t2                               # set ENABLE bit
+  li    t2, (1<<11)                              # ENABLE 位掩码
+  or    t1, t1, t2                               # 置位 ENABLE 位
 ```
 
-### `ori` — OR Immediate
+### `ori` - 或立即数
 
 ```asm
-  ori   t1, t1, (1<<6)                           # set bit 6
+  ori   t1, t1, (1<<6)                           # 置位第 6 位
 ```
 
-`ori` performs bitwise OR with a sign-extended 12-bit immediate.  In gpio.s, it sets the input enable bit:
+`ori` 用一个经过符号扩展的 12 位立即数做按位或. 在 gpio.s 里, 它置位输入使能位:
 
 ```asm
-  ori   t1, t1, (1<<6)                           # set IE bit
+  ori   t1, t1, (1<<6)                           # 置位 IE 位
 ```
 
-And sets the FUNCSEL value:
+它还用来设置 FUNCSEL 的值:
 
 ```asm
-  ori   t1, t1, 0x05                             # set FUNCSEL = 5 (SIO)
+  ori   t1, t1, 0x05                             # 设置 FUNCSEL = 5 (SIO)
 ```
 
-In xosc.s, it sets the AUXSRC bits:
+在 xosc.s 里, 它设置 AUXSRC 的位:
 
 ```asm
-  ori   t1, t1, 128                              # set AUXSRC: XOSC_CLKSRC bit
+  ori   t1, t1, 128                              # 设置 AUXSRC: XOSC_CLKSRC 位
 ```
 
-### `not` — Bitwise NOT (Pseudo-Instruction)
+### `not` - 按位取反 (伪指令)
 
 ```asm
   not   t2, t2                                   # t2 = ~t2
 ```
 
-`not` inverts all bits.  It is a pseudo-instruction that expands to `xori rd, rs1, -1`:
+`not` 把所有位取反. 它是一条伪指令, 展开为 `xori rd, rs1, -1`:
 
 ```
 not   t2, t2   =>   xori  t2, t2, -1
 ```
 
-Since -1 in two's complement is 0xFFFFFFFF, XOR with -1 inverts every bit.  In reset.s, it creates a clear mask:
+因为补码里的 -1 就是 0xFFFFFFFF, 与 -1 做 XOR 会把每一位都取反. 在 reset.s 里, 它用来生成清除掩码:
 
 ```asm
-  li    t2, (1<<6)                               # IO_BANK0 reset mask
-  not   t2, t2                                   # invert: 0xFFFFFFBF
-  and   t1, t1, t2                               # clear IO_BANK0 bit
+  li    t2, (1<<6)                               # IO_BANK0 复位掩码
+  not   t2, t2                                   # 取反: 0xFFFFFFBF
+  and   t1, t1, t2                               # 清除 IO_BANK0 位
 ```
 
-### `sll` — Shift Left Logical
+### `sll` - 逻辑左移
 
 ```asm
   sll   t1, t1, a2                               # t1 = t1 << a2
 ```
 
-`sll` shifts the source register left by the number of positions in the second source register.  In gpio.s, it creates a single-bit mask at the GPIO position:
+`sll` 把源寄存器左移, 移位量来自第二个源寄存器. 在 gpio.s 里, 它生成一个正好落在 GPIO 位置上的单位掩码:
 
 ```asm
-  li    t1, 1                                    # bit value
-  sll   t1, t1, a2                               # shift to GPIO position
+  li    t1, 1                                    # 位值
+  sll   t1, t1, a2                               # 移到 GPIO 对应的位置
 ```
 
-If `a2` = 16, the result is `0x00010000` — a mask with only bit 16 set.  This is used for GPIO_OE_SET, GPIO_OUT_SET, and GPIO_OUT_CLR operations.
+如果 `a2` = 16, 结果就是 `0x00010000` - 一个只有第 16 位置位的掩码. GPIO_OE_SET, GPIO_OUT_SET 和 GPIO_OUT_CLR 这些操作都用它.
 
-## No Condition Flags
+## 没有条件标志位
 
-Unlike ARM (which uses the APSR with N, Z, C, V flags), RISC-V has **no condition flags register**.  Branches compare registers directly:
+和 ARM 不同 (ARM 用带 N, Z, C, V 标志的 APSR), RISC-V **没有条件标志寄存器**. 分支直接比较寄存器:
 
-| ARM Pattern | RISC-V Pattern |
+| ARM 写法 | RISC-V 写法 |
 |-------------|----------------|
-| `subs r5, r5, #1` then `bne .Loop` | `addi t1, t1, -1` then `bnez t1, .Loop` |
-| `tst r1, #mask` then `beq .Wait` | `andi t1, t1, mask` then `beqz t1, .Wait` |
-| `cmp r0, #0` then `ble .Done` | `blez a0, .Done` |
+| `subs r5, r5, #1` 然后 `bne .Loop` | `addi t1, t1, -1` 然后 `bnez t1, .Loop` |
+| `tst r1, #mask` 然后 `beq .Wait` | `andi t1, t1, mask` 然后 `beqz t1, .Wait` |
+| `cmp r0, #0` 然后 `ble .Done` | `blez a0, .Done` |
 
-This simplifies the hardware — no flag register to update, no dependency chains through flags — but means every comparison must name its operand registers.
+这简化了硬件 - 没有标志寄存器要更新, 也没有经由标志位的依赖链 - 但代价是每次比较都必须把参与比较的寄存器写出来.
 
-## Read-Modify-Write Pattern
+## 读-改-写模式
 
-Hardware register manipulation follows a consistent pattern throughout our firmware:
+在整个固件里, 硬件寄存器的操作都遵循同一个模式:
 
 ```asm
-  li    t0, PADS_BANK0_BASE                      # compute address
-  add   t0, t0, a0                               # add offset
-  lw    t1, 0(t0)                                # READ current value
-  li    t2, ~(1<<7)                              # create mask
-  and   t1, t1, t2                               # MODIFY: clear bit
-  ori   t1, t1, (1<<6)                           # MODIFY: set bit
-  sw    t1, 0(t0)                                # WRITE back
+  li    t0, PADS_BANK0_BASE                      # 计算地址
+  add   t0, t0, a0                               # 加上偏移
+  lw    t1, 0(t0)                                # READ 当前值
+  li    t2, ~(1<<7)                              # 生成掩码
+  and   t1, t1, t2                               # MODIFY: 清除位
+  ori   t1, t1, (1<<6)                           # MODIFY: 置位
+  sw    t1, 0(t0)                                # WRITE 写回
 ```
 
-This pattern appears in gpio.s (pad configuration, CTRL register), xosc.s (clock enable), and reset.s (subsystem reset).  It preserves all bits we do not intend to change.
+这个模式出现在 gpio.s (pad 配置, CTRL 寄存器), xosc.s (时钟使能) 和 reset.s (子系统复位) 里. 它会保留所有我们不打算改动的位.
 
-## Summary
+## 小结
 
-- Arithmetic instructions (`add`, `addi`, `mul`) handle addressing, delay loops, and stack adjustment.
-- Logic instructions (`and`, `andi`, `or`, `ori`, `not`, `sll`) manipulate individual bits in hardware registers.
-- RISC-V has no condition flags — branches compare register values directly.
-- The read-modify-write pattern (li → lw → and/or → sw) is the fundamental hardware register manipulation idiom.
+- 算术指令 (`add`, `addi`, `mul`) 负责地址计算, 延时循环和栈调整.
+- 逻辑指令 (`and`, `andi`, `or`, `ori`, `not`, `sll`) 操作硬件寄存器里的单个位.
+- RISC-V 没有条件标志位 - 分支直接比较寄存器值.
+- 读-改-写模式 (li -> lw -> and/or -> sw) 是操作硬件寄存器最基础的惯用法.

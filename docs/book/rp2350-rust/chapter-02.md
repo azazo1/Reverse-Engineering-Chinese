@@ -1,17 +1,17 @@
-# Chapter 2: Number Systems and Memory
+# Chapter 2: 数制与内存
 
-## Introduction
+## 引言
 
-Every register, every address, and every incoming byte on a UART wire is a
-number. To program a microcontroller we must be fluent in the three number
-systems Rust and the hardware share: **decimal**, **binary**, and
-**hexadecimal**. This chapter builds that fluency and connects it to the
-RP2350's physical memory map.
+每一个寄存器, 每一个地址, UART 线路上进来的每一个字节,
+都是数字. 要给微控制器编程, 就必须熟练使用 Rust
+和硬件共有的三套数制: **十进制**, **二进制**
+和 **十六进制**. 本章帮你建立这种熟练度,
+并把它和 RP2350 的物理内存映射联系起来.
 
-## Decimal — Base 10
+## 十进制 - 基数为 10
 
-Decimal is the counting system we learn in school. It uses ten digits,
-`0` through `9`, and each position represents a power of ten:
+十进制是我们上学时学的计数系统.
+它用十个数字, `0` 到 `9`, 每一位代表 10 的幂:
 
 ```
   4  8  2  6
@@ -23,11 +23,11 @@ Decimal is the counting system we learn in school. It uses ten digits,
                             total   =   4826
 ```
 
-## Binary — Base 2
+## 二进制 - 基数为 2
 
-A computer's memory element has exactly two states: off or on. We represent
-those states with the digits `0` and `1` — one **binary digit**, one **bit**.
-Every position is a power of two:
+计算机的存储元件只有两种状态: 关或开. 我们用数字
+`0` 和 `1` 表示这两种状态 - 一个 **二进制位**,
+也就是一个 **bit**. 每一位都是 2 的幂:
 
 ```
   0  0  0  0  1  0  1  1
@@ -43,13 +43,13 @@ Every position is a power of two:
                                     total    =      11
 ```
 
-So `0b00001011` is decimal 11. Eight bits form a **byte**, and a byte can hold
-any value from `0` (`0b0000_0000`) to `255` (`0b1111_1111`).
+所以 `0b00001011` 就是十进制 11. 八个 bit 组成一个 **字节**,
+一个字节可以保存从 `0` (`0b0000_0000`) 到 `255` (`0b1111_1111`) 的任意值.
 
-## Hexadecimal — Base 16
+## 十六进制 - 基数为 16
 
-Writing long binary values is error-prone. Hexadecimal packs four bits into one
-symbol. Its digits are `0`–`9` and then `A`–`F` for the values 10–15:
+写很长的二进制值很容易出错. 十六进制把四个 bit 打包成一个符号.
+它的数字是 `0`-`9`, 然后是 `A`-`F`, 表示 10-15:
 
 ```
 BINARY    0000 0001 0010 0011 0100 0101 0110 0111
@@ -59,7 +59,7 @@ BINARY    1000 1001 1010 1011 1100 1101 1110 1111
 HEX         8    9    A    B    C    D    E    F
 ```
 
-One hex digit is exactly four bits. A byte is exactly two hex digits:
+一个十六进制数字正好是四个 bit. 一个字节正好是两个十六进制数字:
 
 ```
   0b 1100_0010    =    0xC2
@@ -68,29 +68,29 @@ One hex digit is exactly four bits. A byte is exactly two hex digits:
       +------- 0b1100 = C
 ```
 
-This is why every peripheral register and the entire RP2350 address map are
-written in hex. `0x20000000` is far easier to read, transcribe, and verify than
-its binary form.
+这就是为什么每个外设寄存器和整张 RP2350
+地址映射图都用十六进制书写. 比起二进制形式,
+`0x20000000` 读起来, 抄写和核对都容易得多.
 
-## The 0x Prefix
+## 0x 前缀
 
-Rust follows C's convention for number literals. This matters because our
-`config.rs` files and memory map are full of these prefixes:
+Rust 沿用了 C 的数字字面量约定. 这一点很重要, 因为我们的
+`config.rs` 文件和内存映射图里到处都是这些前缀:
 
 ```rust
 let flash_base = 0x1000_0000u32;
-let ram_base   = 0x2000_0000u32;   // underscores group digits, ignored by the compiler
-let mask       = 0b0000_0011u8;    // binary literal
-let count      = 10_000u64;        // decimal literal with grouping
+let ram_base   = 0x2000_0000u32;   // 下划线用于分组数字, 编译器会忽略
+let mask       = 0b0000_0011u8;    // 二进制字面量
+let count      = 10_000u64;        // 带分组下划线的十进制字面量
 ```
 
-The `u32`, `u8`, and `u64` suffixes pin the exact width of each value. Getting
-the width right is essential: a `u8` can hold `0xFF` but not `0x100`.
+`u32`, `u8` 和 `u64` 后缀锁定了每个值的精确宽度.
+把宽度定对很关键: `u8` 能装下 `0xFF`, 但装不下 `0x100`.
 
-## Bytes, Halfwords, and Words
+## 字节, 半字和字
 
-The RP2350 addresses memory in units of eight bits, a byte. Larger units are
-built from bytes:
+RP2350 以八位为单位寻址内存,
+也就是字节. 更大的单位由字节组成:
 
 ```
 +-----------------------------------+
@@ -100,23 +100,23 @@ built from bytes:
 +-----------------------------------+
 ```
 
-Rust's integer types map directly onto these hardware sizes:
+Rust 的整数类型直接对应这些硬件尺寸:
 
-| Rust type | Bits | Bytes | Max value             |
+| Rust 类型 | 位   | 字节  | 最大值                 |
 |-----------|------|-------|-----------------------|
 | `u8`      | 8    | 1     | `0xFF`  (255)         |
 | `u16`     | 16   | 2     | `0xFFFF` (65,535)     |
 | `u32`     | 32   | 4     | `0xFFFF_FFFF`         |
 | `u64`     | 64   | 8     | `0xFFFF_FFFF_FFFF_FFFF`|
 
-Unsigned (`u`) types hold only non-negative values. Signed (`i`) types hold
-positive and negative values in two's complement.
+无符号 (`u`) 类型只能保存非负值.
+有符号 (`i`) 类型用补码保存正数和负数.
 
-## Alignment
+## 对齐
 
-When the CPU reads a 32-bit word from memory, it is fastest and most natural if
-that word crosses no address boundary of the word size. We say the access must
-be **aligned** to a multiple of its size:
+当 CPU 从内存读取一个 32 位字时,
+如果这个字没有跨过字长的地址边界, 速度最快也最自然.
+我们说这次访问必须 **对齐** 到自身大小的整数倍:
 
 ```
 ALIGNED                      MISALIGNED
@@ -128,14 +128,14 @@ ALIGNED                      MISALIGNED
  W0 = bytes 0-3               W0 = bytes 1-4
 ```
 
-Rust defines each struct's layout so its fields are naturally aligned. Typical
-embedded code never thinks about alignment because the compiler enforces it; we
-mention it here because the hardware datasheet will.
+Rust 会定义每个 struct 的布局, 让它的字段自然对齐.
+典型的嵌入式代码从不需要考虑对齐, 因为编译器会强制它;
+我们在这里提一句, 是因为硬件数据手册里会讲.
 
-## Little-Endian Byte Order
+## 小端字节序
 
-The RP2350 stores multi-byte values **little-endian**: the least significant
-byte lives at the lowest address. The value `0xAABBCCDD` is laid out as:
+RP2350 以 **小端序** 保存多字节的值:
+最低有效字节放在最低的地址上. 值 `0xAABBCCDD` 的排布是:
 
 ```
 ADDRESS   BYTE
@@ -145,18 +145,18 @@ ADDRESS   BYTE
 0x03      AA   (most significant)
 ```
 
-Rust uses the native byte order of the target, which for the RP2350 is
-little-endian. When we receive bytes over UART one at a time, we assemble them
-in this same order.
+Rust 使用目标平台的原生字节序, 对 RP2350 来说就是小端序.
+当我们通过 UART 一个字节一个字节地接收数据时,
+也按同样的顺序把它们拼起来.
 
-## Memory-Mapped I/O
+## 内存映射 I/O
 
-Peripherals on the RP2350 are controlled through registers that appear at fixed
-addresses in the same address space as RAM and flash. Writing a 0 or 1 to a GPIO
-output register is a normal memory store; the hardware reacts. This design is
-called **memory-mapped I/O** and we explore it fully in Chapter 11.
+RP2350 上的外设通过寄存器来控制, 这些寄存器出现在固定地址上,
+和 RAM, flash 处在同一个地址空间里. 往 GPIO 输出寄存器写一个
+0 或 1 就是一次普通的内存存储; 硬件会作出反应.
+这种设计叫做 **内存映射 I/O**, 我们会在第 11 章完整展开.
 
-For now, keep the big picture:
+现在先记住这幅全景图:
 
 ```
 +-----------------------------+      +-----------------------------+
@@ -168,9 +168,9 @@ For now, keep the big picture:
                                             change pin states
 ```
 
-## The RP2350 Address Map
+## RP2350 地址映射图
 
-The exact regions we use in all three drivers:
+三个驱动里用到的确切区域:
 
 ```
 +----------------+----------------+------------------+
@@ -184,31 +184,31 @@ The exact regions we use in all three drivers:
 +----------------+----------------+------------------+
 ```
 
-Our firmware runs from `0x10000000` (flash), places its stack at the top of
-`0x20000000` (RAM), and does all hardware control through registers in the
-peripheral region. You will see these three numbers in the `memory.x` linker
-script in Chapter 9.
+我们的固件从 `0x10000000` (flash) 运行,
+把栈放在 `0x20000000` (RAM) 的顶部,
+所有硬件控制都通过外设区域里的寄存器完成.
+你会在第 9 章的 `memory.x` 链接脚本里看到这三个数字.
 
-## Why This Matters
+## 为什么这很重要
 
-Every constant in the three drivers is a number in one of these systems:
+三个驱动里的每个常量, 都是这些数制中的某个数字:
 
-- `BLINK_DELAY_MS: u64 = 500` — a plain decimal.
-- `UART_BAUD_RATE: u32 = 115200` — a plain decimal.
-- `BACKSPACE: u8 = 0x08` — a control-character hex code.
-- GPIO addresses like `0x40014000` — hexadecimal region bases.
+- `BLINK_DELAY_MS: u64 = 500` - 一个普通的十进制数.
+- `UART_BAUD_RATE: u32 = 115200` - 一个普通的十进制数.
+- `BACKSPACE: u8 = 0x08` - 一个控制字符的十六进制编码.
+- 像 `0x40014000` 这样的 GPIO 地址 - 十六进制的区域基址.
 
-When you can translate between binary, hex, and decimal without thinking, you
-can read a register dump, a linker script, or a datasheet as easily as prose.
+当你能不加思索地在二进制, 十六进制和十进制之间转换时,
+读寄存器转储, 链接脚本或者数据手册就会像读散文一样轻松.
 
-## Summary
+## 小结
 
-- Bits are the atoms of memory; 8 bits make a byte, 4 bytes make a word.
-- Hexadecimal is a compact notation for binary; one hex digit is four bits.
-- The RP2350 is little-endian, so least significant bytes sit at low addresses.
-- Peripherals are controlled through registers in the memory-mapped address
-  space.
-- The address map — `0x10000000` flash, `0x20000000` RAM, `0x40000000`
-  peripherals — appears throughout the rest of this course.
+- bit 是内存的原子; 8 个 bit 组成一个字节, 4 个字节组成一个字.
+- 十六进制是二进制的紧凑写法; 一个十六进制数字就是四个 bit.
+- RP2350 是小端序, 所以最低有效字节放在低地址上.
+- 外设通过内存映射地址空间里的寄存器来控制,
+  这片地址空间和 RAM 与 flash 共用.
+- 地址映射图 - `0x10000000` 是 flash, `0x20000000` 是
+  RAM, `0x40000000` 是外设 - 会在本课程余下部分反复出现.
 
-Next we begin the Rust language itself: variables, types, and control flow.
+接下来我们开始讲 Rust 语言本身: 变量, 类型和控制流.

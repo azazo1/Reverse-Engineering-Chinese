@@ -1,56 +1,56 @@
-# Lesson 024 - IR Controlled Stepper
+# Lesson 024 - 红外遥控步进电机
 
-## What Are We Building Today?
+## 今天我们要做什么?
 
-Welcome to the Grand Finale! Over the past 23 lessons, you have mastered everything from flipping simple bits in registers to time-domain multiplexing and analog-to-digital conversions. 
+欢迎来到大结局! 在过去的 23 课里, 你从翻转寄存器里简单的某一位, 一路学到了时域多路复用和模数转换.
 
-Today, we will tie everything together by combining the **IR Receiver** (from Lesson 13) with the **Stepper Motor** (from Lesson 23).
-We are going to build a completely wireless, remote-controlled motorized system in pure assembly! 
+今天我们要把一切串起来: 把**红外接收器** (第 13 课) 和**步进电机** (第 23 课) 合在一起用.
+我们要用纯汇编做一套完全无线的遥控电动系统!
 
 [CODE](https://github.com/mytechnotalent/Assembler/blob/main/lessons/024/lesson.s)
 
 ---
 
-## Hardware Check: Combining the Systems
-We will use the same hardware from our previous lessons:
-1. **The ULN2003 Stepper Driver**: Connected to `PD2`, `PD3`, `PD4`, and `PD5`.
-2. **The IR Receiver Module**: Connected to `PD6`.
+## 硬件检查: 把两套系统合起来
+我们沿用前几课的那套硬件:
+1. **ULN2003 步进驱动**: 接在 `PD2`, `PD3`, `PD4` 和 `PD5`.
+2. **红外接收模块**: 接在 `PD6`.
 
-## The Code Walkthrough
+## 代码讲解
 
-In Lesson 13, we learned that the IR Receiver module idles at `HIGH` (5V). When invisible infrared light hits the sensor, it drops to `LOW` (0V).
-We can use a single instruction, `SBIC` (Skip if Bit in I/O Register is Cleared), to constantly poll the sensor and wait for a signal.
+第 13 课我们学过, 红外接收模块空闲时是 `HIGH` (5V). 当看不见的红外光打到传感器上, 它就掉到 `LOW` (0V).
+我们可以用一条指令 `SBIC` (I/O 寄存器中的这一位为 0 就跳过), 不停地轮询传感器, 等一个信号.
 
 ```assembly
 .loop:
-  ; Wait for an IR signal (LOW means light is hitting the receiver)
-  SBIC   PIND, PD6                     ; Skip next instruction if IR Receiver is LOW
-  RJMP   .loop                         ; If it's HIGH, just keep waiting
+  ; 等一个红外信号 (低电平表示有光打在接收器上)
+  SBIC   PIND, PD6                     ; 若红外接收器为低电平则跳过下一条指令
+  RJMP   .loop                         ; 如果是高电平, 就继续等
 ```
 
-While the room is dark (infrared speaking), the microcontroller executes this `RJMP .loop` millions of times per second, trapped in a tiny waiting pattern.
-The instant you point your TV Remote at the sensor and press a button, infrared light floods the sensor, `PD6` drops to LOW, and the CPU skips the `RJMP` instruction!
+房间里一片漆黑 (红外意义上的"安静") 的时候, 单片机每秒把这条 `RJMP .loop` 执行几百万次, 困在一个小小的等待循环里.
+你把电视遥控器对准传感器按下按键的那一瞬间, 红外光涌进传感器, `PD6` 掉到低电平, CPU 就跳过了那条 `RJMP`!
 
-It breaks out of the waiting pattern and immediately begins executing our Wave-Drive stepper algorithm:
+它冲出等待循环, 立刻开始执行我们的单相励磁步进算法:
 
 ```assembly
-  ; Signal Detected! Spin the Stepper Motor!
-  
-  ; Step 1: Fire Coil 1 (IN1)
-  LDI    R16, 0b01000100               ; PD2 HIGH, PD6 pull-up maintained
+  ; 检测到信号! 转动步进电机!
+
+  ; 第 1 步: 给线圈 1 通电 (IN1)
+  LDI    R16, 0b01000100               ; PD2 高电平, PD6 上拉保持
   OUT    PORTD, R16
   RCALL  delay_5ms
 ```
 
-**CRITICAL RULE:** Because both the Stepper Motor and the IR Receiver share `PORTD`, we must be extremely careful! 
-The IR Receiver requires an internal pull-up resistor on `PD6`. If we write `0b00000100` to `PORTD`, we would accidentally turn OFF the pull-up resistor on bit 6!
-To fix this, our masks are `0b01000100` (Bit 6 is kept HIGH to maintain the pull-up resistor while Bit 2 fires the motor).
+**关键规则:** 因为步进电机和红外接收器共用 `PORTD`, 我们必须格外小心!
+红外接收器需要 `PD6` 上有内部上拉电阻. 如果我们往 `PORTD` 写 `0b00000100`, 就会不小心把第 6 位的上拉电阻关掉!
+为了避开这个问题, 我们的掩码是 `0b01000100` (第 6 位保持高电平以维持上拉电阻, 同时第 2 位给电机通电).
 
-The motor will execute one full 4-step sequence (turning exactly 0.7 degrees) and then return to the top of the loop to check the IR receiver again. 
-If you hold down a button on your remote, the motor will continuously spin!
+电机会走完一整套 4 步的序列 (正好转过 0.7 度), 然后回到循环开头再检查一次红外接收器.
+如果你按住遥控器上的按键不放, 电机就会连续不停地转!
 
 ---
 
-Congratulations! You have completed the AVR Assembler series. You have written drivers, multiplexers, and hardware controllers from scratch using nothing but pure binary machine instructions. 
+恭喜! 你已经完成了整个 AVR 汇编系列. 你从零开始, 只用纯粹的二进制机器指令, 写出了驱动, 多路复用器和硬件控制器.
 
-You are now a true Bare-Metal Engineer!
+现在你是一位真正的裸机工程师了!

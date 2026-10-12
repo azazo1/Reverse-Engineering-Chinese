@@ -1,12 +1,12 @@
-# Chapter 30: Full Integration — From Source to Blinking LED
+# Chapter 30: 完整集成 - 从源码到闪烁的 LED
 
-## Introduction
+## 引言
 
-Across 29 chapters we have studied every concept, instruction, hardware block, and source file that makes up our blink driver.  This final chapter brings everything together: we build the firmware, wire the hardware, flash the chip, and verify that the LED blinks.  This is the complete journey from source code to a working embedded system.
+在 29 章里, 我们研究了构成这个闪烁驱动的每一个概念, 指令, 硬件模块和源文件. 这最后一章把所有东西合到一起: 我们构建固件, 连接硬件, 烧录芯片, 并确认 LED 在闪. 这就是从源代码到一个能工作的嵌入式系统的完整旅程.
 
-## Step 1: Verify the Toolchain
+## 第 1 步: 确认工具链
 
-Open PowerShell and confirm the ARM toolchain is installed:
+打开 PowerShell, 确认 ARM 工具链已经安装:
 
 ```powershell
 arm-none-eabi-as --version
@@ -14,24 +14,24 @@ arm-none-eabi-ld --version
 arm-none-eabi-objcopy --version
 ```
 
-All three must report version information.  If any command is not found, revisit the Install ARM Toolchain section of the README.
+三条命令都必须报出版本信息. 如果有命令找不到, 请回看 README 里的安装 ARM 工具链一节.
 
-## Step 2: Build the Firmware
+## 第 2 步: 构建固件
 
-From the project root directory, run:
+在项目根目录下运行:
 
 ```powershell
 .\build.bat
 ```
 
-The build script:
+构建脚本会:
 
-1. **Assembles** 10 source files → 10 object files (.o)
-2. **Links** all object files using linker.ld → blink.elf
-3. **Extracts** raw binary → blink.bin
-4. **Converts** to UF2 format → blink.uf2
+1. **汇编** 10 个源文件 → 10 个目标文件 (.o)
+2. **链接** 所有目标文件 (使用 linker.ld) → blink.elf
+3. **提取** 原始二进制 → blink.bin
+4. **转换** 成 UF2 格式 → blink.uf2
 
-A successful build prints:
+构建成功时会打印:
 
 ```
 Building...
@@ -41,40 +41,40 @@ SUCCESS! Created blink.uf2
 =================================
 ```
 
-If any step fails, the script stops with an error message identifying the failing stage.
+如果有任何一步失败, 脚本会停下并给出错误信息, 指明是哪一阶段出的问题.
 
-## Step 3: Verify Build Artifacts
+## 第 3 步: 检查构建产物
 
-After a successful build, these files exist:
+构建成功之后, 会出现这些文件:
 
-| File | Size (approx) | Purpose |
+| 文件 | 大小 (约) | 用途 |
 |------|---------------|---------|
-| `*.o` (10 files) | ~1 KB each | Intermediate object files |
-| `blink.elf` | ~10 KB | Linked binary with debug info |
-| `blink.bin` | ~1 KB | Raw binary (flash content) |
-| `blink.uf2` | ~2 KB | UF2 image for USB flashing |
+| `*.o` (10 个文件) | 每个约 1 KB | 中间目标文件 |
+| `blink.elf` | 约 10 KB | 带调试信息的链接后二进制 |
+| `blink.bin` | 约 1 KB | 原始二进制 (flash 内容) |
+| `blink.uf2` | 约 2 KB | 用于 USB 烧录的 UF2 镜像 |
 
-## Step 4: Wire the Hardware
+## 第 4 步: 连接硬件
 
-### Components Needed
+### 需要的元件
 
-| Component | Quantity |
+| 元件 | 数量 |
 |-----------|----------|
 | Raspberry Pi Pico 2 (RP2350) | 1 |
-| LED (any color) | 1 |
-| 330 Ω resistor | 1 |
-| Breadboard | 1 |
-| Jumper wires | 2 |
-| USB cable (Micro-B or USB-C) | 1 |
+| LED (任意颜色) | 1 |
+| 330 Ω 电阻 | 1 |
+| 面包板 | 1 |
+| 杜邦线 | 2 |
+| USB 线 (Micro-B 或 USB-C) | 1 |
 
-### Wiring Diagram
+### 接线图
 
 ```
 Pico 2 Pin 21 (GPIO16) ---[330 Ω]---[LED anode (+)]
                                       [LED cathode (-)]--- Pico 2 Pin 23 (GND)
 ```
 
-### Physical Layout
+### 实物布局
 
 ```
 +---------------------------+
@@ -88,41 +88,41 @@ Pico 2 Pin 21 (GPIO16) ---[330 Ω]---[LED anode (+)]
 +---------------------------+
 ```
 
-**LED orientation matters:** The anode (longer leg) connects to the resistor side.  The cathode (shorter leg, flat side of the lens) connects to ground.
+**LED 的方向很重要:** 阳极 (较长的引脚) 接电阻那一侧. 阴极 (较短的引脚, 透镜上的平面那一侧) 接地.
 
-**Resistor value:** 330 Ω limits current to approximately 10 mA at 3.3V, which is safe for both the LED and the GPIO pin.  Values from 220 Ω to 1 kΩ work — lower values produce a brighter LED.
+**电阻取值:** 330 Ω 把电流限制在 3.3V 下约 10 mA, 这对 LED 和 GPIO 引脚都是安全的. 220 Ω 到 1 kΩ 都能用 - 阻值越低, LED 越亮.
 
-## Step 5: Flash the Firmware
+## 第 5 步: 烧录固件
 
-### Method A: UF2 (USB Mass Storage)
+### 方法 A: UF2 (USB 大容量存储)
 
-1. Hold the **BOOTSEL** button on the Pico 2
-2. Connect the USB cable to your computer
-3. Release BOOTSEL — a drive named **RP2350** appears
-4. Copy `blink.uf2` to the RP2350 drive
-5. The drive disappears and the firmware starts running
+1. 按住 Pico 2 上的 **BOOTSEL** 按钮
+2. 把 USB 线接到电脑
+3. 松开 BOOTSEL - 会出现一个名为 **RP2350** 的驱动器
+4. 把 `blink.uf2` 复制到 RP2350 驱动器
+5. 驱动器消失, 固件开始运行
 
-### Method B: OpenOCD (Debug Probe)
+### 方法 B: OpenOCD (调试探针)
 
-If you have a CMSIS-DAP debug probe connected:
+如果你接好了 CMSIS-DAP 调试探针:
 
 ```powershell
 openocd -f interface/cmsis-dap.cfg -f target/rp2350.cfg -c "adapter speed 5000" -c "program blink.elf verify reset exit"
 ```
 
-This programs the ELF file, verifies the flash contents, resets the chip, and exits.
+这条命令会烧录 ELF 文件, 校验 flash 内容, 复位芯片, 然后退出.
 
-### Method C: picotool
+### 方法 C: picotool
 
 ```powershell
 picotool load blink.uf2 -f
 ```
 
-This loads the UF2 file and forces a reboot.
+这条命令加载 UF2 文件并强制重启.
 
-## Step 6: Verify Operation
+## 第 6 步: 确认运行
 
-After flashing, the LED should blink:
+烧录之后, LED 应该开始闪烁:
 
 ```
 Time:  0s    0.5s   1.0s   1.5s   2.0s   2.5s
@@ -131,21 +131,21 @@ LED:   ON    OFF    ON     OFF    ON     OFF
        500ms  500ms  500ms  500ms  500ms
 ```
 
-The LED turns on for 500 ms, off for 500 ms, repeating indefinitely.  The blink frequency is 1 Hz.
+LED 亮 500 ms, 灭 500 ms, 如此无限重复. 闪烁频率是 1 Hz.
 
-## Troubleshooting
+## 故障排查
 
-| Symptom | Cause | Fix |
+| 现象 | 原因 | 解决 |
 |---------|-------|-----|
-| LED does not light | Wrong GPIO pin | Verify wiring to Pin 21 (GPIO16) |
-| LED stays on constantly | LED wired to 3.3V instead of GPIO | Check wiring |
-| LED is very dim | Resistor too large | Try a lower value (330Ω) |
-| Build fails at assembly | Syntax error | Check error message for file and line |
-| Build fails at linking | Undefined symbol | Verify all `.global` declarations |
-| UF2 drive does not appear | BOOTSEL not held | Hold BOOTSEL before plugging USB |
-| Chip does not boot | Missing PICOBIN block | Verify image_def.s and linker script |
+| LED 不亮 | GPIO 引脚错了 | 检查接线是否接到 Pin 21 (GPIO16) |
+| LED 一直亮着 | LED 接到了 3.3V 而不是 GPIO | 检查接线 |
+| LED 很暗 | 电阻太大 | 换一个更小的阻值 (330Ω) |
+| 构建在汇编阶段失败 | 语法错误 | 看错误信息里的文件名和行号 |
+| 构建在链接阶段失败 | 未定义的符号 | 检查所有 `.global` 声明 |
+| UF2 驱动器不出现 | 没有按住 BOOTSEL | 插 USB 之前先按住 BOOTSEL |
+| 芯片不启动 | 缺少 PICOBIN 块 | 检查 image_def.s 和链接脚本 |
 
-## The Complete Architecture
+## 完整架构
 
 ```
 +----------------------------------------------------------+
@@ -189,23 +189,23 @@ The LED turns on for 500 ms, off for 500 ms, repeating indefinitely.  The blink 
                            GND
 ```
 
-## What You Have Learned
+## 你学到了什么
 
-Across these 30 chapters, you have built understanding from the ground up:
+在这 30 章里, 你从零开始建立起了理解:
 
-- **Chapters 1–6:** Computer fundamentals — binary, memory, registers, execution model
-- **Chapters 7–12:** ARM Cortex-M33 instruction set — moves, arithmetic, logic, memory, branches, calls
-- **Chapters 13–17:** Assembly programming — directives, symbols, sections, system registers, bit manipulation
-- **Chapter 18:** RP2350 hardware — XOSC, clocks, resets, GPIO, SIO coprocessor
-- **Chapters 19–20:** Build system — linker script and build pipeline
-- **Chapters 21–29:** Source code walkthrough — every file, every function, every instruction
+- **第 1-6 章:** 计算机基础 - 二进制, 内存, 寄存器, 执行模型
+- **第 7-12 章:** ARM Cortex-M33 指令集 - 传送, 算术, 逻辑, 内存, 分支, 调用
+- **第 13-17 章:** 汇编编程 - 指示符, 符号, 段, 系统寄存器, 位操作
+- **第 18 章:** RP2350 硬件 - XOSC, 时钟, 复位, GPIO, SIO 协处理器
+- **第 19-20 章:** 构建系统 - 链接脚本与构建流水线
+- **第 21-29 章:** 源码讲解 - 每个文件, 每个函数, 每条指令
 
-You now understand every byte of a working bare-metal firmware, from the PICOBIN boot block to the final `b .Loop` that keeps the LED blinking.
+现在你已经理解了一个能工作的裸机固件的每一个字节, 从 PICOBIN 引导块一直到最后那条让 LED 持续闪烁的 `b .Loop`.
 
-## Summary
+## 小结
 
-- Build with `.\build.bat` to produce blink.uf2.
-- Wire an LED with a 330 Ω resistor between GPIO16 (Pin 21) and GND (Pin 23).
-- Flash via UF2 drag-and-drop, OpenOCD, or picotool.
-- The LED blinks at 1 Hz: 500 ms on, 500 ms off.
-- Every instruction in the firmware has been explained across the preceding 29 chapters.
+- 用 `.\build.bat` 构建, 产出 blink.uf2.
+- 把 LED 和 330 Ω 电阻接在 GPIO16 (Pin 21) 与 GND (Pin 23) 之间.
+- 通过 UF2 拖放, OpenOCD 或 picotool 烧录.
+- LED 以 1 Hz 闪烁: 亮 500 ms, 灭 500 ms.
+- 固件里的每条指令都在前面 29 章里讲解过了.

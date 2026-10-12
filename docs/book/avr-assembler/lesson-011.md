@@ -1,80 +1,80 @@
-# Lesson 011 - DHT11 Temperature & Humidity Sensor
+# Lesson 011 - DHT11 温湿度传感器
 
-## What Are We Building Today?
+## 今天我们要做什么?
 
-Today we will tackle one of the most exciting challenges in bare metal programming: **Single-Wire Digital Protocols**.
+今天我们要挑战裸机编程里最刺激的难题之一: **单线数字协议**.
 
-We are using the **DHT11**, a digital temperature and humidity sensor. Unlike a simple button or LED that just turns on and off, the DHT11 actually talks to us! It sends 40 bits of digital data (1s and 0s) over a single wire. It does this by pulling the voltage LOW and HIGH at very specific microscopic time intervals.
+我们用 **DHT11**, 一款数字温湿度传感器. 它不像简单的按钮或者 LED 那样只会开和关, DHT11 是真的会跟我们说话! 它在一根线上送出 40 位数字数据 (也就是 0 和 1). 它是靠以极其精确的微小时间间隔把电压拉低又拉高来做到这一点的.
 
-We will write an advanced timing subroutine to measure these electrical pulses, assemble them into 8-bit bytes, and then perform a mathematical checksum to guarantee the data is correct. If the data is read perfectly, the built-in LED (Pin 13) will turn ON for 1 second. If there is an error in reading the data, it will flash rapidly!
+我们要写一个高级的计时子程序来测量这些电脉冲, 把它们拼成 8 位字节, 再做一次数学校验和, 确保数据没错. 如果数据读得完全正确, 板载 LED (Pin 13) 会亮 1 秒. 如果读数据出了错, 它就会飞快地闪!
 
 [CODE](https://github.com/mytechnotalent/Assembler/blob/main/lessons/011/lesson.s)
 
 ---
 
-## Hardware Check: The Single-Wire Protocol
+## 硬件检查: 单线协议
 
-The DHT11 uses a single data wire connected to **PD2 (Pin 2)**.
-To talk to it, we must follow a strict handshake:
-1. **The Wake Up Call**: We pull the line LOW (0 Volts) for 20 milliseconds, then release it HIGH.
-2. **The Acknowledgment**: The DHT11 pulls the line LOW for 80 microseconds, then HIGH for 80 microseconds.
-3. **The Data Transmission**: The DHT11 immediately sends 40 bits (5 bytes) of data.
-   - A logic `0` is a 50µs LOW pulse followed by a **~28µs HIGH** pulse.
-   - A logic `1` is a 50µs LOW pulse followed by a **~70µs HIGH** pulse.
-4. **The Bytes**: Byte 1 (Humidity Integer), Byte 2 (Humidity Decimal), Byte 3 (Temp Integer), Byte 4 (Temp Decimal), and Byte 5 (Checksum).
+DHT11 只用一根数据线, 接在 **PD2 (Pin 2)**.
+要跟它说话, 我们必须遵守一套严格的握手流程:
+1. **叫醒它**: 我们把线拉低 (0 伏) 持续 20 毫秒, 然后放开拉高.
+2. **应答**: DHT11 把线拉低 80 微秒, 再拉高 80 微秒.
+3. **数据传输**: DHT11 紧接着送出 40 位 (5 字节) 数据.
+   - 逻辑 `0` 是一段 50µs 的低电平脉冲, 后面跟一个 **~28µs 的高电平**脉冲.
+   - 逻辑 `1` 是一段 50µs 的低电平脉冲, 后面跟一个 **~70µs 的高电平**脉冲.
+4. **字节内容**: 第 1 字节 (湿度整数), 第 2 字节 (湿度小数), 第 3 字节 (温度整数), 第 4 字节 (温度小数), 第 5 字节 (校验和).
 
-Our job is to measure the length of the HIGH pulses to figure out if the sensor is sending us a `0` or a `1`!
+我们的活儿就是量一量高电平脉冲有多长, 从而判断传感器送来的是 `0` 还是 `1`!
 
-## The Code Walkthrough
+## 代码讲解
 
-### 1. The Handshake
+### 1. 握手
 ```assembly
-  SBI    DDRD, PD2                     ; PD2 as Output
-  CBI    PORTD, PD2                    ; Pull line LOW for Start Signal
-  RCALL  delay_20ms                    ; Wait 20ms
-  SBI    PORTD, PD2                    ; Release line HIGH
-  CBI    DDRD, PD2                     ; Change PD2 to Input to listen
+  SBI    DDRD, PD2                     ; 把 PD2 设为输出
+  CBI    PORTD, PD2                    ; 拉低发出起始信号
+  RCALL  delay_20ms                    ; 等 20ms
+  SBI    PORTD, PD2                    ; 放开拉高
+  CBI    DDRD, PD2                     ; 把 PD2 改成输入, 准备听
 ```
-We take control of the pin, drive it LOW for 20ms, release it, and immediately switch our pin to an `Input` so we can listen. We then use `SBIC` and `SBIS` in tight loops to wait for the sensor to acknowledge us.
+我们把引脚的控制权拿过来, 拉低 20ms, 放开, 然后马上把引脚切成 `Input`, 这样我们才能听. 接着我们在紧凑的循环里用 `SBIC` 和 `SBIS` 等传感器来应答我们.
 
-### 2. Reading a Byte (The Magic Subroutine)
-To read 8 bits, we wrote a brilliant subroutine: `dht_read_byte`.
+### 2. 读取一个字节 (神奇的子程序)
+为了读 8 位, 我们写了一个很妙的子程序: `dht_read_byte`.
 ```assembly
-.inc_counter:                          
-  INC    R25                           ; Increment counter (takes 5 cycles total)
-  NOP                                  ; Pad for timing
-  RJMP   .wait_low                     ; Loop back
+.inc_counter:
+  INC    R25                           ; 计数器加 1 (总共花 5 个周期)
+  NOP                                  ; 补齐时序
+  RJMP   .wait_low                     ; 绕回去
 ```
-When the pulse goes HIGH, we loop this counter. This loop takes exactly 5 clock cycles (`0.3125 microseconds`). If the pulse stays HIGH for 28µs (a logic `0`), our counter will reach about `90`. If it stays HIGH for 70µs (a logic `1`), our counter will reach about `224`.
+脉冲变高的时候, 我们就让这个计数器转圈. 这个循环正好花 5 个时钟周期 (`0.3125 microseconds`). 如果脉冲保持高电平 28µs (逻辑 `0`), 我们的计数器大约会数到 `90`. 如果它保持高电平 70µs (逻辑 `1`), 计数器大约会数到 `224`.
 
 ```assembly
-.eval_bit:                             
-  CPI    R25, 150                      ; Compare counter to threshold (approx 47us)
-  BRSH   .bit_one                      ; If counter >= 150, the bit is a 1
-  CLC                                  ; Bit is 0, clear Carry flag
-  RJMP   .shift_in                     ; Jump to shift
-.bit_one:                              
-  SEC                                  ; Bit is 1, set Carry flag
-.shift_in:                             
-  ROL    R18                           ; Shift the Carry flag into R18
+.eval_bit:
+  CPI    R25, 150                      ; 把计数器和阈值比较 (约 47us)
+  BRSH   .bit_one                      ; 若计数器 >= 150, 这一位就是 1
+  CLC                                  ; 这一位是 0, 清零进位标志
+  RJMP   .shift_in                     ; 跳到移位
+.bit_one:
+  SEC                                  ; 这一位是 1, 置位进位标志
+.shift_in:
+  ROL    R18                           ; 把进位标志移进 R18
 ```
-We compare our counter to `150` (which sits perfectly in the middle at 47µs). 
-If it is greater or equal (`BRSH`), we set the CPU's Carry Flag (`SEC`). If it is lower, we clear the Carry Flag (`CLC`). 
-Then, we use the `ROL` (Rotate Left through Carry) instruction. This magically slides our new bit directly into the `R18` register! After doing this 8 times, `R18` holds our fully assembled byte!
+我们把计数器和 `150` 比一比 (它正好落在 47µs 的中间).
+如果大于等于 (`BRSH`), 我们就置位 CPU 的进位标志 (`SEC`). 如果更小, 我们就清零进位标志 (`CLC`).
+然后, 我们用 `ROL` (Rotate Left through Carry, 通过进位循环左移) 指令. 它就像变魔术一样, 把我们刚读到的这一位直接滑进 `R18` 寄存器! 这样重复 8 次之后, `R18` 里装着的就是我们拼好的整个字节!
 
-### 3. The Checksum
-The 5th byte sent by the sensor is a Checksum. The rule is: `Byte 1 + Byte 2 + Byte 3 + Byte 4` must exactly equal `Byte 5`.
+### 3. 校验和
+传感器送出的第 5 个字节是校验和. 规则是: `Byte 1 + Byte 2 + Byte 3 + Byte 4` 必须正好等于 `Byte 5`.
 ```assembly
-  MOV    R17, R20                      ; R17 = Humidity Int
-  ADD    R17, R21                      ; Add Humidity Dec
-  ADD    R17, R22                      ; Add Temp Int
-  ADD    R17, R23                      ; Add Temp Dec
-  CP     R17, R24                      ; Compare calculated sum with Checksum
-  BRNE   .error                        ; If not equal, checksum failed!
-  SBI    PORTB, PB5                    ; Success! Turn LED ON
+  MOV    R17, R20                      ; R17 = 湿度整数
+  ADD    R17, R21                      ; 加上湿度小数
+  ADD    R17, R22                      ; 加上温度整数
+  ADD    R17, R23                      ; 加上温度小数
+  CP     R17, R24                      ; 把算出的和与校验和比较
+  BRNE   .error                        ; 如果不相等, 校验失败!
+  SBI    PORTB, PB5                    ; 成功! 点亮 LED
 ```
-We add all four data bytes together and `CP` (Compare) the result to the 5th byte. If it matches, our data is completely error-free, and we celebrate by turning on the LED!
+我们把四个数据字节加起来, 用 `CP` (比较) 把结果和第 5 个字节比一比. 如果对上了, 说明我们的数据完全没有错, 我们就点亮 LED 庆祝一下!
 
 ---
 
-Congratulations! You just wrote a fully functional software driver for a digital single-wire communications protocol using pure mathematical timing in Assembly!
+恭喜! 你刚刚用汇编里纯粹的数学计时, 给一个数字单线通信协议写出了完全可用的软件驱动!

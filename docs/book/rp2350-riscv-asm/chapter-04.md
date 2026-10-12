@@ -1,117 +1,117 @@
-# Chapter 4: What Is a Register?
+# Chapter 4: 什么是寄存器?
 
-## Introduction
+## 引言
 
-Registers are the fastest storage locations in the processor.  Every computation passes through them: loading data from memory into a register, operating on it, and storing the result back.  This chapter maps out every register in the Hazard3 RISC-V core and shows exactly how our blink firmware uses them.
+寄存器是处理器里最快的存储位置. 每一次运算都要经过它们: 把数据从内存加载进寄存器, 在寄存器上运算, 再把结果存回去. 本章会把 Hazard3 RISC-V 内核里的每个寄存器都梳理一遍, 并展示闪烁固件究竟是怎样使用它们的.
 
-## The RISC-V RV32 Register File
+## RISC-V RV32 寄存器组
 
-The RISC-V base integer ISA defines 32 general-purpose registers, each 32 bits wide:
+RISC-V 基础整数 ISA 定义了 32 个通用寄存器, 每个 32 位宽:
 
-| Register | ABI Name | Purpose |
+| 寄存器 | ABI 名 | 用途 |
 |----------|----------|---------|
-| x0 | zero | Hardwired to 0 — reads always return 0, writes are ignored |
-| x1 | ra | Return address — saved by `call`, used by `ret` |
-| x2 | sp | Stack pointer — points to top of stack |
-| x3 | gp | Global pointer (unused in our firmware) |
-| x4 | tp | Thread pointer (unused in our firmware) |
-| x5–x7 | t0–t2 | Temporary registers — caller-saved |
-| x8 | s0/fp | Saved register / frame pointer — callee-saved |
-| x9 | s1 | Saved register — callee-saved |
-| x10–x11 | a0–a1 | Function arguments and return values |
-| x12–x17 | a2–a7 | Function arguments |
-| x18–x27 | s2–s11 | Saved registers — callee-saved |
-| x28–x31 | t3–t6 | Temporary registers — caller-saved |
+| x0 | zero | 硬连线为 0 - 读总是得到 0, 写会被忽略 |
+| x1 | ra | 返回地址 - 由 `call` 保存, 由 `ret` 使用 |
+| x2 | sp | 栈指针 - 指向栈顶 |
+| x3 | gp | 全局指针 (我们的固件里未使用) |
+| x4 | tp | 线程指针 (我们的固件里未使用) |
+| x5-x7 | t0-t2 | 临时寄存器 - 调用者保存 |
+| x8 | s0/fp | 保存寄存器 / 帧指针 - 被调用者保存 |
+| x9 | s1 | 保存寄存器 - 被调用者保存 |
+| x10-x11 | a0-a1 | 函数参数和返回值 |
+| x12-x17 | a2-a7 | 函数参数 |
+| x18-x27 | s2-s11 | 保存寄存器 - 被调用者保存 |
+| x28-x31 | t3-t6 | 临时寄存器 - 调用者保存 |
 
-## Registers t0–t2, t3–t6: Temporaries
+## 寄存器 t0-t2, t3-t6: 临时寄存器
 
-The temporary registers are **caller-saved**: a called function may freely overwrite them.  Our firmware uses `t0`, `t1`, and `t2` extensively for loading addresses, reading peripheral values, and computing bit masks:
+临时寄存器是**调用者保存 (caller-saved)** 的: 被调用的函数可以随意覆盖它们. 我们的固件大量使用 `t0`, `t1` 和 `t2` 来加载地址, 读取外设值以及计算位掩码:
 
 ```asm
-  li    t0, XOSC_STARTUP                         # load address into t0
-  li    t1, 0x00c4                               # load value into t1
-  sw    t1, 0(t0)                                # store t1 at address in t0
+  li    t0, XOSC_STARTUP                         # 把地址加载进 t0
+  li    t1, 0x00c4                               # 把值加载进 t1
+  sw    t1, 0(t0)                                # 把 t1 存到 t0 指向的地址
 ```
 
-## Registers a0–a7: Arguments
+## 寄存器 a0-a7: 参数寄存器
 
-The `a0`–`a7` registers pass arguments to functions and return values.  In our firmware, `a0` carries the GPIO number or delay value:
+`a0`-`a7` 寄存器用来给函数传参数, 也用来传返回值. 在我们的固件里, `a0` 携带 GPIO 编号或延时值:
 
 ```asm
-  li    a0, 16                                   # load GPIO number
-  call  GPIO_Set                                 # call GPIO_Set(16)
+  li    a0, 16                                   # 加载 GPIO 编号
+  call  GPIO_Set                                 # 调用 GPIO_Set(16)
 ```
 
-## Registers s0–s11: Saved
+## 寄存器 s0-s11: 保存寄存器
 
-The saved registers are **callee-saved**: if a function uses them, it must save them on the stack first and restore them before returning.  Our blink firmware primarily uses temporary and argument registers, so the saved registers are not heavily used.
+保存寄存器是**被调用者保存 (callee-saved)** 的: 如果某个函数要用它们, 必须先把它们存到栈上, 返回前再恢复. 我们的闪烁固件主要使用临时寄存器和参数寄存器, 所以保存寄存器用得不多.
 
-## Register x0 (zero): The Zero Register
+## 寄存器 x0 (zero): 零寄存器
 
-The `x0` register always reads as zero.  This is a fundamental RISC-V feature that eliminates the need for special zero-clearing instructions:
+`x0` 寄存器的读值永远是零. 这是 RISC-V 的一个基本设计, 它免去了专门的清零指令:
 
 ```asm
-  sw    zero, 0(t0)                              # store 0 to address in t0
+  sw    zero, 0(t0)                              # 把 0 存到 t0 指向的地址
 ```
 
-## Register x1 (ra): Return Address
+## 寄存器 x1 (ra): 返回地址
 
-When `call` (which is `jal ra, offset`) executes, the address of the next instruction is saved in `ra`.  The `ret` pseudo-instruction (`jalr zero, ra, 0`) jumps back to that saved address:
+当 `call` (也就是 `jal ra, offset`) 执行时, 下一条指令的地址会保存到 `ra` 里. `ret` 伪指令 (`jalr zero, ra, 0`) 则跳回那个保存下来的地址:
 
 ```asm
-  call  GPIO_Config                              # ra = return address
+  call  GPIO_Config                              # ra = 返回地址
   ...
-  ret                                            # jump to address in ra
+  ret                                            # 跳到 ra 里的地址
 ```
 
-## Register x2 (sp): Stack Pointer
+## 寄存器 x2 (sp): 栈指针
 
-The stack pointer tracks the top of the call stack.  Our Init_Stack function sets it to the top of the SRAM stack region:
+栈指针跟踪调用栈的顶部. 我们的 Init_Stack 函数把它设为 SRAM 栈区的顶端:
 
 ```asm
-  li    sp, STACK_TOP                            # set SP to top of RAM stack
+  li    sp, STACK_TOP                            # 把 SP 设为 RAM 栈顶
 ```
 
-Functions that need to save `ra` (non-leaf functions) adjust `sp` to create a stack frame.
+需要保存 `ra` 的函数 (非叶子函数) 会调整 `sp` 来建立一个栈帧.
 
-## The Program Counter (PC)
+## 程序计数器 (PC)
 
-The PC is not part of the general register file — it is a special register that holds the address of the current instruction.  It advances by 4 after each 32-bit instruction (or by 2 for compressed instructions).  Branch and jump instructions modify the PC directly.
+PC 不属于通用寄存器组 - 它是一个特殊寄存器, 保存着当前指令的地址. 每执行完一条 32 位指令它就前进 4 (压缩指令则前进 2). 分支和跳转指令会直接修改 PC.
 
-## Control and Status Registers (CSRs)
+## 控制和状态寄存器 (CSR)
 
-RISC-V defines a separate set of **CSRs** for machine-mode control. Our firmware uses:
+RISC-V 单独定义了一组 **CSR** 用于机器模式控制. 我们的固件用到:
 
-| CSR | Name | Purpose |
+| CSR | 名称 | 用途 |
 |-----|------|---------|
-| mtvec | Machine Trap Vector | Holds the address of the trap handler |
-| mstatus | Machine Status | Controls global interrupt enable |
+| mtvec | Machine Trap Vector | 存放陷阱处理程序的地址 |
+| mstatus | Machine Status | 控制全局中断使能 |
 
-The `csrw` instruction writes a CSR:
+`csrw` 指令用来写 CSR:
 
 ```asm
-  csrw  mtvec, t0                                # set trap vector to t0
+  csrw  mtvec, t0                                # 把陷阱向量设为 t0
 ```
 
-## Register Usage in Our Firmware
+## 寄存器在固件中的用法
 
-| Register | How Our Firmware Uses It |
+| 寄存器 | 我们固件怎么用它 |
 |----------|------------------------|
-| t0 | Base address for peripheral registers |
-| t1 | Value read from / written to peripheral |
-| t2 | Bit masks for set/clear/test operations |
-| a0 | GPIO number, delay milliseconds, pad offset |
-| a1 | CTRL offset argument |
-| a2 | GPIO number for GPIO_Config |
-| sp | Stack pointer (set to STACK_TOP) |
-| ra | Return address for function calls |
+| t0 | 外设寄存器的基地址 |
+| t1 | 从外设读出 / 写入外设的值 |
+| t2 | 置位/清零/测试操作用的位掩码 |
+| a0 | GPIO 编号, 延时毫秒数, pad 偏移 |
+| a1 | CTRL 偏移参数 |
+| a2 | 传给 GPIO_Config 的 GPIO 编号 |
+| sp | 栈指针 (设为 STACK_TOP) |
+| ra | 函数调用的返回地址 |
 
-## Summary
+## 小结
 
-- RISC-V has 32 general-purpose registers (x0–x31), each 32 bits wide.
-- x0 is hardwired to zero; writes are silently discarded.
-- ra (x1) holds the return address; sp (x2) holds the stack pointer.
-- Temporary registers (t0–t6) are caller-saved; saved registers (s0–s11) are callee-saved.
-- Arguments pass through a0–a7; return values come back in a0–a1.
-- CSRs (mtvec, mstatus) control machine-mode behavior.
-- Our firmware primarily uses t0–t2, a0–a2, sp, and ra.
+- RISC-V 有 32 个通用寄存器 (x0-x31), 每个 32 位宽.
+- x0 硬连线为零; 对它的写会被静默丢弃.
+- ra (x1) 保存返回地址; sp (x2) 保存栈指针.
+- 临时寄存器 (t0-t6) 是调用者保存的; 保存寄存器 (s0-s11) 是被调用者保存的.
+- 参数通过 a0-a7 传入; 返回值通过 a0-a1 传回.
+- CSR (mtvec, mstatus) 控制机器模式的行为.
+- 我们的固件主要使用 t0-t2, a0-a2, sp 和 ra.

@@ -1,18 +1,18 @@
-# Chapter 1: What Is a Computer?
+# Chapter 1: 什么是计算机?
 
-## Introduction
+## 引言
 
-This chapter presents the fundamental model of computation that every computer — from a warehouse-scale server to the RP2350 microcontroller on your desk — follows.  By the end you will understand the three core components of any computer, the cycle that drives all program execution, and why we chose the RP2350 and RISC-V assembly language for this project.
+本章介绍计算的基本模型, 从仓库规模的服务器到你桌上的 RP2350 单片机, 每一台计算机都遵循这个模型. 读完之后, 你会理解任何计算机的三个核心部件, 驱动所有程序执行的那个循环, 以及我们为什么为这个项目选择 RP2350 和 RISC-V 汇编语言.
 
-## The Fetch-Decode-Execute Cycle
+## 取指-译码-执行循环
 
-Every processor, regardless of its complexity, performs the same three-step loop for as long as it is powered on:
+不管处理器有多复杂, 只要通着电, 它就在重复同一个三步循环:
 
-1. **Fetch** — read the next instruction from memory at the address held in the Program Counter (PC).
-2. **Decode** — interpret the binary pattern of that instruction to determine the operation and its operands.
-3. **Execute** — carry out the operation (arithmetic, memory access, branch, etc.) and update any affected registers or memory.
+1. **取指 (Fetch)** - 从内存中程序计数器 (Program Counter, PC) 所指向的地址读取下一条指令.
+2. **译码 (Decode)** - 解读这条指令的二进制位模式, 判断它要做什么操作, 操作数是谁.
+3. **执行 (Execute)** - 真正完成这个操作 (算术, 访存, 跳转等), 并更新受影响的寄存器或内存.
 
-After execution the PC advances to the next instruction (or to a branch target) and the cycle repeats.  This loop is the heartbeat of every program.
+执行完毕, PC 前进到下一条指令 (或者跳到分支目标), 然后循环重新开始. 这个循环就是每个程序的心跳.
 
 ```
 +-------+     +--------+     +---------+
@@ -22,93 +22,93 @@ After execution the PC advances to the next instruction (or to a branch target) 
      +---------------------------------+
 ```
 
-## The Three Core Components
+## 三个核心部件
 
-A computer is built from three fundamental components:
+一台计算机由三个基本部件构成:
 
-| Component | Purpose |
+| 部件 | 作用 |
 |-----------|---------|
-| **Processor (CPU)** | Executes instructions — the fetch-decode-execute engine |
-| **Memory** | Stores instructions and data at addressable locations |
-| **I/O (Input/Output)** | Connects the processor to the outside world — buttons, LEDs, serial ports, sensors |
+| **处理器 (CPU)** | 执行指令 - 取指译码执行的引擎 |
+| **内存** | 在可寻址的位置上存放指令和数据 |
+| **I/O (输入/输出)** | 把处理器和外部世界连起来 - 按键, LED, 串口, 传感器 |
 
-Everything else — caches, buses, interrupt controllers — exists to make these three components work together efficiently.
+其余的东西 - 缓存, 总线, 中断控制器 - 都是为了让这三个部件高效地协同工作.
 
-## Microcontroller vs Desktop Computer
+## 单片机与台式机
 
-A desktop computer distributes these three components across separate chips on a motherboard.  A **microcontroller** integrates all three onto a single silicon die:
+台式机把这三个部件分散在主板上的不同芯片里. 而**单片机**把三者集成在同一块硅片上:
 
-| Feature | Desktop | Microcontroller |
+| 特性 | 台式机 | 单片机 |
 |---------|---------|-----------------|
-| CPU | Separate chip (Intel, AMD) | On-chip core (Hazard3 RISC-V) |
-| Memory | External DRAM sticks | On-chip SRAM (520 KB) and external flash |
-| I/O | Expansion cards, chipset | On-chip peripherals (GPIO, UART, SPI, I2C) |
-| Clock speed | 3–5 GHz | 12–150 MHz |
-| Operating system | Windows, Linux, macOS | Usually none (bare-metal) |
+| CPU | 独立芯片 (Intel, AMD) | 片上内核 (Hazard3 RISC-V) |
+| 内存 | 外置 DRAM 内存条 | 片上 SRAM (520 KB) 加外部 flash |
+| I/O | 扩展卡, 芯片组 | 片上外设 (GPIO, UART, SPI, I2C) |
+| 时钟频率 | 3-5 GHz | 12-150 MHz |
+| 操作系统 | Windows, Linux, macOS | 通常没有 (裸机) |
 
-The RP2350 is a microcontroller.  We will program it without an operating system — our code is the only software running.
+RP2350 是一颗单片机. 我们会在没有操作系统的情况下给它编程 - 我们的代码就是唯一在跑的软件.
 
-## What Is RP2350?
+## 什么是 RP2350?
 
-The RP2350 is a dual-architecture microcontroller designed by Raspberry Pi.  Key specifications:
+RP2350 是 Raspberry Pi 设计的双架构单片机. 关键规格:
 
-- **Cores**: two ARM Cortex-M33 cores *and* two Hazard3 RISC-V cores (selectable at boot)
-- **SRAM**: 520 KB on-chip
-- **Flash**: external, up to 32 MB via QSPI (execute-in-place)
-- **Clock**: 12 MHz crystal oscillator, configurable PLLs up to 150 MHz
-- **GPIO**: 30 general-purpose I/O pins with programmable function select
-- **Peripherals**: 2× UART, 2× SPI, 2× I2C, 24 PWM channels, USB 1.1, ADC
-- **Debug**: SWD via the Raspberry Pi Debug Probe
-- **Security**: ARM TrustZone, secure boot, OTP memory
+- **内核**: 两个 ARM Cortex-M33 内核*和*两个 Hazard3 RISC-V 内核 (启动时可选)
+- **SRAM**: 片上 520 KB
+- **Flash**: 外置, 通过 QSPI 最多 32 MB (支持就地执行)
+- **时钟**: 12 MHz 晶振, PLL 可配置到 150 MHz
+- **GPIO**: 30 个通用 I/O 引脚, 功能可选
+- **外设**: 2 个 UART, 2 个 SPI, 2 个 I2C, 24 路 PWM, USB 1.1, ADC
+- **调试**: 通过 Raspberry Pi Debug Probe 使用 SWD
+- **安全**: ARM TrustZone, 安全启动, OTP 存储
 
-In this project we use the Hazard3 RISC-V core.
+本项目里我们使用 Hazard3 RISC-V 内核.
 
-## What Is Hazard3 RISC-V?
+## 什么是 Hazard3 RISC-V?
 
-Hazard3 is a 32-bit RISC-V processor core designed by Raspberry Pi for the RP2350.  It implements the RV32IMAC instruction set architecture:
+Hazard3 是 Raspberry Pi 为 RP2350 设计的 32 位 RISC-V 处理器内核. 它实现了 RV32IMAC 指令集架构:
 
-- **RV32I** — the base 32-bit integer instruction set with 32 general-purpose registers
-- **M extension** — hardware multiply and divide instructions
-- **A extension** — atomic memory operations
-- **C extension** — compressed 16-bit instructions for code density
-- **Zicsr extension** — control and status register (CSR) instructions
+- **RV32I** - 基础的 32 位整数指令集, 带 32 个通用寄存器
+- **M 扩展** - 硬件乘除法指令
+- **A 扩展** - 原子内存操作
+- **C 扩展** - 压缩的 16 位指令, 用来提高代码密度
+- **Zicsr 扩展** - 控制和状态寄存器 (CSR) 指令
 
-The Hazard3 core has 32 general-purpose registers (x0–x31), a program counter (PC), and several CSRs for machine-mode control.  We will explore every one in Chapter 4.
+Hazard3 内核有 32 个通用寄存器 (x0-x31), 一个程序计数器 (PC), 以及若干用于机器模式控制的 CSR. 第 4 章我们会逐个讲解.
 
-## What Is Assembly Language?
+## 什么是汇编语言?
 
-Assembly language is the human-readable form of machine code.  Each assembly instruction corresponds directly to one machine instruction that the processor executes.  There is no compiler making optimization decisions on your behalf — you control exactly what the hardware does.
+汇编语言是机器码的人类可读形式. 每条汇编指令都直接对应处理器要执行的一条机器指令. 没有编译器替你决定怎么优化 - 硬件做什么, 完全由你掌控.
 
-In RISC-V assembly a typical instruction looks like:
+在 RISC-V 汇编里, 一条典型的指令长这样:
 
 ```asm
-  li    t0, 0x40028000                           # load GPIO base address
+  li    t0, 0x40028000                           # 加载 GPIO 基地址
 ```
 
-The assembler translates this into the exact binary encoding the processor fetches and executes.
+汇编器把它翻译成处理器真正取指并执行的二进制编码.
 
-## Why Learn Assembly?
+## 为什么要学汇编?
 
-1. **Total hardware control** — you decide every register load, every memory access, every branch.
-2. **No hidden abstractions** — there is no runtime, no standard library, no heap allocator between you and the silicon.
-3. **Debugging mastery** — when something breaks at the hardware level, assembly is the language the debugger speaks.
-4. **Security analysis** — reverse engineering, vulnerability research, and exploit development all require reading assembly.
-5. **Performance insight** — understanding assembly makes you a better programmer in every language.
+1. **完全掌控硬件** - 每一次寄存器加载, 每一次访存, 每一次跳转都由你决定.
+2. **没有隐藏的抽象** - 你和硅片之间没有运行时, 没有标准库, 没有堆分配器.
+3. **调试功力** - 硬件层面出问题时, 汇编就是调试器说的语言.
+4. **安全分析** - 逆向工程, 漏洞研究, 利用代码开发, 都要求你能读汇编.
+5. **性能洞察** - 理解汇编会让你在任何语言里都成为更好的程序员.
 
-## What We Will Build
+## 我们要做什么
 
-Over the next 29 chapters we will build, explain, and test a complete bare-metal LED blink driver for the RP2350:
+接下来 29 章, 我们会构建, 讲解并测试一个完整的 RP2350 裸机 LED 闪烁驱动:
 
-1. **Boot from flash** — the RP2350 boot ROM reads our image metadata block, finds the entry point, and jumps to our Reset_Handler.
-2. **Initialize hardware** — configure the crystal oscillator, release GPIO from reset, and configure GPIO16 as an output via SIO registers.
-3. **Blink loop** — toggle GPIO16 high and low with a 500 ms delay, driving an LED on and off in an infinite loop.
+1. **从 flash 启动** - RP2350 的启动 ROM 读取我们的镜像元数据块, 找到入口点, 然后跳到我们的 Reset_Handler.
+2. **初始化硬件** - 配置晶振, 把 GPIO 从复位状态释放, 再通过 SIO 寄存器把 GPIO16 配成输出.
+3. **闪烁循环** - 用 500 ms 延时把 GPIO16 拉高拉低, 驱动 LED 不停开关.
 
-Every single line of assembly will be explained.  By Chapter 30 you will understand the entire firmware from power-on to blinking LED.
+每一行汇编都会被讲解. 到第 30 章, 你会彻底理解这份固件从加电到点亮 LED 的全过程.
 
-## Summary
+## 小结
 
-- A computer is a processor, memory, and I/O executing the fetch-decode-execute cycle.
-- A microcontroller integrates all three on one chip.
-- The RP2350 contains Hazard3 RISC-V cores running the RV32IMAC instruction set.
-- Assembly language gives direct, one-to-one control over the hardware.
-- We will build a complete bare-metal LED blink driver and explain every line.
+- 计算机就是处理器, 内存和 I/O 在执行取指-译码-执行循环.
+- 单片机把这三者集成在一颗芯片上.
+- RP2350 内置运行 RV32IMAC 指令集的 Hazard3 RISC-V 内核.
+- 汇编语言让你一对一直观地控制硬件.
+- 我们会构建一个完整的裸机 LED 闪烁驱动, 并讲解每一行.

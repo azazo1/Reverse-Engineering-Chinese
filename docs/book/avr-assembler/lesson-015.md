@@ -1,70 +1,70 @@
-# Lesson 015 - Thermometer (Thermistor + LCD)
+# Lesson 015 - 温度计 (热敏电阻 + LCD)
 
-## What Are We Building Today?
+## 今天我们要做什么?
 
-In our last lesson, we learned how to write the word "HELLO" to an LCD screen by sending hardcoded ASCII characters. But what if we want to display a *variable*? Like a changing sensor value?
+上一课我们学会了往 LCD 屏幕上写死板的 ASCII 字符, 打出 "HELLO" 这个词. 可要是我们想显示一个*变量*呢? 比如一个不断变化的传感器读数?
 
-Today, we are combining our ADC (Analog to Digital Converter) knowledge with our LCD knowledge. We will use a **Thermistor**—a special resistor whose resistance changes based on temperature. We will measure the voltage across it using the ADC, mathematically convert the 16-bit binary integer into four ASCII text digits, and print the live, updating value directly to the LCD screen! 
+今天我们要把 ADC (模数转换器) 的知识和 LCD 的知识合起来用. 我们要用一个**热敏电阻** - 一种阻值会随温度变化的特殊电阻. 我们用 ADC 测出它两端的电压, 再用数学方法把 16 位二进制整数转成四个 ASCII 文本数字, 然后把实时更新的数值直接打印到 LCD 上!
 
-Pinch the thermistor with your fingers and watch the numbers on the screen change!
+用手指捏住热敏电阻, 看着屏幕上的数字变!
 
 [CODE](https://github.com/mytechnotalent/Assembler/blob/main/lessons/015/lesson.s)
 
 ---
 
-## Hardware Check: The Thermistor
+## 硬件检查: 热敏电阻
 
-A Thermistor (NTC) is wired into a "voltage divider" circuit alongside a standard 10k resistor. 
-As the temperature changes, the resistance of the thermistor changes, which causes the voltage in the middle of the divider to shift up or down. 
-We connect this middle wire to **A0 (Analog Channel 0)**. 
+热敏电阻 (NTC) 和一个标准的 10k 电阻一起组成一个"分压"电路.
+温度一变, 热敏电阻的阻值就变, 于是分压电路中间那一点的电压就跟着上下移动.
+我们把中间这根线接到 **A0 (模拟通道 0)**.
 
-When we read the ADC, we get a 10-bit number between `0` and `1023`. We want to display this exact number on the screen.
+读 ADC 的时候, 我们得到的是 `0` 到 `1023` 之间的一个 10 位数字. 我们想把这个数字原样显示到屏幕上.
 
-## The Code Walkthrough
+## 代码讲解
 
-### The "Repeated Subtraction" Algorithm
-How do we turn the binary number `00000011 11111111` (which is `1023` in decimal) into the four distinct ASCII text characters `'1'`, `'0'`, `'2'`, and `'3'`?
+### "反复减法"算法
+我们怎么把二进制数 `00000011 11111111` (也就是十进制的 `1023`) 变成四个各自独立的 ASCII 文本字符 `'1'`, `'0'`, `'2'` 和 `'3'`?
 
-Microcontrollers don't have a hardware `divide` instruction! So we have to do it the old-fashioned way: **Repeated Subtraction**.
+单片机没有硬件 `divide` 指令! 所以我们只能用老办法: **反复减法**.
 
 ```assembly
 bin_to_ascii:
-  LDI    R20, '0'                      ; Thousands digit starts at ASCII '0'
-.sub_1000:                             
-  LDI    R16, lo8(1000)                
-  CP     R24, R16                      
-  LDI    R16, hi8(1000)                
-  CPC    R25, R16                      
-  BRLO   .done_1000                    ; If we drop below 1000, we are done!
-  
-  LDI    R16, lo8(1000)                
-  SUB    R24, R16                      ; Subtract 1000
-  LDI    R16, hi8(1000)                
-  SBC    R25, R16                      
-  
-  INC    R20                           ; Increment the Thousands ASCII character
-  RJMP   .sub_1000                     ; Try subtracting 1000 again
+  LDI    R20, '0'                      ; 千位从 ASCII '0' 开始
+.sub_1000:
+  LDI    R16, lo8(1000)
+  CP     R24, R16
+  LDI    R16, hi8(1000)
+  CPC    R25, R16
+  BRLO   .done_1000                    ; 如果掉到 1000 以下, 就结束了!
+
+  LDI    R16, lo8(1000)
+  SUB    R24, R16                      ; 减去 1000
+  LDI    R16, hi8(1000)
+  SBC    R25, R16
+
+  INC    R20                           ; 千位 ASCII 字符加 1
+  RJMP   .sub_1000                     ; 再试着减一次 1000
 .done_1000:
 ```
 
-1. We start the thousands digit at the ASCII character `'0'` (`0x30`).
-2. We compare our 16-bit number in `R25:R24` to `1000`. 
-3. If it is greater than or equal to 1000, we **subtract 1000** from our number, and we **increment** our text character from `'0'` to `'1'`.
-4. We loop and try again! 
-5. When our number finally drops below 1000, we jump down and repeat the exact same process for `100` to find the Hundreds digit!
-6. Then we do it for `10` to find the Tens digit.
-7. Whatever is left over at the very end is our Ones digit!
+1. 我们把千位从 ASCII 字符 `'0'` (`0x30`) 开始.
+2. 我们把 `R25:R24` 里的 16 位数和 `1000` 比一比.
+3. 如果它大于等于 1000, 我们就从数字里**减去 1000**, 同时把文本字符从 `'0'` **加一**变成 `'1'`.
+4. 我们绕回去再试一次!
+5. 等数字终于掉到 1000 以下, 我们就跳下去, 对 `100` 做完全相同的事, 找出百位!
+6. 然后对 `10` 做一遍, 找出十位.
+7. 最后剩下来的那个数就是个位!
 
-### Printing the Results
-Once `bin_to_ascii` runs, our four pristine ASCII text characters are sitting in `R20`, `R21`, `R22`, and `R23`. We can just blast them straight to the LCD!
+### 打印结果
+`bin_to_ascii` 跑完之后, 四个干干净净的 ASCII 文本字符就待在 `R20`, `R21`, `R22` 和 `R23` 里. 我们直接把它们轰到 LCD 上就行!
 
 ```assembly
-  ; Print 'V' 'A' 'L' ':' ' '
+  ; 打印 'V' 'A' 'L' ':' ' '
   LDI    R16, 'V'
   RCALL  lcd_write_data
   ...
-  
-  ; Print our 4 newly calculated digits
+
+  ; 打印我们刚算出来的 4 个数字
   MOV    R16, R20
   RCALL  lcd_write_data
   MOV    R16, R21
@@ -77,4 +77,4 @@ Once `bin_to_ascii` runs, our four pristine ASCII text characters are sitting in
 
 ---
 
-Congratulations! You have successfully implemented Binary-to-ASCII string conversion algorithms and built a live, dynamic sensor dashboard in pure assembly!
+恭喜! 你已经实现了二进制到 ASCII 字符串的转换算法, 还用纯汇编搭出了一块实时动态的传感器仪表盘!

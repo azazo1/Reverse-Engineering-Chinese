@@ -1,23 +1,23 @@
-# Chapter 8: Cargo, Targets, and the Toolchain
+# Chapter 8: Cargo, 目标与工具链
 
-## Introduction
+## 引言
 
-Cargo is Rust's build system and package manager. It is also the whole
-toolchain glue for embedded Rust: a single `cargo build` invokes the right
-compiler, links against the right libraries, and produces a binary for our exact
-CPU. This chapter walks through installing everything and reading the pieces of
-a driver's `Cargo.toml`, `.cargo/config.toml`, and build commands.
+Cargo 是 Rust 的构建系统和包管理器. 它也是嵌入式
+Rust 整套工具链的黏合剂: 一条 `cargo build`
+就会调用正确的编译器, 链接正确的库, 并为我们这颗确切的
+CPU 产出二进制. 本章带你装好所有东西, 并读懂一个驱动里的
+`Cargo.toml`, `.cargo/config.toml` 和构建命令.
 
-## Installing the Toolchain
+## 安装工具链
 
-You need two things:
+你需要两样东西:
 
-1. **Rust** via [rustup](https://rustup.rs) — the toolchain manager.
-2. **The ARM GNU toolchain** for the linker and other host tools — available
-   from [arm.com](https://developer.arm.com/downloads/-/arm-gnu-toolchain-downloads).
-   During installation, select **Add path to environment variable**.
+1. 通过 [rustup](https://rustup.rs) 安装的 **Rust** - 工具链管理器.
+2. **ARM GNU 工具链**, 用来提供链接器和其它主机工具 - 可从
+   [arm.com](https://developer.arm.com/downloads/-/arm-gnu-toolchain-downloads)
+   获取. 安装过程中请勾选 **Add path to environment variable**.
 
-Verify the installation:
+验证安装:
 
 ```bash
 $ rustup --version
@@ -30,16 +30,16 @@ $ arm-none-eabi-gcc --version
 ... (arm-none-eabi-gcc) 13.2.Rel1 ...
 ```
 
-For flashing and on-chip debugging we use `probe-rs`:
+烧录和片上调试我们用 `probe-rs`:
 
 ```bash
 $ cargo install probe-rs-tools
 ```
 
-## The Target: thumbv8m.main-none-eabihf
+## 目标平台: thumbv8m.main-none-eabihf
 
-Rust does not compile to "generic ARM." It compiles to a **target triple** that
-names the exact architecture, ABI, and environment:
+Rust 不会编译成 "泛泛的 ARM". 它编译到一个
+**目标三元组**, 由它指明确切的架构, ABI 和运行环境:
 
 ```
 thumbv8m.main-none-eabihf
@@ -49,11 +49,11 @@ thumbv8m.main-none-eabihf
 └──────────────────────── Thumb instruction set
 ```
 
-The RP2350's M33 core is ARMv8-M mainline with the Thumb instruction set, so
-`thumbv8m.main-none-eabihf` is exactly our target. `none` means no operating
-system — matching `no_std`.
+RP2350 的 M33 核属于 ARMv8-M mainline, 使用 Thumb 指令集,
+所以 `thumbv8m.main-none-eabihf` 正好是我们的目标.
+`none` 表示没有操作系统 - 这与 `no_std` 对应.
 
-Install it:
+安装它:
 
 ```bash
 $ rustup target add thumbv8m.main-none-eabihf
@@ -61,8 +61,8 @@ $ rustup target add thumbv8m.main-none-eabihf
 
 ## .cargo/config.toml
 
-The driver's `.cargo/config.toml` tells Cargo to use this target everywhere and
-pass the linker arguments the embedded runtime needs:
+驱动的 `.cargo/config.toml` 告诉 Cargo
+在所有地方都使用这个目标, 并传入嵌入式运行时需要的链接器参数:
 
 ```toml
 [build]
@@ -76,21 +76,21 @@ rustflags = [
 ]
 ```
 
-Two kinds of flags:
+这里有两类标志:
 
-- `--nmagic` — Do not page-align the data sections; smaller and simpler binaries
-  for flash.
-- `-Tlink.x` — Use the `link.x` linker script produced by `cortex-m-rt` from
-  our own `memory.x` (Chapter 9).
+- `--nmagic` - 不对数据段做页对齐;
+  对 flash 来说二进制更小也更简单.
+- `-Tlink.x` - 使用由 `cortex-m-rt` 根据我们自己的
+  `memory.x` 生成的 `link.x` 链接脚本 (第 9 章).
 
-With `target` set here, plain `cargo build` targets the RP2350 and `cargo run`
-flashes via `probe-rs` — exactly the README's surface API for every driver.
+在这里设好 `target` 之后, 直接 `cargo build` 就会面向 RP2350 构建, 而
+`cargo run` 会通过 `probe-rs` 烧录 - 这正是每个驱动 README 里给出的表面 API.
 
 ## Cargo.toml
 
-A driver's `Cargo.toml` is deliberately split into a **library** and a
-**binary**. The library holds all the testable logic; the binary is a thin async
-shell:
+驱动的 `Cargo.toml` 有意拆成 **库** 和
+**二进制** 两部分. 库装着所有可测试的逻辑;
+二进制只是一层薄薄的 async 外壳:
 
 ```toml
 [package]
@@ -108,14 +108,14 @@ path = "src/lib.rs"
 test = true
 ```
 
-Crucially, the **binary does not run tests** (`test = false`) and the
-**library does** (`test = true`). The library has no main and no interrupt
-machinery, so `cargo test --lib` can run it on the host.
+关键在于, **二进制不跑测试** (`test = false`),
+而 **库跑测试** (`test = true`). 库里没有 main,
+也没有中断机制, 所以 `cargo test --lib` 能在主机上运行它.
 
-## Optional Dependencies and Features
+## 可选依赖与 feature
 
-Dependencies that only the embedded binary needs (Embassy, `cortex-m-rt`,
-`panic-halt`) are declared `optional` and gated behind a feature:
+只有嵌入式二进制才需要的依赖 (Embassy, `cortex-m-rt`,
+`panic-halt`) 都声明为 `optional`, 并藏在一个 feature 后面:
 
 ```toml
 [dependencies]
@@ -145,28 +145,28 @@ default = [
 ]
 ```
 
-The `embassy-rp` features are the hardware knobs:
+`embassy-rp` 的这些 feature 就是硬件旋钮:
 
-- `time-driver` — The RTC/timer backend that `embassy-time` uses for delays.
-- `rp235xa` — Target the RP2350 (RP235xA) chip.
-- `critical-section-impl` — Provide the critical-section mechanism (Chapter 16).
-- `imagedef-secure-exe` — Emit the secure image definition the RP2350 bootrom
-  requires (pairing with `memory.x` in Chapter 9).
+- `time-driver` - `embassy-time` 用来做延时的 RTC/定时器后端.
+- `rp235xa` - 面向 RP2350 (RP235xA) 芯片.
+- `critical-section-impl` - 提供临界区机制 (第 16 章).
+- `imagedef-secure-exe` - 生成 RP2350 bootrom 所需的
+  secure image definition (与第 9 章的 `memory.x` 配对).
 
-The `[features] default` set is what a normal `cargo build` enables. When we run
-host tests we pass `--no-default-features`, dropping every embedded option so
-the crate compiles with plain `core`/`std` (Chapter 25).
+`[features] default` 这一组就是普通 `cargo build` 会启用的东西.
+跑主机测试时我们传 `--no-default-features`, 把所有嵌入式选项都去掉,
+让 crate 用普通的 `core`/`std` 编译 (第 25 章).
 
-## Summary
+## 小结
 
-- rustup installs Rust; the ARM GNU toolchain provides the linker; probe-rs
-  flashes.
-- The `thumbv8m.main-none-eabihf` target names our exact CPU and bare-metal
-  ABI.
-- `.cargo/config.toml` makes the RP2350 the default target and provides
-  `--nmagic` and `link.x`.
-- `Cargo.toml` splits a testable library from a non-test binary.
-- Optional + feature-gated dependencies keep the no_std binary distinct from the
-  host-testable library.
+- rustup 安装 Rust; ARM GNU
+  工具链提供链接器; probe-rs 负责烧录.
+- `thumbv8m.main-none-eabihf`
+  目标指明了我们确切的 CPU 和裸机 ABI.
+- `.cargo/config.toml` 把 RP2350
+  设为默认目标, 并提供 `--nmagic` 和 `link.x`.
+- `Cargo.toml` 把一个可测试的库和一个不跑测试的二进制分开.
+- 可选加 feature 门控的依赖, 让 no_std
+  二进制和可在主机测试的库彼此隔离.
 
-Next, the linker script that puts our code in flash at the right addresses.
+接下来是链接脚本, 它把我们的代码放到 flash 里正确的地址上.

@@ -1,18 +1,18 @@
-# Chapter 9: memory.x and the Linker Script
+# Chapter 9: memory.x 与链接脚本
 
-## Introduction
+## 引言
 
-A microcontroller does not load firmware into a blank process. Code must land at
-specific addresses: the bootrom looks for specific headers in flash, the vector
-table must be at the flash base, and the stack pointer must be initialized to
-the top of RAM before the first Rust instruction runs. The **linker script**
-expresses those facts. In embedded Rust it is a file called `memory.x`, and it
-is the same for all three of our drivers.
+微控制器不会把固件加载进一个空白的进程.
+代码必须落在特定的地址上: bootrom 会在 flash
+里寻找特定的头部, 向量表必须在 flash 基址上, 而在第一条
+Rust 指令执行之前, 栈指针必须被初始化到 RAM 的顶部.
+**链接脚本** 就是用来表达这些事实的. 在嵌入式 Rust
+里, 这个文件叫 `memory.x`, 我们的三个驱动共用同一份.
 
-## The RP2350 Memory Regions
+## RP2350 的内存区域
 
-The linker script starts by naming the chip's physical memory regions and their
-sizes:
+链接脚本首先要给芯片的物理内存区域
+和它们的大小命名:
 
 ```
 0x10000000  FLASH  4096K   (XIP, firmware)
@@ -21,7 +21,7 @@ sizes:
 0x20081000  SRAM9   4K     (bootrom scratch)
 ```
 
-In linker script syntax this becomes the `MEMORY` block:
+用链接脚本的语法写出来, 就变成了 `MEMORY` 块:
 
 ```
 MEMORY {
@@ -32,13 +32,13 @@ MEMORY {
 }
 ```
 
-`SRAM8` and `SRAM9` are the bootrom's private scratch regions. They appear in
-the script because the RP2350 bootrom implements part of its secure-boot
-handshake there, but our firmware itself runs from `FLASH` and `RAM`.
+`SRAM8` 和 `SRAM9` 是 bootrom 私有的暂存区域. 它们出现在脚本里,
+是因为 RP2350 的 bootrom 在那里实现了部分安全启动握手,
+但我们的固件本身是从 `FLASH` 和 `RAM` 运行的.
 
-## Complete Linker Script
+## 完整的链接脚本
 
-Here is the full `memory.x` shared by all three drivers:
+这是三个驱动共用的完整 `memory.x`:
 
 ```
 MEMORY {
@@ -83,13 +83,13 @@ PROVIDE(start_to_end = __end_block_addr - __start_block_addr);
 PROVIDE(end_to_start = __start_block_addr - __end_block_addr);
 ```
 
-## The Start Block
+## 起始块
 
-The RP2350 bootrom does not boot a raw executable. It boots an **image
-definition** — a preamble plus a list of "boot info" entries that describe the
-image type, the entry point, and signatures. Embassy generates this preamble for
-us when we enable `imagedef-secure-exe` (Chapter 8); the linker must reserve
-space for it at a known offset.
+RP2350 的 bootrom 不引导裸可执行文件. 它引导的是一个
+**image definition** - 一段前导数据, 外加一组描述镜像类型,
+入口点和签名的 "boot info" 条目. 当我们启用
+`imagedef-secure-exe` 时 (第 8 章), Embassy
+会为我们生成这段前导数据; 链接器必须在已知偏移处为它留出空间.
 
 ```
 0x10000000 +---------------------+
@@ -105,16 +105,16 @@ space for it at a known offset.
            +---------------------+
 ```
 
-`.start_block` collects every `.start_block` and `.boot_info` input section and
-keeps them even if the linker would otherwise garbage-collect them (`KEEP`).
-`INSERT AFTER .vector_table` places this block immediately after the vector
-table, which is where the RP2350 bootrom expects the image definition.
+`.start_block` 收集所有 `.start_block` 和 `.boot_info`
+输入段, 并且即使链接器本来会把它们当作垃圾回收掉, 也会保留它们
+(`KEEP`). `INSERT AFTER .vector_table` 把这个块紧挨着向量表放置,
+而 RP2350 bootrom 正是期望镜像定义出现在那里.
 
-## Boot Info Entries
+## Boot info 条目
 
-The bootrom also needs an array of boot-info entries — the tag list describing
-size, flags, and image type. The `.bi_entries` section collects them and
-publishes their bounds so firmware can locate them:
+bootrom 还需要一个 boot-info 条目数组 -
+也就是描述大小, 标志和镜像类型的标签列表. `.bi_entries`
+段把它们收集起来, 并公布它们的边界, 好让固件能找到它们:
 
 ```
 SECTIONS {
@@ -128,14 +128,14 @@ SECTIONS {
 } INSERT AFTER .text;
 ```
 
-The `.` symbols are **location counters** — read them as "memory address right
-now." `__bi_entries_start` is the address of the first byte of the array;
-`__bi_entries_end` is one past the last byte, aligned up to four. Any code that
-must walk the phrase table uses these two symbols to know its extents.
+`.` 符号是 **位置计数器** - 你可以把它读作 "当前的内存地址".
+`__bi_entries_start` 是数组第一个字节的地址;
+`__bi_entries_end` 是最后一个字节之后的位置, 向上对齐到 4
+字节. 任何需要遍历 phrase 表的代码都用这两个符号来知道范围.
 
-## The End Block
+## 结束块
 
-The end marker closes the image:
+结束标记为整个镜像收尾:
 
 ```
 SECTIONS {
@@ -147,27 +147,27 @@ SECTIONS {
 } INSERT AFTER .uninit;
 ```
 
-`INSERT AFTER .uninit` places it at the very end of the image, after all code,
-data, and uninitialized sections. The bootrom uses these blocks plus the size
-symbols to validate the image.
+`INSERT AFTER .uninit` 把它放在镜像的最末尾,
+也就是所有代码, 数据和未初始化段之后.
+bootrom 会用这些块加上大小符号来校验镜像.
 
-## Provided Symbols
+## 提供的符号
 
-The final statements expose computed addresses to the firmware:
+最后几条语句把算出来的地址暴露给固件:
 
 ```
 PROVIDE(start_to_end = __end_block_addr - __start_block_addr);
 PROVIDE(end_to_start = __start_block_addr - __end_block_addr);
 ```
 
-`PROVIDE` defines a symbol **only if the firmware has not already defined it**.
-`start_to_end` is the image size in bytes (distance from the start-block address
-to the end-block address); `end_to_start` is its negative. The Embassy RP2350
-support code reads these to help the bootrom verify the image.
+`PROVIDE` **只在固件还没有定义该符号时** 才定义它.
+`start_to_end` 是镜像的字节大小 (从起始块地址到结束块地址的距离);
+`end_to_start` 是它的负值. Embassy 的 RP2350
+支持代码会读这两个值, 来帮助 bootrom 校验镜像.
 
-## Why This Matters
+## 为什么这很重要
 
-Every one of these addresses is a *number* in the language of Chapter 2:
+这里的每一个地址, 都是第 2 章那套语言里的一个*数字*:
 
 ```
 0x10000000  firmware base (BOOT2 image start)
@@ -176,22 +176,22 @@ Every one of these addresses is a *number* in the language of Chapter 2:
 0x20081000  SRAM9 — secure-boot scratch
 ```
 
-When your board flashes and boots, the hardware is literally reading these
-regions: the vector table, then the image definition, then code. If the linker
-places the start block in the wrong spot, the bootrom radios nothing but
-silence. `memory.x` is how we keep the promise that code lands where the
-hardware expects it.
+当你的板子烧录并启动时, 硬件真的就是在读这些区域:
+先是向量表, 然后是镜像定义, 再然后是代码.
+如果链接器把起始块放错了位置, bootrom
+什么都不会说, 只有一片沉默. `memory.x`
+就是我们用来兑现那个承诺的东西: 代码一定落在硬件期望的地方.
 
-## Summary
+## 小结
 
-- `MEMORY` declares `FLASH` at `0x10000000`, `RAM` at `0x20000000`, and the two
-  SRAM8/9 scratch regions.
-- `_stack_start` is the top of RAM — the initial stack pointer.
-- `.start_block` + `.boot_info` form the RP2350 image definition after the
-  vector table.
-- `.bi_entries` holds the boot-info entry array with published bounds.
-- `.end_block` closes the image; `start_to_end`/`end_to_start` expose sizes.
-- The side effects (`imagedef-secure-exe`) and this script together make the
-  .uf2 bootable.
+- `MEMORY` 声明了位于 `0x10000000` 的 `FLASH`, 位于
+  `0x20000000` 的 `RAM`, 以及 SRAM8/9 这两块暂存区域.
+- `_stack_start` 是 RAM 的顶部 - 也就是初始栈指针.
+- `.start_block` 加 `.boot_info`
+  构成紧跟在向量表之后的 RP2350 镜像定义.
+- `.bi_entries` 保存 boot-info 条目数组, 并公布它的边界.
+- `.end_block` 为镜像收尾; `start_to_end`/`end_to_start` 把大小暴露出来.
+- 副作用 (`imagedef-secure-exe`)
+  和这份脚本合在一起, 才让 .uf2 可以启动.
 
-Next, `build.rs`, the Makefile, and getting firmware onto the chip.
+接下来是 `build.rs`, Makefile, 以及如何把固件送进芯片.

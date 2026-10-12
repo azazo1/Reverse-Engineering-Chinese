@@ -23,6 +23,9 @@
 
 上游 491 节 Lesson 的中文版完整收录在 [docs/courses.md](docs/courses.md).
 
+上游索引里的链接大多指向外部站点, 正文并不在上游仓库内. 其中 9 个课程的 markdown 正文
+已取回并译成中文, 放在 [docs/book/](docs/book/), 共 124 篇, 可直接离线阅读.
+
 ## 课程系列
 
 | 课程系列 | Lesson 数 |
@@ -63,6 +66,7 @@
 ├── LICENSE                      Apache License 2.0, 继承自上游
 ├── docs/
 │   ├── courses.md               中文课程目录, 26 个系列 491 节 Lesson
+│   ├── book/                    部分课程教材正文的中文版
 │   ├── translation-guide.md     翻译规范与术语表
 │   └── inventory.md             素材清单与保留策略
 ├── 0xNNNN-<名字>/               各示例工程的源码与 Visual Studio 工程文件

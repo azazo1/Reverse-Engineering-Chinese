@@ -1,198 +1,198 @@
-# Chapter 28: gpio.s Part 2, delay.s, and coprocessor.s — Output Control and Timing
+# Chapter 28: gpio.s 第 2 部分, delay.s 与 coprocessor.s - 输出控制与定时
 
-## Introduction
+## 引言
 
-With GPIO16 configured by `GPIO_Config`, three more functions complete the blink driver's runtime operation: `GPIO_Set` drives the pin high, `GPIO_Clear` drives it low, and `Delay_MS` creates a timed pause between transitions.  A fourth function, `Enable_Coprocessor`, makes all coprocessor-based GPIO operations possible.  This chapter covers all four functions.
+GPIO16 由 `GPIO_Config` 配置好之后, 还需要三个函数才能让闪烁程序的运行时完整运转: `GPIO_Set` 把引脚拉高, `GPIO_Clear` 把它拉低, `Delay_MS` 在两次变化之间制造一段定时停顿. 第四个函数 `Enable_Coprocessor` 则让所有基于协处理器的 GPIO 操作成为可能. 本章覆盖这四个函数.
 
-## GPIO_Set — Drive Pin High
+## GPIO_Set - 把引脚拉高
 
 ```asm
 .global GPIO_Set
 .type GPIO_Set, %function
 GPIO_Set:
 .GPIO_Set_Push_Registers:
-  push  {r4-r12, lr}                             // push registers r4-r12, lr to the stack
+  push  {r4-r12, lr}                             // 把寄存器 r4-r12, lr 压入栈
 .GPIO_Set_Execute:
-  ldr   r4, =1                                   // enable output
+  ldr   r4, =1                                   // 使能输出
   mcrr  p0, #4, r0, r4, c0                       // gpioc_bit_out_put(GPIO, 1)
 .GPIO_Set_Pop_Registers:
-  pop   {r4-r12, lr}                             // pop registers r4-r12, lr from the stack
-  bx    lr                                       // return
+  pop   {r4-r12, lr}                             // 把寄存器 r4-r12, lr 弹出栈
+  bx    lr                                       // 返回
 ```
 
-### Function Signature
+### 函数签名
 
 ```
 GPIO_Set(r0 = GPIO_NUMBER)
 ```
 
-### How It Works
+### 它的工作方式
 
 ```asm
-  ldr   r4, =1                                   // r4 = 1 (high)
-  mcrr  p0, #4, r0, r4, c0                       // set GPIO output high
+  ldr   r4, =1                                   // r4 = 1 (高电平)
+  mcrr  p0, #4, r0, r4, c0                       // 把 GPIO 输出置为高电平
 ```
 
-The `mcrr` instruction fields:
+`mcrr` 指令各字段的含义:
 
-| Field | Value | Meaning |
+| 字段 | 值 | 含义 |
 |-------|-------|---------|
-| `p0` | Coprocessor 0 | SIO block |
-| `#4` | Opcode | GPIO bit operation |
-| `r0` | GPIO number | 16 |
-| `r4` | Output value | 1 (high = 3.3V) |
-| `c0` | Register | Output Value control |
+| `p0` | 协处理器 0 | SIO 模块 |
+| `#4` | 操作码 | GPIO 位操作 |
+| `r0` | GPIO 编号 | 16 |
+| `r4` | 输出值 | 1 (高电平 = 3.3V) |
+| `c0` | 寄存器 | 输出值控制 |
 
-When r4 = 1, the GPIO pin is driven to 3.3V.  Current flows through the LED and resistor to ground — the LED lights up.
+当 r4 = 1 时, GPIO 引脚被驱动到 3.3V. 电流经 LED 和电阻流向地 - LED 就亮了.
 
-## GPIO_Clear — Drive Pin Low
+## GPIO_Clear - 把引脚拉低
 
 ```asm
 .global GPIO_Clear
 .type GPIO_Clear, %function
 GPIO_Clear:
 .GPIO_Clear_Push_Registers:
-  push  {r4-r12, lr}                             // push registers r4-r12, lr to the stack
+  push  {r4-r12, lr}                             // 把寄存器 r4-r12, lr 压入栈
 .GPIO_Clear_Execute:
-  ldr   r4, =0                                   // disable output
+  ldr   r4, =0                                   // 禁用输出
   mcrr  p0, #4, r0, r4, c0                       // gpioc_bit_out_put(GPIO, 0)
 .GPIO_Clear_Pop_Registers:
-  pop   {r4-r12, lr}                             // pop registers r4-r12, lr from the stack
-  bx    lr                                       // return
+  pop   {r4-r12, lr}                             // 把寄存器 r4-r12, lr 弹出栈
+  bx    lr                                       // 返回
 ```
 
-### Difference from GPIO_Set
+### 与 GPIO_Set 的区别
 
-The only difference is r4:
+唯一的区别在 r4:
 
-| Function | r4 Value | Pin State | LED |
+| 函数 | r4 的值 | 引脚状态 | LED |
 |----------|----------|-----------|-----|
-| GPIO_Set | 1 | High (3.3V) | ON |
-| GPIO_Clear | 0 | Low (0V) | OFF |
+| GPIO_Set | 1 | 高电平 (3.3V) | 亮 |
+| GPIO_Clear | 0 | 低电平 (0V) | 灭 |
 
-Both use `c0` (output value register) instead of `c4` (output enable register used in GPIO_Config).
+两者都用 `c0` (输出值寄存器), 而不是 GPIO_Config 里用的 `c4` (输出使能寄存器).
 
-## Delay_MS — Millisecond Delay
+## Delay_MS - 毫秒级延时
 
 ```asm
 .global Delay_MS
 .type Delay_MS, %function
 Delay_MS:
 .Delay_MS_Push_Registers:
-  push  {r4-r12, lr}                             // push registers r4-r12, lr to the stack
+  push  {r4-r12, lr}                             // 把寄存器 r4-r12, lr 压入栈
 .Delay_MS_Check:
-  cmp   r0, #0                                   // if MS is not valid, return
-  ble   .Delay_MS_Done                           // branch if less or equal to 0
+  cmp   r0, #0                                   // 如果毫秒数无效就直接返回
+  ble   .Delay_MS_Done                           // 小于等于 0 则跳转
 .Delay_MS_Setup:
-  ldr   r4, =3600                                // loops per MS based on 14.5MHz clock
-  mul   r5, r0, r4                               // MS * 3600
+  ldr   r4, =3600                                // 基于 14.5MHz 时钟的每毫秒循环次数
+  mul   r5, r0, r4                               // 毫秒数 * 3600
 .Delay_MS_Loop:
-  subs  r5, r5, #1                               // decrement counter
-  bne   .Delay_MS_Loop                           // branch until zero
+  subs  r5, r5, #1                               // 计数器减一
+  bne   .Delay_MS_Loop                           // 不为零则继续
 .Delay_MS_Done:
-  pop   {r4-r12, lr}                             // pop registers r4-r12, lr from the stack
-  bx    lr                                       // return
+  pop   {r4-r12, lr}                             // 把寄存器 r4-r12, lr 弹出栈
+  bx    lr                                       // 返回
 ```
 
-### Function Signature
+### 函数签名
 
 ```
 Delay_MS(r0 = milliseconds)
 ```
 
-### Input Validation
+### 输入检查
 
 ```asm
-  cmp   r0, #0                                   // compare ms to 0
-  ble   .Delay_MS_Done                           // if <= 0, skip to return
+  cmp   r0, #0                                   // 把毫秒数与 0 比较
+  ble   .Delay_MS_Done                           // 若 <= 0 则跳到返回
 ```
 
-`cmp` subtracts 0 from r0 and sets the flags.  `ble` branches if the result is less than or equal to zero (Z=1 or N!=V).  This prevents:
+`cmp` 用 r0 减去 0 并设置标志位. 如果结果小于等于零 (Z=1 或 N!=V), `ble` 就跳转. 这能防止:
 
-- Zero delay: `mul` would produce 0 iterations, but the check makes intent explicit
-- Negative values: if r0 were interpreted as signed negative, `mul` could produce a huge unsigned count
+- 零延时: `mul` 会得到 0 次迭代, 但这个检查把意图表达得更明确
+- 负值: 如果 r0 被当作有符号的负数, `mul` 可能算出一个巨大的无符号计数
 
-### Calculate Total Iterations
+### 计算总迭代次数
 
 ```asm
-  ldr   r4, =3600                                // loops per millisecond
-  mul   r5, r0, r4                               // total iterations = ms * 3600
+  ldr   r4, =3600                                // 每毫秒的循环次数
+  mul   r5, r0, r4                               // 总迭代次数 = 毫秒数 * 3600
 ```
 
-At approximately 14.5 MHz, with `subs` + `bne` taking ~4 cycles per iteration:
+在约 14.5 MHz 下, `subs` + `bne` 每轮大约花 4 个周期:
 
 ```
 iterations per ms = 14,500,000 / 4 ≈ 3,625 ≈ 3,600 (rounded)
 ```
 
-For 500 ms: `500 × 3600 = 1,800,000` iterations.
+对于 500 ms: `500 × 3600 = 1,800,000` 次迭代.
 
-### The Delay Loop
+### 延时循环
 
 ```asm
 .Delay_MS_Loop:
-  subs  r5, r5, #1                               // r5 = r5 - 1, set flags
-  bne   .Delay_MS_Loop                           // loop if r5 != 0
+  subs  r5, r5, #1                               // r5 = r5 - 1, 并设置标志位
+  bne   .Delay_MS_Loop                           // r5 != 0 则继续循环
 ```
 
-This is the tightest possible loop on ARM: two instructions, executing approximately 1,800,000 times for a 500 ms delay.  The `s` suffix on `subs` sets the Zero flag when r5 reaches zero.  `bne` loops while Z=0 (non-zero).
+这是 ARM 上能做到的最紧凑的循环: 两条指令, 在 500 ms 延时里大约执行 1,800,000 次. `subs` 末尾的 `s` 会在 r5 减到零时置上 Zero 标志. `bne` 在 Z=0 (非零) 时继续循环.
 
-### Timing Accuracy
+### 定时精度
 
-The delay is approximate because:
+这个延时是近似的, 原因有:
 
-1. The ring oscillator frequency varies with temperature and voltage
-2. Pipeline effects add small variations per iteration
-3. The loop overhead (setup, push/pop) adds a few microseconds
+1. 环形振荡器的频率会随温度和电压变化
+2. 流水线效应会给每次迭代带来细微差别
+3. 循环的额外开销 (准备, push/pop) 会多花几微秒
 
-For blinking an LED, this accuracy is more than sufficient.
+对于闪烁一颗 LED 来说, 这个精度已经绰绰有余.
 
-## Enable_Coprocessor — CP0 Access
+## Enable_Coprocessor - 访问 CP0
 
 ```asm
 .global Enable_Coprocessor
 .type Enable_Coprocessor , %function
 Enable_Coprocessor:
-  ldr   r0, =CPACR                               // load CPACR address
-  ldr   r1, [r0]                                 // read CPACR value
-  orr   r1, r1, #(1<<1)                          // set CP0: Ctrl access priv coproc 0 bit
-  orr   r1, r1, #(1<<0)                          // set CP0: Ctrl access priv coproc 0 bit
-  str   r1, [r0]                                 // store value into CPACR
-  dsb                                            // data sync barrier
-  isb                                            // instruction sync barrier
-  bx    lr                                       // return
+  ldr   r0, =CPACR                               // 加载 CPACR 地址
+  ldr   r1, [r0]                                 // 读取 CPACR 的值
+  orr   r1, r1, #(1<<1)                          // 置 CP0: 允许访问特权协处理器 0 位
+  orr   r1, r1, #(1<<0)                          // 置 CP0: 允许访问特权协处理器 0 位
+  str   r1, [r0]                                 // 把值写入 CPACR
+  dsb                                            // 数据同步屏障
+  isb                                            // 指令同步屏障
+  bx    lr                                       // 返回
 ```
 
-### CPACR Modification
+### 修改 CPACR
 
 ```asm
   ldr   r0, =CPACR                               // r0 = 0xE000ED88
-  ldr   r1, [r0]                                 // read current value
-  orr   r1, r1, #(1<<1)                          // set bit 1
-  orr   r1, r1, #(1<<0)                          // set bit 0
-  str   r1, [r0]                                 // write back
+  ldr   r1, [r0]                                 // 读取当前值
+  orr   r1, r1, #(1<<1)                          // 置 bit 1
+  orr   r1, r1, #(1<<0)                          // 置 bit 0
+  str   r1, [r0]                                 // 写回
 ```
 
-Setting bits [1:0] to `0b11` grants full (privileged + unprivileged) access to coprocessor 0.  Without this, any `mcrr p0, ...` instruction triggers a UsageFault.
+把 bits [1:0] 设成 `0b11`, 就授予了对协处理器 0 的完全访问权 (特权级 + 非特权级). 没有这一步, 任何 `mcrr p0, ...` 指令都会触发 UsageFault.
 
-### Barrier Instructions
+### 屏障指令
 
 ```asm
-  dsb                                            // all memory accesses complete
-  isb                                            // flush instruction pipeline
+  dsb                                            // 所有内存访问完成
+  isb                                            // 冲刷指令流水线
 ```
 
-The `dsb` (Data Synchronization Barrier) ensures the CPACR write has reached the register before proceeding.  The `isb` (Instruction Synchronization Barrier) flushes the pipeline so any subsequent `mcrr` instructions are fetched with the updated access permissions.
+`dsb` (数据同步屏障) 保证 CPACR 的写入已经到达寄存器, 然后才继续往下走. `isb` (指令同步屏障) 冲刷流水线, 这样后续的 `mcrr` 指令都是在更新后的访问权限下取指的.
 
-This sequence is required by the ARM Architecture Reference Manual after any modification to CPACR.
+ARM 架构参考手册要求, 任何对 CPACR 的修改之后都必须有这段序列.
 
-### Leaf Function
+### 叶子函数
 
-`Enable_Coprocessor` is a leaf function using only scratch registers (r0, r1).  No push/pop is needed.
+`Enable_Coprocessor` 是一个叶子函数, 只使用临时寄存器 (r0, r1). 不需要 push/pop.
 
-## The Runtime Flow
+## 运行时流程
 
-With all four functions defined, the blink loop operates:
+四个函数都定义好之后, 闪烁循环就运转起来了:
 
 ```
 main:
@@ -205,12 +205,12 @@ main:
     goto loop
 ```
 
-The LED blinks at 1 Hz (500 ms on, 500 ms off).
+LED 以 1 Hz 的频率闪烁 (亮 500 ms, 灭 500 ms).
 
-## Summary
+## 小结
 
-- `GPIO_Set` drives a pin high via `mcrr p0, #4, r0, r4, c0` with r4=1.
-- `GPIO_Clear` drives a pin low via the same instruction with r4=0.
-- `Delay_MS` validates input, computes iterations (ms × 3600), and counts down with `subs`/`bne`.
-- `Enable_Coprocessor` grants CP0 access via CPACR modification, followed by mandatory `dsb`/`isb` barriers.
-- The delay calibration of 3600 loops/ms assumes the ~14.5 MHz ring oscillator clock speed.
+- `GPIO_Set` 用 r4=1 的 `mcrr p0, #4, r0, r4, c0` 把引脚拉高.
+- `GPIO_Clear` 用同样的指令, 但 r4=0, 把引脚拉低.
+- `Delay_MS` 检查输入, 计算迭代次数 (毫秒数 × 3600), 然后用 `subs`/`bne` 倒数.
+- `Enable_Coprocessor` 通过修改 CPACR 授予 CP0 访问权, 随后是必需的 `dsb`/`isb` 屏障.
+- 每毫秒 3600 次循环的延时校准, 依据的是约 14.5 MHz 的环形振荡器时钟速度.

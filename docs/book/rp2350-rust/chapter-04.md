@@ -1,64 +1,64 @@
-# Chapter 4: Ownership, Borrowing, and Lifetimes
+# Chapter 4: 所有权, 借用与生命周期
 
-## Introduction
+## 引言
 
-Ownership is the single rule that makes Rust safe without a garbage collector.
-It explains why Rust code can confidently drive a GPIO pin, share a buffer with
-DMA, and never corrupt memory. In this chapter we build the mental model: every
-value has an owner, ownership can move, and we can lend values by borrowing.
+所有权是让 Rust 在没有垃圾回收器的情况下依然安全的那一条规则.
+它解释了为什么 Rust 代码能放心地驱动一个 GPIO 引脚, 能和 DMA
+共享一块缓冲区, 而且永远不破坏内存. 本章搭建这套思维模型:
+每个值都有一个所有者, 所有权可以移动, 我们也可以把值借出去.
 
-## Ownership
+## 所有权
 
-Every value in Rust has exactly one **owner** — the variable that holds it.
-When the owner goes out of scope, the value is dropped and its memory is
-reclaimed immediately. No garbage collector is needed:
+Rust 里的每个值都恰好有一个 **所有者** -
+也就是持有它的那个变量. 当所有者离开作用域时,
+值就被丢弃, 它占的内存立刻被回收. 完全不需要垃圾回收器:
 
 ```rust
 fn run() {
-    let packet = [0u8; 64];      // packet owns 64 bytes on the stack
-    echo(&packet);               // borrowed for the call...
-}                                // ...and freed when run() returns
+    let packet = [0u8; 64];      // packet 在栈上拥有 64 字节
+    echo(&packet);               // 在调用期间被借用...
+}                                // ...并且会在 run() 返回时被释放
 ```
 
-This "drop at end of scope" behavior gives embedded code deterministic timing:
-we know exactly when a buffer is freed, which is essential when DMA or an
-interrupt might still be looking at it.
+这种 "离开作用域就丢弃" 的行为让嵌入式代码有了确定的时间行为:
+我们清楚知道缓冲区何时被释放, 而当 DMA
+或者中断可能还在看它时, 这一点至关重要.
 
-## Move Semantics
+## 移动语义
 
-Assigning a value or passing it to a function **moves** ownership unless the
-type is `Copy`. After a move the old variable no longer exists:
+给变量赋值或者把值传给函数, 都会 **移动** 所有权,
+除非这个类型是 `Copy`. 移动之后, 原来的变量就不存在了:
 
 ```rust
-let a = String::from("hello");   // String is not Copy
-let b = a;                       // ownership moves to b
-// println!("{a}");              // COMPILE ERROR: a was moved
+let a = String::from("hello");   // String 不是 Copy
+let b = a;                       // 所有权移动给了 b
+// 编译错误: a 已经被移动
 
-let x = 5u32;                    // u32 is Copy
-let y = x;                       // x is copied, still usable
+let x = 5u32;                    // u32 是 Copy
+let y = x;                       // x 被复制, 仍然可用
 ```
 
-Why does this matter on a microcontroller? It is exactly how Embassy makes
-peripheral handles exclusive. When `embassy_rp::init()` hands you a
-`Peripherals` struct, ownership of each peripheral token is moved into your
-code. Because ownership cannot be duplicated, two tasks physically cannot both
-own and fight over UART0. The compiler enforces single ownership of the
-hardware.
+这在微控制器上为什么重要? 因为 Embassy
+正是这样让外设句柄具有排他性的. 当
+`embassy_rp::init()` 交给你一个 `Peripherals`
+struct 时, 每个外设令牌的所有权都被移动进了你的代码.
+由于所有权无法复制, 两个任务在物理上不可能同时拥有
+UART0 并为它打架. 编译器替我们强制了硬件的单一所有权.
 
-## Borrowing and References
+## 借用与引用
 
-Instead of moving a value, you can lend it with a reference:
+与其移动一个值, 你可以用引用的方式把它借出去:
 
 ```rust
-fn total(buf: &[u8]) -> u32 {     // & = immutable borrow
+fn total(buf: &[u8]) -> u32 {     // & 表示不可变借用
     buf.iter().fold(0u32, |s, b| s + *b as u32)
 }
 
 let data = [1u8, 2, 3];
-let sum = total(&data);           // data still owned by caller
+let sum = total(&data);           // data 仍然归调用者所有
 ```
 
-Rust's central safety law is the **borrow checker**:
+Rust 的核心安全法则就是 **借用检查器**:
 
 ```
 +-----------------------------------------------------------+
@@ -70,19 +70,19 @@ Rust's central safety law is the **borrow checker**:
 +-----------------------------------------------------------+
 ```
 
-A mutable borrow `&mut` is exclusive: the compiler guarantees nothing else reads
-or writes the value at the same time. This turns "data race" from a runtime
-nasty into a compile-time error.
+可变借用 `&mut` 是排他的:
+编译器保证同一时间没有别的地方读取或写入这个值. 这就把
+"数据竞争" 从运行时的麻烦事, 变成了编译期的错误.
 
-## Copy and Clone
+## Copy 与 Clone
 
-Two traits control what happens on assignment and passing:
+有两个 trait 决定了赋值和传参时会发生什么:
 
-- **`Copy`** — Cheap duplication by copying bits; the original stays usable.
-  Integer types, booleans, and element-wise copies of them are `Copy`. Our
-  `LedState` and `LedController` types derive `Copy` (Chapter 20).
-- **`Clone`** — Explicit duplication via the `.clone()` method; the type decides
-  the cost. Arrays and structs containing non-`Copy` data implement `Clone`.
+- **`Copy`** - 通过复制比特位完成的廉价复制; 原值仍然可用.
+  整数类型, 布尔值以及由它们逐元素构成的类型都是 `Copy`. 我们的
+  `LedState` 和 `LedController` 类型就派生了 `Copy` (第 20 章).
+- **`Clone`** - 通过 `.clone()` 方法显式复制; 代价由类型自己决定.
+  数组以及包含非 `Copy` 数据的 struct 会实现 `Clone`.
 
 ```rust
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -92,48 +92,48 @@ pub enum LedState {
 }
 ```
 
-Because `LedState` is `Copy`, calling `led_state_to_level(state)` passes it by
-copy, and we can keep using it afterwards. All three drivers rely on this.
+因为 `LedState` 是 `Copy`, 调用 `led_state_to_level(state)`
+时它是按复制传递的, 之后我们还能继续用它. 三个驱动都依赖这一点.
 
-## Lifetimes
+## 生命周期
 
-A **lifetime** is the compiler's label for how long a reference stays valid. Most
-lifetimes are elided (inferred), but one pattern shows up constantly in our
-code — returning a reference tied to an input:
+**生命周期** 是编译器给引用贴的标签,
+用来标记它能保持有效多久. 大多数生命周期都会被省略 (自动推断),
+但有一种模式在我们的代码里反复出现 - 返回一个和输入绑定的引用:
 
 ```rust
 pub fn process_char(&mut self, ch: u8) -> &'static [u8] {
-    ...                                 // returns bytes that live forever
+    ...                                 // 返回的字节会一直存活
 }
 ```
 
-The `&'static [u8]` in the UART driver means "the returned byte slice lives as
-long as the program." That slice points into a `static` table whose memory is
-fixed for the whole firmware lifetime, so it is safe to return from a function.
-The driver never owns the echoed bytes — they live in a table declared at
-compile time.
+UART 驱动里的 `&'static [u8]` 意思是
+"返回的字节切片与程序同寿". 这个切片指向一张
+`static` 表, 它的内存在整个固件存活期间都是固定的,
+所以从函数里返回它是安全的. 驱动从不拥有被回显的字节 -
+它们住在一张编译期就声明的表里.
 
-When the compiler *does* need an explicit lifetime, you write a named one:
+当编译器*确实*需要显式生命周期时, 你可以写一个有名字的:
 
 ```rust
 fn first<'a>(s: &'a [u8]) -> &'a u8 { &s[0] }
-// 'a ties the output to the input: the result cannot outlive s
+// 'a 把输出和输入绑在一起: 结果不能比 s 活得更久
 ```
 
-Lifetimes rarely need writing in normal code, but understanding them is
-powerful: when an Embassy API requires a `&'static mut` buffer, you immediately
-know exactly what kind of memory it needs and where it must live.
+在普通代码里很少需要写生命周期, 但理解它们很有威力:
+当某个 Embassy API 要求一个 `&'static mut` 缓冲区时,
+你立刻就知道它需要什么样的内存, 以及这块内存必须住在哪里.
 
-## Summary
+## 小结
 
-- Every value has one owner; dropping the owner frees the value immediately.
-- Moving transfers ownership; `Copy` types duplicate instead.
-- Borrowing via `&` and `&mut` is governed by rules the compiler verifies,
-  eliminating data races and dangling references.
-- `Copy`/`Clone` choose cheap bit-copies vs explicit duplication; our driver
-  types derive both families of traits.
-- Lifetimes guarantee references never outlive the data they point to, and
-  `'static` describes values that live for the entire program.
+- 每个值只有一个所有者; 所有者被丢弃时, 值立刻被释放.
+- 移动会转移所有权; `Copy` 类型则是复制.
+- 通过 `&` 和 `&mut` 进行的借用受编译器验证的规则约束,
+  从而消除了数据竞争和悬垂引用.
+- `Copy`/`Clone` 分别对应廉价的位复制和显式复制;
+  我们的驱动类型把这两族 trait 都派生了.
+- 生命周期保证引用永远不会比它指向的数据活得更久,
+  而 `'static` 描述的是与整个程序同寿的值.
 
-Next: structs, enums, and pattern matching — the types we use to model the
-hardware's state.
+接下来: struct, enum 和模式匹配 -
+我们用来给硬件状态建模的类型.

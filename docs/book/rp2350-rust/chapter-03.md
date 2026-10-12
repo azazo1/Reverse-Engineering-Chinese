@@ -1,65 +1,65 @@
-# Chapter 3: Rust Essentials
+# Chapter 3: Rust 基础
 
-## Introduction
+## 引言
 
-Every embedded Rust program — including the three drivers we build — is composed
-of a small set of language fundamentals: variables, primitive types, control
-flow, functions, and constants. This chapter covers those essentials exactly as
-they appear in `no_std` firmware. If you have written Rust before, treat it as a
-review that is tuned to microcontroller work.
+每一个嵌入式 Rust 程序 - 包括我们要写的三个驱动 -
+都由一小撮语言基础构成: 变量, 基本类型,
+控制流, 函数和常量. 本章讲的正是这些基础在
+`no_std` 固件里的样子. 如果你写过 Rust,
+就把它当作一次面向微控制器工作的复习.
 
-## Variables and Mutability
+## 变量与可变性
 
-Variables are introduced with `let`. By default a variable is **immutable** — it
-cannot change — which matches embedded philosophy: an address or a pin mask
-should not silently change behind your back.
+变量用 `let` 引入. 默认情况下变量是 **不可变**
+的 - 它不能改变 - 这符合嵌入式的哲学:
+一个地址或者一个引脚掩码, 不应该在你背后悄悄变化.
 
 ```rust
-let led_pin = 16;          // immutable
-let mut count = 0;         // mutable with the mut keyword
-count += 1;                // allowed because we declared mut
+let led_pin = 16;          // 不可变
+let mut count = 0;         // 用 mut 关键字声明为可变
+count += 1;                // 因为我们声明了 mut, 所以这里允许修改
 
-// A shadowing example: two different variables share a name.
+// 一个遮蔽 (shadowing) 的例子: 两个不同的变量共用一个名字.
 let value = 10;
-let value = value * 2;     // a new variable, not a mutation
+let value = value * 2;     // 这是一个新变量, 不是修改原变量
 ```
 
-The compiler enforces immutability at compile time. Trying to write
-`led_pin = 17;` without `mut` is a compile error, not a runtime bug. That is the
-Rust design: catch mistakes before the code ever reaches the chip.
+编译器在编译期强制不可变性. 在没有 `mut` 的情况下试图写
+`led_pin = 17;` 是编译错误, 不是运行时 bug. 这就是
+Rust 的设计: 在代码到达芯片之前就把错误抓住.
 
-## Primitive Types
+## 基本类型
 
-The integer types map directly onto the RP2350's register widths:
+这些整数类型直接对应 RP2350 的寄存器宽度:
 
 ```rust
-let a: u8   = 0xFF;                  // 8-bit  unsigned
-let b: u16  = 0x4000;                // 16-bit unsigned
-let c: u32  = 0x2000_0000;           // 32-bit unsigned (an address!)
-let d: u64  = 10_000;                // 64-bit unsigned (our blink delay)
-let s: i32  = -5;                    // signed
-let f: bool = true;                  // boolean
-let ch: char = 'A';                  // a Unicode scalar value
+let a: u8   = 0xFF;                  // 8 位无符号
+let b: u16  = 0x4000;                // 16 位无符号
+let c: u32  = 0x2000_0000;           // 32 位无符号 (一个地址!)
+let d: u64  = 10_000;                // 64 位无符号 (我们的闪灯延时)
+let s: i32  = -5;                    // 有符号
+let f: bool = true;                  // 布尔值
+let ch: char = 'A';                  // 一个 Unicode 标量值
 ```
 
-The type suffix is optional when inference can determine it, but embedded code
-usually writes it explicitly. A `u64` delay and a `u32` register mask have very
-different ranges; letting the compiler know both keeps every operation checked.
+当类型推断能确定类型时, 类型后缀是可选的, 但嵌入式代码通常会显式写出来.
+一个 `u64` 的延时和一个 `u32` 的寄存器掩码取值范围差别很大;
+把两者的类型都告诉编译器, 每次运算才会被检查.
 
-## Control Flow
+## 控制流
 
-**`if`/`else if`/`else`** works as everywhere, but Rust's `if` is an
-*expression* — it produces a value:
+**`if`/`else if`/`else`** 和其它语言一样能用,
+但 Rust 的 `if` 是一个*表达式* - 它会产出一个值:
 
 ```rust
 let state: u8 = if led_is_on { 1 } else { 0 };
 ```
 
-This form appears constantly in our drivers. In `main.rs` we write exactly this
-shape to turn a boolean into a decision about the LED.
+这种写法在我们的驱动里反复出现. 在 `main.rs` 里,
+我们正是用这个形状把一个布尔值变成关于 LED 的决定.
 
-**`loop`** is Rust's infinite loop. Firmware is an infinite program, so `loop` is
-the heart of every embedded application:
+**`loop`** 是 Rust 的无限循环. 固件就是一段无限运行的程序,
+所以 `loop` 是每个嵌入式应用的心脏:
 
 ```rust
 loop {
@@ -70,22 +70,22 @@ loop {
 }
 ```
 
-**`for`** iterates over a range or collection; **`while`** repeats while a
-condition holds:
+**`for`** 遍历一个区间或集合;
+**`while`** 在条件成立时反复执行:
 
 ```rust
 for i in 0..5 { /* i is 0,1,2,3,4 */ }
 while !uart_rx_ready() { /* spin */ }
 ```
 
-## Functions
+## 函数
 
-Functions are declared with `fn`. A function that returns a value states its
-return type after `->`. The last expression in the body is the return value;
-`return` is only needed for early exit:
+函数用 `fn` 声明. 有返回值的函数在 `->`
+后面写出返回类型. 函数体里最后一个表达式就是返回值;
+只有需要提前退出时才用 `return`:
 
 ```rust
-/// Maps a boolean to a PWM duty cycle (0% or 100%).
+/// 把一个布尔值映射成 PWM 占空比 (0% 或 100%).
 fn duty(state: bool) -> u16 {
     if state {
         65535 // 100%
@@ -95,44 +95,44 @@ fn duty(state: bool) -> u16 {
 }
 ```
 
-Notice the function documents itself with the rustdoc comment above it. Every
-public item in our drivers carries such a comment — this is the foundation of
-our strict docstring standard, formalized in Chapter 18.
+注意这个函数用它上方的 rustdoc 注释为自己写了文档.
+我们驱动里的每个公开条目都带有这样的注释 -
+这是我们严格文档注释规范的根基, 该规范在第 18 章正式定型.
 
-## Constants and Statics
+## 常量与静态量
 
-Two ways to declare compile-time values, and they differ in exactly the way
-embedded programmers care about:
+声明编译期值有两种方式,
+它们的区别恰恰是嵌入式程序员最在意的:
 
 ```rust
-pub const BLINK_DELAY_MS: u64 = 500;   // inlined at every use, no memory
-pub static VOLTAGE_REF: u32 = 3300;    // a single memory cell at a fixed address
-static CHARS: [u8; 3] = [b'A', b'B', b'C'];  // static array in flash
+pub const BLINK_DELAY_MS: u64 = 500;   // 每次使用处都被内联, 不占内存
+pub static VOLTAGE_REF: u32 = 3300;    // 固定在某个地址上的单个内存单元
+static CHARS: [u8; 3] = [b'A', b'B', b'C'];  // 存放在 flash 里的静态数组
 ```
 
-- **`const`** — Inlined by the compiler at each use. It costs no memory. All of
-  our configuration values in `config.rs` are `const`.
-- **`static`** — A fixed memory location, live for the whole program. Useful for
-  tables that must have an address, such as the character table in the UART
-  driver's `process_char`.
+- **`const`** - 编译器在每次使用处内联它. 它不占内存.
+  我们在 `config.rs` 里的所有配置值都是 `const`.
+- **`static`** - 一个固定的内存位置,
+  在整个程序存活期间都存在. 适合那些必须有地址的表,
+  比如 UART 驱动 `process_char` 里的字符表.
 
-Static mutable data is a threading hazard and is the source of most safety bugs;
-Rust forbids shared access to `static mut` without extra care. In this course we
-never need it — Embassy's types give us safe alternatives.
+静态可变数据是线程安全的隐患, 也是大多数安全 bug
+的来源; Rust 不允许随便共享访问 `static mut`.
+在本课程里我们从来不需要它 - Embassy 的类型提供了安全的替代方案.
 
-A note on literals in embedded code: primitives are `Copy`, so passing a `u32`
-into a function does not move or transfer ownership. That concept is the subject
-of the next chapter and is central to why Rust code can be trusted at high
-clock speeds.
+关于嵌入式代码里的字面量还有一点: 基本类型都是 `Copy`,
+所以把一个 `u32` 传进函数并不会移动或转移所有权.
+这个概念是下一章的主题, 也是 Rust
+代码能在高时钟频率下被信任的核心原因.
 
-## Summary
+## 小结
 
-- `let` bindings are immutable by default; `mut` opts into change.
-- Integer widths — `u8`, `u16`, `u32`, `u64` — mirror the hardware's byte
-  sizes, and explicit types keep operations checked.
-- `if` is an expression; `loop` is the backbone of firmware.
-- Functions return with an expression and document themselves with docstrings.
-- `const` values are inlined; `static` values live at a fixed address.
+- `let` 绑定默认不可变; `mut` 才允许改变.
+- 整数宽度 - `u8`, `u16`, `u32`, `u64` -
+  与硬件的字节尺寸一一对应, 显式写出类型能让每次运算都受检查.
+- `if` 是表达式; `loop` 是固件的骨架.
+- 函数用表达式返回, 并用文档注释为自己写文档.
+- `const` 值会被内联; `static` 值住在固定地址上.
 
-Next, we tackle the idea that defines Rust: ownership, borrowing, and
-lifetimes.
+接下来, 我们攻克那个定义 Rust
+的想法: 所有权, 借用和生命周期.

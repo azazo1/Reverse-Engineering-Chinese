@@ -1,78 +1,78 @@
-# Chapter 10: ARM Memory Access Instructions
+# Chapter 10: ARM 内存访问指令
 
-## Introduction
+## 引言
 
-The Cortex-M33 is a load-store architecture: arithmetic and logic operate only on registers.  To interact with the outside world — RAM, peripheral registers, the stack — the processor must explicitly load from and store to memory.  This chapter explores every memory-access instruction and addressing mode used in our blink driver.
+Cortex-M33 是加载-存储架构: 算术和逻辑运算只在寄存器上进行. 要与外部世界打交道 - RAM, 外设寄存器, 栈 - 处理器必须显式地从内存加载, 往内存存储. 本章把闪烁驱动里用到的每一条内存访问指令和每一种寻址方式都过一遍.
 
-## `ldr` — Load Register
+## `ldr` - 加载寄存器
 
-`ldr` reads a 32-bit word from memory into a register:
+`ldr` 从内存读一个 32 位的字进寄存器:
 
 ```asm
   ldr   r5, [r3]                                 // r5 = memory[r3]
 ```
 
-The source address is held in a base register.  Several addressing modes exist:
+源地址放在一个基址寄存器里. 有几种寻址方式:
 
-### Immediate Offset
+### 立即数偏移
 
 ```asm
   ldr   r1, [r0, #4]                             // r1 = memory[r0 + 4]
 ```
 
-The offset is added to the base register.  The base register itself is not modified.  In our firmware, we typically compute the full address first and use zero offset:
+偏移量加到基址寄存器上. 基址寄存器本身不变. 在我们的固件里, 通常先算出完整地址, 再用零偏移:
 
 ```asm
-  add   r3, r3, r0                               // r3 = PADS_BANK0_BASE + offset
-  ldr   r5, [r3]                                 // read pad register
+  add   r3, r3, r0                               // r3 = PADS_BANK0_BASE + 偏移
+  ldr   r5, [r3]                                 // 读 pad 寄存器
 ```
 
-### Zero Offset
+### 零偏移
 
 ```asm
   ldr   r1, [r0]                                 // r1 = memory[r0]
 ```
 
-This is the most common form in our firmware.  xosc.s, reset.s, gpio.s, and coprocessor.s all load peripheral registers this way.
+这是我们固件里最常见的形式. xosc.s, reset.s, gpio.s 和 coprocessor.s 都这样加载外设寄存器.
 
-### PC-Relative (Literal Pool)
+### 相对于 PC (字面量池)
 
 ```asm
-  ldr   r0, =0x40048000                          // assembled as ldr r0, [pc, #offset]
+  ldr   r0, =0x40048000                          // 汇编成 ldr r0, [pc, #offset]
 ```
 
-The assembler generates a PC-relative load from the literal pool.  This is how every `ldr Rd, =constant` works internally.
+汇编器生成一条从字面量池出发的相对于 PC 的加载. 每一条 `ldr Rd, =constant` 内部都是这么实现的.
 
-## `str` — Store Register
+## `str` - 存储寄存器
 
-`str` writes a 32-bit word from a register to memory:
+`str` 把一个 32 位的字从寄存器写进内存:
 
 ```asm
   str   r5, [r3]                                 // memory[r3] = r5
 ```
 
-Store completes the read-modify-write cycle.  After modifying bits with `orr`/`bic`, the result is written back:
+存储补完了读-改-写这一环. 用 `orr`/`bic` 改完位之后, 结果被写回去:
 
 ```asm
-  ldr   r5, [r3]                                 // read
-  bic   r5, r5, #(1<<7)                          // modify
-  str   r5, [r3]                                 // write back
+  ldr   r5, [r3]                                 // 读
+  bic   r5, r5, #(1<<7)                          // 改
+  str   r5, [r3]                                 // 写回
 ```
 
-Every hardware register configuration in our firmware follows this pattern.
+固件里每一次硬件寄存器配置都遵循这个模式.
 
-## `push` and `pop` — Stack Operations
+## `push` 和 `pop` - 栈操作
 
-`push` and `pop` are aliases for store-multiple and load-multiple using the stack pointer (SP):
+`push` 和 `pop` 是使用栈指针 (SP) 的多寄存器存储和加载的别名:
 
 ```asm
-  push  {r4-r12, lr}                             // save registers to stack
-  pop   {r4-r12, lr}                             // restore registers from stack
+  push  {r4-r12, lr}                             // 把寄存器保存到栈上
+  pop   {r4-r12, lr}                             // 从栈上恢复寄存器
 ```
 
-### How `push` Works
+### `push` 是怎么工作的
 
-`push {r4-r12, lr}` performs:
+`push {r4-r12, lr}` 执行的是:
 
 ```
 SP = SP - (10 * 4)        // decrement by 40 bytes (10 registers)
@@ -82,11 +82,11 @@ memory[SP + 4]  = r5
 memory[SP + 36] = lr
 ```
 
-The stack grows downward (toward lower addresses).
+栈向低地址方向生长.
 
-### How `pop` Works
+### `pop` 是怎么工作的
 
-`pop {r4-r12, lr}` performs:
+`pop {r4-r12, lr}` 执行的是:
 
 ```
 r4  = memory[SP + 0]
@@ -96,23 +96,23 @@ lr  = memory[SP + 36]
 SP  = SP + 40              // restore stack pointer
 ```
 
-### Register Lists
+### 寄存器列表
 
-Our firmware uses several different register lists:
+我们的固件用了几种不同的寄存器列表:
 
-| Function | Push/Pop Registers | Count |
+| 函数 | 压栈/出栈的寄存器 | 数量 |
 |----------|--------------------|-------|
-| `main` | `{r4-r12, lr}` | 10 registers |
-| `GPIO_Config` | `{r0-r12, lr}` | 13 registers |
-| `GPIO_Set` | `{r0-r12, lr}` | 13 registers |
-| `GPIO_Clear` | `{r0-r12, lr}` | 13 registers |
-| `Delay_MS` | `{r4-r12, lr}` | 10 registers |
+| `main` | `{r4-r12, lr}` | 10 个寄存器 |
+| `GPIO_Config` | `{r0-r12, lr}` | 13 个寄存器 |
+| `GPIO_Set` | `{r0-r12, lr}` | 13 个寄存器 |
+| `GPIO_Clear` | `{r0-r12, lr}` | 13 个寄存器 |
+| `Delay_MS` | `{r4-r12, lr}` | 10 个寄存器 |
 
-Functions that receive parameters in r0–r3 and need to preserve them for the caller push the full range r0–r12.
+有些函数通过 r0-r3 接收参数, 又需要替调用者保住它们, 于是就把 r0-r12 整段压栈.
 
-## Memory Map and Peripheral Access
+## 内存映射与外设访问
 
-Our firmware accesses these memory regions:
+我们的固件访问这些内存区域:
 
 ```
 +------------------------------+
@@ -130,42 +130,42 @@ Our firmware accesses these memory regions:
 +------------------------------+
 ```
 
-Every peripheral access follows the same steps:
+每一次外设访问都遵循同样的步骤:
 
-1. `ldr` the base address into a register
-2. Optionally `add` an offset
-3. `ldr` to read the current value
-4. `bic`/`orr` to modify bits
-5. `str` to write back
+1. 用 `ldr` 把基地址装进寄存器
+2. 需要的话用 `add` 加上偏移
+3. 用 `ldr` 读出当前值
+4. 用 `bic`/`orr` 修改位
+5. 用 `str` 写回
 
-## Alignment Requirements
+## 对齐要求
 
-The Cortex-M33 requires word-aligned access for `ldr` and `str`:
+Cortex-M33 要求 `ldr` 和 `str` 的访问是字对齐的:
 
-| Access | Alignment | Size |
+| 访问 | 对齐 | 大小 |
 |--------|-----------|------|
-| `ldr` / `str` (word) | 4-byte aligned | 32 bits |
-| `ldrh` / `strh` (halfword) | 2-byte aligned | 16 bits |
-| `ldrb` / `strb` (byte) | No alignment | 8 bits |
+| `ldr` / `str` (字) | 4 字节对齐 | 32 位 |
+| `ldrh` / `strh` (半字) | 2 字节对齐 | 16 位 |
+| `ldrb` / `strb` (字节) | 无需对齐 | 8 位 |
 
-All peripheral registers in our firmware are at 4-byte-aligned addresses, so word access is safe.  Unaligned word access on Cortex-M33 can be configured to fault or succeed with a performance penalty.
+我们固件里的所有外设寄存器都在 4 字节对齐的地址上, 所以字访问是安全的. Cortex-M33 上的非对齐字访问可以配置成触发错误, 也可以配置成成功执行但付出性能代价.
 
-## `msr` and `mrs` — Special Register Access
+## `msr` 和 `mrs` - 访问专用寄存器
 
-The Cortex-M33 has special-purpose registers accessed via `msr` and `mrs`:
+Cortex-M33 有一些专用寄存器, 通过 `msr` 和 `mrs` 访问:
 
 ```asm
-  msr   MSP, r0                                  // set Main Stack Pointer
-  msr   PSP, r0                                  // set Process Stack Pointer
-  msr   MSPLIM, r0                               // set MSP limit
-  msr   PSPLIM, r0                               // set PSP limit
+  msr   MSP, r0                                  // 设置主栈指针
+  msr   PSP, r0                                  // 设置进程栈指针
+  msr   MSPLIM, r0                               // 设置 MSP 下限
+  msr   PSPLIM, r0                               // 设置 PSP 下限
 ```
 
-These are used in stack.s to initialize the stack pointers.  Unlike `ldr`/`str`, these instructions move data between core registers and the special register bank.
+stack.s 里用它们来初始化栈指针. 与 `ldr`/`str` 不同, 这些指令在核心寄存器和专用寄存器组之间搬运数据.
 
-## Summary
+## 小结
 
-- `ldr` and `str` are the only instructions that access memory, supporting immediate offset and PC-relative addressing.
-- `push` and `pop` manage the call stack, saving and restoring registers across function calls.
-- Peripheral registers are accessed at fixed addresses in the `0x4xxx_xxxx` range using the read-modify-write pattern.
-- `msr`/`mrs` access special-purpose registers like the stack pointer and its limits.
+- `ldr` 和 `str` 是仅有的会访问内存的指令, 支持立即数偏移和相对于 PC 的寻址.
+- `push` 和 `pop` 管理调用栈, 在函数调用之间保存和恢复寄存器.
+- 外设寄存器位于 `0x4xxx_xxxx` 范围内的固定地址上, 用读-改-写模式访问.
+- `msr`/`mrs` 用来访问栈指针及其下限这类专用寄存器.

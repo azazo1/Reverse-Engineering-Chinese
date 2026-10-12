@@ -1,36 +1,36 @@
-# Chapter 6: The Fetch-Decode-Execute Cycle in Detail
+# Chapter 6: 取指-译码-执行循环详解
 
-## Introduction
+## 引言
 
-Chapter 1 introduced the fetch-decode-execute cycle as a concept.  Now we examine it in detail on the ARM Cortex-M33, including the pipeline, how branches disrupt it, and what happens at each stage when our blink driver executes.  This understanding is essential for reasoning about instruction timing and the delay loop in our firmware.
+第 1 章把取指-译码-执行循环作为一个概念介绍过. 现在我们到 ARM Cortex-M33 上仔细看看它, 包括流水线, 跳转如何打断流水线, 以及我们的闪烁驱动执行时每个阶段都发生了什么. 理解这些, 是推断指令时序和固件里那个延时循环的关键.
 
-## The Three Stages
+## 三个阶段
 
-### Fetch
+### 取指
 
-The processor reads the instruction bytes from the address in the Program Counter (PC).  On Cortex-M33, instructions can be 16 bits (narrow Thumb) or 32 bits (wide Thumb-2).  The fetch unit reads from flash (via XIP) or SRAM depending on where the PC points.
+处理器从程序计数器 (PC) 所指的地址读出指令字节. 在 Cortex-M33 上, 指令可以是 16 位 (窄 Thumb) 或 32 位 (宽 Thumb-2). 取指单元根据 PC 指向的位置, 从 flash (经由 XIP) 或 SRAM 里读取.
 
-### Decode
+### 译码
 
-The binary pattern of the fetched instruction is decoded to determine:
+对取到的指令的二进制位模式进行译码, 判断出:
 
-- The operation type (load, store, add, branch, etc.)
-- The source and destination registers
-- Any immediate value embedded in the instruction
-- The condition code (for conditional instructions)
+- 操作类型 (加载, 存储, 加法, 跳转等)
+- 源寄存器和目标寄存器
+- 指令里内嵌的立即数
+- 条件码 (针对条件指令)
 
-### Execute
+### 执行
 
-The operation is performed:
+真正完成操作:
 
-- Arithmetic/logic instructions compute a result and write it to the destination register.
-- Load instructions read from the address bus and write to a register.
-- Store instructions write a register value to the address bus.
-- Branch instructions update the PC.
+- 算术/逻辑指令算出结果, 写进目标寄存器.
+- 加载指令从地址总线读数据, 写进寄存器.
+- 存储指令把寄存器里的值写到地址总线.
+- 跳转指令更新 PC.
 
-## The Pipeline
+## 流水线
 
-The Cortex-M33 overlaps these stages so that while one instruction executes, the next is being decoded, and the one after that is being fetched:
+Cortex-M33 把这些阶段重叠起来: 一条指令在执行的同时, 下一条正在译码, 再下一条正在取指:
 
 ```
 Time:     T1        T2        T3        T4        T5
@@ -43,23 +43,23 @@ Instr 3:                     | Fetch | |Decode | |Execute|
                              +-------+ +-------+ +-------+
 ```
 
-In ideal conditions, one instruction completes every clock cycle despite each instruction taking three cycles to process.
+理想情况下, 虽然每条指令要花三个周期处理, 但每个时钟周期都能完成一条指令.
 
-## A Concrete Example
+## 一个具体的例子
 
-Consider these three lines from our blink loop:
+看看闪烁循环里的这三行:
 
 ```asm
-  ldr   r0, =16                                  // load GPIO number
-  bl    GPIO_Set                                 // call GPIO_Set
+  ldr   r0, =16                                  // 加载 GPIO 编号
+  bl    GPIO_Set                                 // 调用 GPIO_Set
   ldr   r0, =500                                 // 500ms
 ```
 
-At cycle T1 the processor fetches the `ldr`.  At T2 it decodes the `ldr` while fetching the `bl`.  At T3 it executes the `ldr` (placing 16 in r0), decodes the `bl`, and fetches the next `ldr`.
+在周期 T1, 处理器取指 `ldr`. 在 T2, 它一边译码 `ldr`, 一边取指 `bl`. 在 T3, 它执行 `ldr` (把 16 放进 r0), 译码 `bl`, 并取指下一条 `ldr`.
 
-## How Branch Instructions Affect the Pipeline
+## 跳转指令如何影响流水线
 
-A branch instruction changes the PC to a new address.  The instructions already in the pipeline (fetched from the addresses *after* the branch) are wrong — they are from the old sequential path.  The pipeline must be **flushed** and refilled from the branch target:
+跳转指令会把 PC 改成一个新地址. 已经进入流水线的那些指令 (从跳转指令*之后*的地址取来的) 是错的 - 它们来自旧的顺序路径. 流水线必须被**冲刷**掉, 再从分支目标重新填充:
 
 ```
 Time:     T1        T2        T3        T4        T5        T6
@@ -72,39 +72,39 @@ Target:                                | Fetch | |Decode | |Execute|
                                        +-------+ +-------+ +-------+
 ```
 
-This pipeline flush costs 1–2 extra cycles per branch.  In our delay loop, the `bne .Delay_MS_Loop` branch executes thousands of times, and each taken branch costs these extra cycles.
+这次流水线冲刷每次跳转要额外花 1-2 个周期. 在我们的延时循环里, `bne .Delay_MS_Loop` 这条跳转要执行成千上万次, 每次跳转成功都要付出这些额外周期.
 
-## The Cortex-M33 Execution Model
+## Cortex-M33 的执行模型
 
-The Cortex-M33 has a 3-stage pipeline optimized for:
+Cortex-M33 有一条 3 级流水线, 针对以下方面做了优化:
 
-- **Branch prediction** — a simple predictor reduces the flush penalty for backward branches (loops).
-- **Single-cycle multiply** — the `mul` instruction completes in one cycle.
-- **Dual-issue** — certain pairs of 16-bit instructions can execute in parallel (implementation-dependent).
+- **分支预测** - 一个简单的预测器能减轻向后跳转 (循环) 带来的冲刷代价.
+- **单周期乘法** - `mul` 指令一个周期完成.
+- **双发射** - 某些 16 位指令对可以并行执行 (与具体实现有关).
 
-The pipeline depth means the PC reads as "current instruction address + 4" — something to be aware of when debugging.
+流水线的深度意味着 PC 读出来是"当前指令地址 + 4" - 调试时这一点要记在心里.
 
-## Clock Speed
+## 时钟频率
 
-Our firmware runs the processor from the XOSC at approximately 14.5 MHz (12 MHz crystal, 1–15 MHz range configured).  At 14.5 MHz each clock cycle is approximately 69 nanoseconds.
+我们的固件让处理器由 XOSC 驱动, 频率大约 14.5 MHz (12 MHz 晶振, 配置在 1-15 MHz 范围内). 在 14.5 MHz 下, 每个时钟周期大约是 69 纳秒.
 
-The delay loop in delay.s uses this clock speed to calibrate timing:
+delay.s 里的延时循环就用这个时钟频率来校准时序:
 
 ```asm
-  ldr   r4, =3600                                // loops per MS based on 14.5MHz clock
-  mul   r5, r0, r4                               // total loop iterations
+  ldr   r4, =3600                                // 基于 14.5MHz 时钟, 每毫秒的循环次数
+  mul   r5, r0, r4                               // 总的循环迭代次数
 .Delay_MS_Loop:
-  subs  r5, r5, #1                               // 1 cycle: decrement
-  bne   .Delay_MS_Loop                           // 1-2 cycles: branch if not zero
+  subs  r5, r5, #1                               // 1 个周期: 减一
+  bne   .Delay_MS_Loop                           // 1-2 个周期: 不为零则跳转
 ```
 
-Each loop iteration takes approximately 2–3 cycles.  At 14.5 MHz, 3600 iterations ≈ 1 ms.
+每一轮循环大约花 2-3 个周期. 在 14.5 MHz 下, 3600 次迭代约等于 1 ms.
 
-## Summary
+## 小结
 
-- The Cortex-M33 has a 3-stage pipeline: fetch, decode, execute.
-- The pipeline allows one instruction to complete per cycle in steady state.
-- Branches flush the pipeline, costing 1–2 extra cycles.
-- The PC reads as current instruction address + 4 due to the pipeline.
-- Our XOSC runs at approximately 14.5 MHz — each cycle is about 69 ns.
-- The delay loop calibration (3600 iterations per ms) accounts for the pipeline behavior at this clock speed.
+- Cortex-M33 有 3 级流水线: 取指, 译码, 执行.
+- 流水线让稳态下每个周期都能完成一条指令.
+- 跳转要冲刷流水线, 额外花 1-2 个周期.
+- 受流水线影响, PC 读出来是当前指令地址加 4.
+- 我们的 XOSC 大约运行在 14.5 MHz - 每个周期约 69 ns.
+- 延时循环的校准 (每毫秒 3600 次迭代) 正是按这个时钟频率下流水线的行为算出来的.

@@ -1,160 +1,160 @@
-# Chapter 9: ARM Arithmetic and Logic Instructions
+# Chapter 9: ARM 算术与逻辑指令
 
-## Introduction
+## 引言
 
-Arithmetic and logic instructions form the computational core of any processor.  On the Cortex-M33, these instructions operate exclusively on registers — never directly on memory — consistent with the load-store philosophy.  Our blink driver uses arithmetic for delay timing and logic for bit manipulation of hardware registers.  This chapter examines every arithmetic and logic instruction that appears in our firmware.
+算术和逻辑指令构成任何处理器的计算核心. 在 Cortex-M33 上, 这些指令只在寄存器上操作 - 从不直接操作内存 - 这与加载-存储的设计原则一致. 我们的闪烁驱动用算术指令算延时, 用逻辑指令操作硬件寄存器的位. 本章考察固件里出现的每一条算术和逻辑指令.
 
-## Arithmetic Instructions
+## 算术指令
 
-### `add` — Addition
+### `add` - 加法
 
 ```asm
   add   r3, r0, r1                               // r3 = r0 + r1
 ```
 
-Adds two values.  In our firmware, `add` calculates addresses from a base register plus an offset:
+把两个值相加. 在我们的固件里, `add` 用基址寄存器加偏移来算出地址:
 
 ```asm
   ldr   r3, =PADS_BANK0_BASE                     // r3 = 0x40038000
-  add   r3, r3, r0                               // r3 = base + pad offset
+  add   r3, r3, r0                               // r3 = 基地址 + pad 偏移
 ```
 
-This is how gpio.s reaches the pad control register for GPIO16.
+gpio.s 就是这样找到 GPIO16 的 pad 控制寄存器的.
 
-### `sub` and `subs` — Subtraction
+### `sub` 和 `subs` - 减法
 
 ```asm
   sub   r0, r0, #1                               // r0 = r0 - 1
-  subs  r5, r5, #1                               // r5 = r5 - 1, update flags
+  subs  r5, r5, #1                               // r5 = r5 - 1, 并更新标志
 ```
 
-The `s` suffix is critical.  Without it, the APSR flags remain unchanged.  With it, the processor updates N, Z, C, and V flags.  Our delay loop in delay.s depends on `subs` to set the Zero flag:
+那个 `s` 后缀非常关键. 不带它, APSR 标志保持不变. 带上它, 处理器就更新 N, Z, C, V 四个标志. delay.s 里的延时循环正是靠 `subs` 来置零标志:
 
 ```asm
 .Delay_Loop:
-  subs  r5, r5, #1                               // decrement, set Z when 0
-  bne   .Delay_Loop                              // loop until Z = 1
+  subs  r5, r5, #1                               // 减一, 减到 0 时置 Z
+  bne   .Delay_Loop                              // 循环直到 Z = 1
 ```
 
-### `mul` — Multiplication
+### `mul` - 乘法
 
 ```asm
   mul   r5, r0, r4                               // r5 = r0 * r4
 ```
 
-In delay.s, `mul` computes the total number of loop iterations:
+在 delay.s 里, `mul` 算出循环迭代的总次数:
 
 ```asm
-  mov   r4, #3600                                // loops per millisecond
-  mul   r5, r0, r4                               // total = ms * 3600
+  mov   r4, #3600                                // 每毫秒的循环次数
+  mul   r5, r0, r4                               // 总数 = 毫秒数 * 3600
 ```
 
-At 14.5 MHz XOSC clock, 3600 inner iterations approximate one millisecond.
+在 14.5 MHz 的 XOSC 时钟下, 3600 次内层迭代约等于一毫秒.
 
-### `cmp` — Compare
+### `cmp` - 比较
 
 ```asm
-  cmp   r0, #0                                   // set flags for r0 - 0
+  cmp   r0, #0                                   // 按 r0 - 0 的结果置标志
 ```
 
-`cmp` subtracts the second operand from the first, discards the result, and updates all four APSR flags.  delay.s uses this to validate the input:
+`cmp` 用第一个操作数减去第二个, 丢弃结果, 但更新 APSR 的全部四个标志. delay.s 用它来校验输入:
 
 ```asm
-  cmp   r0, #0                                   // is delay <= 0?
-  ble   .Delay_Done                              // if so, skip
+  cmp   r0, #0                                   // 延时值 <= 0 吗?
+  ble   .Delay_Done                              // 是的话就跳过
 ```
 
-## Logic Instructions
+## 逻辑指令
 
-### `orr` — Bitwise OR
+### `orr` - 按位或
 
 ```asm
-  orr   r5, r5, #(1<<6)                          // set bit 6
+  orr   r5, r5, #(1<<6)                          // 置位第 6 位
 ```
 
-`orr` sets specific bits while preserving all others.  This is the standard idiom for setting a single bit in a hardware register.  In gpio.s, it enables input:
+`orr` 在保留其他位的同时把特定的位置位. 这是在硬件寄存器里置单个位的标准写法. 在 gpio.s 里, 它用来使能输入:
 
 ```asm
-  orr   r5, r5, #(1<<6)                          // set IE (input enable)
+  orr   r5, r5, #(1<<6)                          // 置位 IE (输入使能)
 ```
 
-In xosc.s, it enables the peripheral clock:
+在 xosc.s 里, 它用来使能外设时钟:
 
 ```asm
-  orr   r1, r1, #(1<<11)                         // set ENABLE bit
+  orr   r1, r1, #(1<<11)                         // 置位 ENABLE 位
 ```
 
-### `bic` — Bit Clear
+### `bic` - 位清除
 
 ```asm
-  bic   r5, r5, #(1<<7)                          // clear bit 7
+  bic   r5, r5, #(1<<7)                          // 清除第 7 位
 ```
 
-`bic` (Bit Clear) performs `Rd = Rn AND NOT imm`.  It clears specific bits.  In gpio.s, it disables output disable and isolation:
+`bic` (Bit Clear) 执行 `Rd = Rn AND NOT imm`, 用来清除特定的位. 在 gpio.s 里, 它关掉输出禁用和隔离:
 
 ```asm
-  bic   r5, r5, #(1<<7)                          // clear OD (output disable)
-  bic   r5, r5, #(1<<8)                          // clear ISO (isolation)
+  bic   r5, r5, #(1<<7)                          // 清除 OD (输出禁用)
+  bic   r5, r5, #(1<<8)                          // 清除 ISO (隔离)
 ```
 
-And clears the FUNCSEL field before setting the new value:
+它还会在设置新值之前把 FUNCSEL 字段清空:
 
 ```asm
-  bic   r5, r5, #0x1f                            // clear FUNCSEL [4:0]
-  orr   r5, r5, #0x05                            // set FUNCSEL = 5 (SIO)
+  bic   r5, r5, #0x1f                            // 清除 FUNCSEL [4:0]
+  orr   r5, r5, #0x05                            // 设置 FUNCSEL = 5 (SIO)
 ```
 
-### `tst` — Test Bits
+### `tst` - 测试位
 
 ```asm
-  tst   r1, #(1<<31)                             // test bit 31
+  tst   r1, #(1<<31)                             // 测试第 31 位
 ```
 
-`tst` performs `Rn AND imm`, discards the result, and updates flags.  If the tested bit is zero, Z=1.  Our XOSC initialization polls the STABLE bit:
+`tst` 执行 `Rn AND imm`, 丢弃结果, 但更新标志. 如果被测的位是 0, 那么 Z=1. 我们的 XOSC 初始化就是靠轮询 STABLE 位:
 
 ```asm
 .Wait_XOSC:
-  ldr   r1, [r0]                                 // read XOSC_STATUS
-  tst   r1, #(1<<31)                             // STABLE bit set?
-  beq   .Wait_XOSC                              // no — keep waiting
+  ldr   r1, [r0]                                 // 读 XOSC_STATUS
+  tst   r1, #(1<<31)                             // STABLE 位置位了吗?
+  beq   .Wait_XOSC                              // 没有 - 接着等
 ```
 
-## The APSR Flags
+## APSR 标志
 
-All flag-setting instructions modify the Application Program Status Register (APSR):
+所有会置标志的指令都会修改应用程序状态寄存器 (APSR):
 
-| Flag | Name | Set When |
+| 标志 | 名称 | 何时置位 |
 |------|------|----------|
-| N | Negative | Result bit 31 is 1 |
-| Z | Zero | Result is zero |
-| C | Carry | Unsigned overflow or borrow |
-| V | oVerflow | Signed overflow |
+| N | 负 (Negative) | 结果的第 31 位是 1 |
+| Z | 零 (Zero) | 结果为零 |
+| C | 进位 (Carry) | 无符号溢出或借位 |
+| V | 溢出 (oVerflow) | 有符号溢出 |
 
-Conditional branches test these flags:
+条件跳转指令就测试这些标志:
 
-| Branch | Condition | Flags |
+| 跳转 | 条件 | 标志 |
 |--------|-----------|-------|
-| `beq` | Equal / zero | Z=1 |
-| `bne` | Not equal / non-zero | Z=0 |
-| `ble` | Less than or equal (signed) | Z=1 or N!=V |
-| `bge` | Greater or equal (signed) | N=V |
+| `beq` | 相等 / 为零 | Z=1 |
+| `bne` | 不相等 / 非零 | Z=0 |
+| `ble` | 小于等于 (有符号) | Z=1 或 N!=V |
+| `bge` | 大于等于 (有符号) | N=V |
 
-## Read-Modify-Write Pattern
+## 读-改-写模式
 
-Hardware register manipulation follows a consistent three-step pattern throughout our firmware:
+在我们整份固件里, 硬件寄存器的操作都遵循同一个三步模式:
 
 ```asm
-  ldr   r5, [r3]                                 // READ current value
-  bic   r5, r5, #(1<<7)                          // MODIFY: clear bit
-  orr   r5, r5, #(1<<6)                          // MODIFY: set bit
-  str   r5, [r3]                                 // WRITE back
+  ldr   r5, [r3]                                 // READ: 读出当前值
+  bic   r5, r5, #(1<<7)                          // MODIFY: 清除某位
+  orr   r5, r5, #(1<<6)                          // MODIFY: 置位某位
+  str   r5, [r3]                                 // WRITE: 写回
 ```
 
-This pattern appears in gpio.s (pad configuration, control register), xosc.s (clock enable), and coprocessor.s (CPACR modification).  It preserves all bits we do not intend to change.
+这个模式出现在 gpio.s (pad 配置, 控制寄存器), xosc.s (时钟使能) 和 coprocessor.s (修改 CPACR) 里. 它能保住所有我们不打算改动的位.
 
-## Summary
+## 小结
 
-- Arithmetic instructions (`add`, `sub`, `subs`, `mul`, `cmp`) handle addressing, delay loops, and input validation.
-- Logic instructions (`orr`, `bic`, `tst`) manipulate individual bits in hardware registers.
-- The `s` suffix on `subs` sets APSR flags, enabling conditional branches.
-- The read-modify-write pattern (ldr → bic/orr → str) is the fundamental hardware register manipulation idiom.
+- 算术指令 (`add`, `sub`, `subs`, `mul`, `cmp`) 负责地址计算, 延时循环和输入校验.
+- 逻辑指令 (`orr`, `bic`, `tst`) 操作硬件寄存器里单独的位.
+- `subs` 上的 `s` 后缀会置 APSR 标志, 从而支撑条件跳转.
+- 读-改-写模式 (ldr → bic/orr → str) 是操作硬件寄存器的基本套路.

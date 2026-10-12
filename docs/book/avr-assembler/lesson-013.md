@@ -1,64 +1,64 @@
-# Lesson 013 - Infrared (IR) Receiver
+# Lesson 013 - 红外 (IR) 接收器
 
-## What Are We Building Today?
+## 今天我们要做什么?
 
-Have you ever wondered how a TV remote actually works? It blasts invisible infrared light in rapid pulses. The TV has a receiver that catches this invisible light and converts it into electrical `0`s and `1`s.
+你有没有想过电视遥控器到底是怎么工作的? 它会以极快的脉冲射出看不见的红外光. 电视机上有一个接收器, 接住这种看不见的光, 再把它变成电信号的 `0` 和 `1`.
 
-Today, we are going to build an **Infrared Visualizer**! 
-We are going to write a lightning-fast assembly loop that watches the IR Receiver module. Whenever it detects a pulse of infrared light from your TV remote, it will instantly flash the built-in LED (Pin 13) on your microcontroller! By pointing a remote at your circuit and pressing a button, you will be able to literally *see* the invisible data pulsing before your very eyes.
+今天我们要做一个**红外可视化器**!
+我们要写一个快如闪电的汇编循环, 盯着红外接收模块看. 只要它从你的电视遥控器那里收到一段红外光脉冲, 就会立刻闪一下单片机上的板载 LED (Pin 13)! 把遥控器对着你的电路按一下按键, 你就能亲眼*看见*那些看不见的数据在跳动.
 
 [CODE](https://github.com/mytechnotalent/Assembler/blob/main/lessons/013/lesson.s)
 
 ---
 
-## Hardware Check: The IR Receiver
+## 硬件检查: 红外接收器
 
-The IR Receiver module has 3 pins:
-- **VCC** (5 Volts)
-- **GND** (Ground)
-- **OUT**: The digital signal wire, which we connect to **PD2 (Digital Pin 2)**.
+红外接收模块有 3 个引脚:
+- **VCC** (5 伏)
+- **GND** (地)
+- **OUT**: 数字信号线, 我们把它接到 **PD2 (数字引脚 2)**.
 
-The IR receiver is **Active-Low**. This means:
-- When there is **NO** infrared light, the `OUT` pin stays `HIGH` (5 Volts).
-- When a pulse of infrared light hits the sensor, the `OUT` pin gets pulled `LOW` (0 Volts).
+红外接收器是**低电平有效**的. 意思是:
+- 当**没有**红外光时, `OUT` 引脚保持 `HIGH` (5 伏).
+- 当一段红外光脉冲打到传感器上时, `OUT` 引脚会被拉成 `LOW` (0 伏).
 
-So to detect light, we must look for a `LOW` signal!
+所以要检测光, 我们得盯着 `LOW` 信号!
 
-## The Code Walkthrough
+## 代码讲解
 
-This is one of our simplest, yet most educational, assembly programs. It perfectly highlights how fast assembly language is. It runs at the true 16 MHz speed of the microcontroller, meaning it checks the sensor millions of times a second and reacts instantly to a light pulse.
+这是我们最简单, 却也最有教学意义的汇编程序之一. 它完美地展示了汇编语言有多快. 它以单片机真实的 16 MHz 速度运行, 也就是说它每秒检查传感器几百万次, 一有光脉冲就立刻反应.
 
-### 1. Setting up the Pins
+### 1. 设置引脚
 ```assembly
-  SBI    DDRB, PB5                     ; Set PB5 (LED) as output
-  CBI    DDRD, PD2                     ; Set PD2 (IR Receiver) as input
-  SBI    PORTD, PD2                    ; Enable internal pull-up resistor on PD2
+  SBI    DDRB, PB5                     ; 把 PB5 (LED) 设为输出
+  CBI    DDRD, PD2                     ; 把 PD2 (红外接收器) 设为输入
+  SBI    PORTD, PD2                    ; 使能 PD2 的内部上拉电阻
 ```
-We set `PB5` (the built-in LED) as an Output so we can turn it on and off.
-We set `PD2` as an Input to listen to the IR receiver, and importantly, we turn on the internal pull-up resistor by writing a `1` to the `PORTD` register. This keeps the pin stable when no light is present.
+我们把 `PB5` (板载 LED) 设为输出, 这样才能点亮和熄灭它.
+我们把 `PD2` 设为输入, 用来听红外接收器, 而且很重要的一点是, 我们往 `PORTD` 寄存器写 `1` 来打开内部上拉电阻. 这样在没有光的时候引脚也能保持稳定.
 
-### 2. The High-Speed Visualizer Loop
+### 2. 高速可视化循环
 ```assembly
-.loop:                                 
-  SBIC   PIND, PD2                     ; Skip next instruction if IR Receiver is LOW
-  RJMP   .turn_off                     ; If HIGH (no signal), jump to turn off
+.loop:
+  SBIC   PIND, PD2                     ; 若红外接收器为低电平则跳过下一条指令
+  RJMP   .turn_off                     ; 若为高电平 (无信号), 就跳去熄灭
 ```
-Inside our infinite loop, we use our favorite instruction: `SBIC` (Skip if Bit in I/O Register is Cleared).
-If the sensor pin (`PD2`) is `LOW` (cleared), it means infrared light is currently hitting the sensor! The microcontroller will skip the next instruction (`RJMP .turn_off`) and fall straight down into `.turn_on`.
+在无限循环里, 我们用最喜欢的指令: `SBIC` (I/O 寄存器中的这一位为 0 就跳过).
+如果传感器引脚 (`PD2`) 是 `LOW` (清零), 说明现在有红外光正打在传感器上! 单片机会跳过下一条指令 (`RJMP .turn_off`), 直接落到 `.turn_on`.
 
-### 3. Flashing the LED
+### 3. 闪一下 LED
 ```assembly
-.turn_on:                              
-  SBI    PORTB, PB5                    ; Turn ON LED (Signal detected)
-  RJMP   .loop                         ; Loop forever
-.turn_off:                             
-  CBI    PORTB, PB5                    ; Turn OFF LED
-  RJMP   .loop                         ; Loop forever
+.turn_on:
+  SBI    PORTB, PB5                    ; 点亮 LED (检测到信号)
+  RJMP   .loop                         ; 永远循环
+.turn_off:
+  CBI    PORTB, PB5                    ; 熄灭 LED
+  RJMP   .loop                         ; 永远循环
 ```
-If we skipped the jump, we land at `.turn_on`, which instantly turns on the LED, and jumps back to the top of the loop.
-If there is no light, `SBIC` does *not* skip, and we jump to `.turn_off`, keeping the LED off.
+如果我们跳过了那次跳转, 就落在 `.turn_on`, 它会立刻点亮 LED, 然后跳回循环开头.
+如果没有光, `SBIC` 就*不*跳过, 我们跳到 `.turn_off`, 让 LED 保持熄灭.
 
 ---
 
-### Challenge!
-Point any household TV remote at your circuit and press a button! You will see the LED flash rapidly. That flashing is the actual digital "NEC Protocol" data packets being transmitted through the air!
+### 挑战!
+把家里随便哪个电视遥控器对准你的电路, 按一个键! 你会看到 LED 飞快地闪. 那一闪一闪的, 就是真正的数字 "NEC 协议" 数据包正在空气中传送!

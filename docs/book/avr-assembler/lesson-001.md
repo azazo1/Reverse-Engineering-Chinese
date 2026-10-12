@@ -1,164 +1,164 @@
-# Lesson 001 - Serial
+# Lesson 001 - 串口通信
 
-## What Are We Building Today?
+## 今天我们要做什么?
 
-Welcome to Lesson 1! Today, we are going to teach our ATmega328P microcontroller how to "talk" to our computer. Have you ever wondered how a USB cable sends text between devices? We are going to build the lowest-level code that makes that happen using **Serial Communication**. 
+欢迎来到第 1 课! 今天, 我们要教 ATmega328P 单片机如何跟我们的电脑"说话". 你有没有想过, 一根 USB 线是怎么在设备之间传送文字的? 我们要用 **串口通信** 写出实现这件事的最底层代码.
 
-By the end of this lesson, our microcontroller will send a welcome message: `Lesson 001 - Serial Monitor Ready!` to our computer's Serial Monitor, and then it will print a dot (`.`) every half second forever.
+学完这一课, 我们的单片机会向电脑的串口监视器发出一条欢迎消息: `Lesson 001 - Serial Monitor Ready!`, 然后永远每半秒打印一个点 (`.`).
 
 [CODE](https://github.com/mytechnotalent/Assembler/blob/main/lessons/001/lesson.s)
 
 ---
 
-## The Brain of the Operation: What is a Register?
+## 核心大脑: 什么是寄存器?
 
-Before we look at the code, we need to understand how the brain of our ATmega328P works. 
+在看代码之前, 我们得先弄明白 ATmega328P 的大脑是怎么工作的.
 
-Imagine you are solving a massive math problem. You can't do it all in your head, so you use a piece of scratch paper to write down small numbers while you work. The microcontroller has its own "scratch paper" called **Registers**. 
+想象你正在解一道超大的数学题. 你没法全靠脑子算, 所以会拿一张草稿纸, 一边算一边把中间的小数字记下来. 单片机也有自己的"草稿纸", 它叫 **寄存器**.
 
-A register is a tiny, super-fast memory box inside the processor. It holds exactly 8 bits of data (a number from 0 to 255). To make the microcontroller do *anything*—like turn on an LED or send a letter to your computer—we have to write specific numbers into specific registers.
+寄存器是处理器内部一个极小, 极快的存储盒子. 它刚好装得下 8 位数据 (也就是 0 到 255 之间的一个数). 想让单片机做*任何*事情 - 比如点亮一颗 LED, 或者给你的电脑发一个字母 - 我们都得往特定的寄存器里写特定的数字.
 
-### General Purpose Registers (The Scratchpads)
-- **R16, R17, R18**: These are general-purpose registers. We can put whatever numbers we want in them to do math, count down time, or hold a letter before sending it.
-- **R30 & R31 (The Z-Pointer)**: Sometimes we need to point to a massive sentence in memory (like our welcome message). Because our memory addresses are larger than 8 bits, we combine two 8-bit registers (R30 and R31) into a single 16-bit super-register called the **Z-Pointer**.
+### 通用寄存器 (草稿纸)
+- **R16, R17, R18**: 这些是通用寄存器. 我们可以往里面放任意数字, 用来做运算, 倒计时, 或者在发送之前先存一个字母.
+- **R30 & R31 (Z 指针)**: 有时候我们需要指向内存里的一大段文字 (比如那条欢迎消息). 因为内存地址比 8 位大, 所以要把两个 8 位寄存器 (R30 和 R31) 拼成一个 16 位的超级寄存器, 它叫 **Z 指针**.
 
-### The Stack Pointer (SPL & SPH)
-Imagine a stack of plates at a buffet. You can only put a plate on the top, and take a plate off the top. This is exactly how the **Stack** works in a computer! 
-When our code jumps to a "Subroutine" (a mini-program like `delay_500ms`), the computer needs to remember where it came from so it can go back. It places a "bookmark" on the top of the stack. 
-- **SPL and SPH**: These registers hold the "Stack Pointer", which tells the computer exactly where the top of the plate stack is.
-- **RAMEND**: This is the very last address in our SRAM (memory). We always set the stack pointer to start at the very back of memory so it has plenty of room to grow.
+### 栈指针 (SPL & SPH)
+想象自助餐厅里摞着的一叠盘子. 你只能从最上面放盘子, 也只能从最上面取盘子. 计算机里的 **栈** 就是这个样子!
+当代码跳到一个"子程序" (比如 `delay_500ms` 这样的小程序) 时, 计算机得记住自己是从哪儿来的, 这样才能回去. 它会在栈顶放一个"书签".
+- **SPL 和 SPH**: 这两个寄存器保存"栈指针", 它告诉计算机盘子堆的顶部到底在哪儿.
+- **RAMEND**: 这是 SRAM (内存) 里最后一个地址. 我们总是把栈指针设在内存的最末尾, 这样它就有充足的空间向上生长.
 
-### The Serial Mailbox (USART Registers)
-To send text, we use a piece of hardware inside the chip called the **USART** (Universal Synchronous and Asynchronous Receiver and Transmitter). Think of it as a post office.
-- **UBRR0H & UBRR0L**: These set the "Baud Rate" (the speed limit of our communication). Both sides (the Arduino and your PC) must agree on the speed, or the text will look like gibberish! We will set it to 9600 bits per second.
-- **UCSR0A, UCSR0B, UCSR0C**: These are the Control and Status registers. They are like the switches and dials on the post office wall. We use them to turn the transmitter ON, check if the mailbox is empty, and set our data size to 8 bits.
-- **UDR0**: The Data Register. This is the actual mailbox! When we drop a letter (like the character `A`) into UDR0, the hardware automatically ships it down the USB wire to your computer.
+### 串口信箱 (USART 寄存器)
+要发送文字, 我们得用芯片内部的一块硬件, 它叫 **USART** (通用同步异步收发器). 你可以把它想成一家邮局.
+- **UBRR0H & UBRR0L**: 它们用来设置"波特率" (也就是通信的限速). 两边 (Arduino 和你的 PC) 必须约定同一个速度, 否则收到的文字就是一堆乱码! 我们会把它设成每秒 9600 位.
+- **UCSR0A, UCSR0B, UCSR0C**: 这些是控制和状态寄存器. 它们就像邮局墙上的开关和旋钮. 我们用它们打开发送器, 检查信箱是不是空的, 以及把数据长度设成 8 位.
+- **UDR0**: 数据寄存器. 这才是真正的信箱! 当我们把一封信 (比如字符 `A`) 投进 UDR0, 硬件会自动把它沿着 USB 线送到你的电脑.
 
 ---
 
-## Step-by-Step Code Walkthrough
+## 逐行代码讲解
 
-Let's break down every single line of our assembly code so you can see exactly how it works.
+我们把汇编代码的每一行都拆开讲一遍, 这样你就能看清它到底是怎么运作的.
 
-### 1. The Defines
-At the very top of our code, we use `.equ` (which stands for "equals"). This doesn't write any actual code; it just gives easy-to-read names to raw memory addresses.
+### 1. 定义部分
+在代码最开头, 我们用 `.equ` (它是 "equals" 的缩写). 它不会生成任何真正的代码, 只是给原始的内存地址起一个好记的名字.
 ```assembly
-.equ RAMEND, 0x08FF                    ; Last SRAM address (ATmega328P)
-.equ SPL,    0x3D                      ; Stack Pointer Low register
+.equ RAMEND, 0x08FF                    ; 最后一个 SRAM 地址 (ATmega328P)
+.equ SPL,    0x3D                      ; 栈指针低位寄存器
 ```
-Instead of trying to memorize that the Stack Pointer Low is at address `0x3D`, we just name it `SPL`. 
+与其去背栈指针低位在地址 `0x3D`, 我们直接给它起名叫 `SPL`.
 
-### 2. The Reset Vector
+### 2. 复位向量
 ```assembly
-.org 0x0000                            ; Program starts at address 0
-  RJMP   main                          ; Jump to main program
+.org 0x0000                            ; 程序从地址 0 开始
+  RJMP   main                          ; 跳到主程序
 ```
-When you plug in your Arduino, the processor wakes up and immediately looks at address `0x0000` to figure out what to do. `.org 0x0000` tells the assembler to put our very first instruction here. `RJMP main` tells it to "Relative Jump" down to our main program.
+当你给 Arduino 插上电, 处理器醒过来第一件事就是看地址 `0x0000`, 弄清自己该干什么. `.org 0x0000` 告诉汇编器把我们的第一条指令放在这里. `RJMP main` 让它"相对跳转"到我们的主程序.
 
-### 3. The Main Program
+### 3. 主程序
 ```assembly
-main:                                  
-  LDI    R16, lo8(RAMEND)              ; R16 = low byte of last RAM addr
-  OUT    SPL, R16                      ; Stack Pointer Low = R16
-  LDI    R16, hi8(RAMEND)              ; R16 = high byte of last RAM addr
-  OUT    SPH, R16                      ; Stack Pointer High = R16
+main:
+  LDI    R16, lo8(RAMEND)              ; R16 = 最后一个 RAM 地址的低字节
+  OUT    SPL, R16                      ; 栈指针低位 = R16
+  LDI    R16, hi8(RAMEND)              ; R16 = 最后一个 RAM 地址的高字节
+  OUT    SPH, R16                      ; 栈指针高位 = R16
 ```
-This is where we set up the Stack! `LDI` means "Load Immediate" (put a number directly into a register). `OUT` means send that number out to a hardware register. We split `RAMEND` into a low byte and high byte, and push them into `SPL` and `SPH`. Now our stack is ready!
+这里就是设置栈的地方! `LDI` 的意思是 "Load Immediate" (把一个数字直接装进寄存器). `OUT` 的意思是把那个数字送出去, 写进某个硬件寄存器. 我们把 `RAMEND` 拆成低字节和高字节, 分别推进 `SPL` 和 `SPH`. 现在栈就准备好了!
 
 ```assembly
-  RCALL  init_usart                    ; Initialize USART0
-  RCALL  delay_100ms                   ; Wait 100ms
+  RCALL  init_usart                    ; 初始化 USART0
+  RCALL  delay_100ms                   ; 等待 100ms
 ```
-`RCALL` means "Relative Call". We pause what we are doing, jump to the `init_usart` mini-program to turn on the serial post office, and then come back. Then we jump to `delay_100ms` to give the hardware a tiny fraction of a second to wake up.
+`RCALL` 的意思是 "Relative Call". 我们把手头的事暂停一下, 跳到 `init_usart` 这个小程序去把串口邮局打开, 然后再回来. 接着我们跳到 `delay_100ms`, 给硬件一丁点儿时间醒过来.
 
 ```assembly
-  LDI    R30, lo8(msg_greeting)        ; Load low byte of string to Z
-  LDI    R31, hi8(msg_greeting)        ; Load high byte of string to Z
-  RCALL  print_string                  ; Print greeting message
+  LDI    R30, lo8(msg_greeting)        ; 把字符串低字节装入 Z
+  LDI    R31, hi8(msg_greeting)        ; 把字符串高字节装入 Z
+  RCALL  print_string                  ; 打印欢迎消息
 ```
-Here, we load the location of our welcome message into the Z-pointer (R30 and R31). Then we call `print_string`, which will use that pointer to read and send our sentence.
+这里我们把欢迎消息所在的位置装进 Z 指针 (R30 和 R31). 然后调用 `print_string`, 它会用这个指针把整句话读出来并发送出去.
 
 ```assembly
-.loop:                                 
-  LDI    R16, '.'                      ; Load dot character
-  RCALL  tx_char                       ; Transmit character
-  RCALL  delay_500ms                   ; Wait 500ms
-  RJMP   .loop                         ; Infinite loop
+.loop:
+  LDI    R16, '.'                      ; 装入点字符
+  RCALL  tx_char                       ; 发送字符
+  RCALL  delay_500ms                   ; 等待 500ms
+  RJMP   .loop                         ; 无限循环
 ```
-This is our infinite loop! We load the dot character `.` into `R16`, call `tx_char` to send it, wait half a second, and then `RJMP .loop` to do it all over again forever.
+这就是我们的无限循环! 我们把点字符 `.` 装进 `R16`, 调用 `tx_char` 把它发出去, 等半秒, 然后 `RJMP .loop` 从头再来一遍, 永远不停.
 
-### 4. Setting up the Serial Post Office (init_usart)
+### 4. 搭建串口邮局 (init_usart)
 ```assembly
-init_usart:                            
-  LDI    R16, 207                      ; UBRR = 207 for 9600 baud
-  STS    UBRR0L, R16                   ; Set UBRR0L
+init_usart:
+  LDI    R16, 207                      ; 9600 波特率对应 UBRR = 207
+  STS    UBRR0L, R16                   ; 设置 UBRR0L
 ```
-To talk at 9600 speed on a 16 MHz chip, math tells us we need to put the number `207` into the UBRR registers. 
+要在 16 MHz 的芯片上以 9600 的速度说话, 算下来我们需要把数字 `207` 放进 UBRR 寄存器.
 
 ```assembly
-  LDI    R16, (1<<TXEN0)               ; Enable transmitter
-  STS    UCSR0B, R16                   ; Write to UCSR0B
+  LDI    R16, (1<<TXEN0)               ; 使能发送器
+  STS    UCSR0B, R16                   ; 写入 UCSR0B
 ```
-This flips the switch to turn the transmitter ON. `(1<<TXEN0)` is just a fancy way of saying "flip the specific bit that controls the transmitter".
+这一行把发送器的开关拨到 ON. `(1<<TXEN0)` 只是一种花哨的说法, 意思就是"把控制发送器的那一位拨上去".
 
 ```assembly
-  LDI    R16, (1<<UCSZ01)|(1<<UCSZ00)  ; 8 data, 1 stop, no parity
-  STS    UCSR0C, R16                   ; Write to UCSR0C
-  RET                                  ; Return to caller
+  LDI    R16, (1<<UCSZ01)|(1<<UCSZ00)  ; 8 位数据, 1 位停止位, 无校验
+  STS    UCSR0C, R16                   ; 写入 UCSR0C
+  RET                                  ; 返回调用者
 ```
-This sets our data size to 8 bits (one standard byte per character). Finally, `RET` tells the computer to take the bookmark off the stack and return to `main`!
+这里把数据长度设成 8 位 (每个字符一个标准字节). 最后 `RET` 告诉计算机把书签从栈上取下来, 回到 `main`!
 
-### 5. Sending a Single Character (tx_char)
+### 5. 发送单个字符 (tx_char)
 ```assembly
-tx_char:                               
-  LDS    R17, UCSR0A                   ; Read UCSR0A
-  SBRS   R17, UDRE0                    ; Skip if UDRE0 is set
-  RJMP   tx_char                       ; Loop until buffer is empty
-  STS    UDR0, R16                     ; Write character to UDR0
-  RET                                  ; Return to caller
+tx_char:
+  LDS    R17, UCSR0A                   ; 读取 UCSR0A
+  SBRS   R17, UDRE0                    ; 若 UDRE0 置位则跳过
+  RJMP   tx_char                       ; 循环直到缓冲区为空
+  STS    UDR0, R16                     ; 把字符写入 UDR0
+  RET                                  ; 返回调用者
 ```
-This is the mailbox check! Before we can drop a letter into `UDR0`, we have to make sure the mailman has emptied it. 
-We read the status register (`LDS R17, UCSR0A`). 
-`SBRS` stands for "Skip if Bit in Register is Set". It checks the `UDRE0` bit (Data Register Empty). If the mailbox is empty, it skips the next instruction! If it is *not* empty, it does not skip, and the `RJMP tx_char` forces it to loop back and check again. 
-Once empty, we write our character to the mailbox (`STS UDR0, R16`) and return!
+这就是查信箱! 在把信投进 `UDR0` 之前, 我们得确认邮递员已经把它清空了.
+我们读取状态寄存器 (`LDS R17, UCSR0A`).
+`SBRS` 的意思是 "Skip if Bit in Register is Set" (寄存器中的这一位为 1 就跳过). 它检查 `UDRE0` 位 (数据寄存器为空). 如果信箱是空的, 它就跳过下一条指令! 如果*不*空, 它就不跳过, `RJMP tx_char` 逼着程序绕回去再查一次.
+一旦空了, 我们就把字符写进信箱 (`STS UDR0, R16`) 然后返回!
 
-### 6. Printing an Entire Sentence (print_string)
+### 6. 打印整句话 (print_string)
 ```assembly
-print_string:                          
-  LPM    R16, Z+                       ; Load char from flash and inc Z
-  CPI    R16, 0                        ; Check if null terminator
-  BREQ   .print_done                   ; If null, we are done
-  RCALL  tx_char                       ; Otherwise, transmit the char
-  RJMP   print_string                  ; Loop for next character
-.print_done:                           
-  RET                                  ; Return to caller
+print_string:
+  LPM    R16, Z+                       ; 从 Flash 取字符并使 Z 自增
+  CPI    R16, 0                        ; 检查是否为结束符 0
+  BREQ   .print_done                   ; 如果是 0, 就结束了
+  RCALL  tx_char                       ; 否则发送这个字符
+  RJMP   print_string                  ; 循环取下一个字符
+.print_done:
+  RET                                  ; 返回调用者
 ```
-This subroutine is a loop that prints an entire sentence. 
-`LPM R16, Z+` means "Load Program Memory". It looks at wherever our Z-pointer is pointing, grabs that letter, puts it in `R16`, and then automatically moves the Z-pointer to the next letter!
-`CPI R16, 0` checks if the letter is a `0`. In C and Assembly, we put a `0` at the very end of our sentences to let the computer know it's time to stop reading. 
-`BREQ .print_done` means "Branch if Equal". If the letter was a 0, we jump to the end and `RET`. If it wasn't a 0, we send the character, and jump back to read the next one!
+这个子程序是一个循环, 负责把整句话打印出来.
+`LPM R16, Z+` 的意思是 "Load Program Memory". 它看 Z 指针指在哪儿, 把那个字母抓出来放进 `R16`, 然后自动把 Z 指针挪到下一个字母!
+`CPI R16, 0` 检查这个字母是不是 `0`. 在 C 和汇编里, 我们会在句子最末尾放一个 `0`, 好让计算机知道该停止读取了.
+`BREQ .print_done` 的意思是 "Branch if Equal" (相等就分支). 如果这个字母是 0, 我们就跳到结尾执行 `RET`. 如果不是 0, 我们就把这个字符发出去, 再跳回去读下一个!
 
-### 7. Time Travel (Delays)
+### 7. 时间旅行 (延时)
 ```assembly
-delay_500ms:                           
-  LDI    R18, 0x18                     ; High byte of delay counter
-  LDI    R17, 0x69                     ; Mid byte of delay counter
-  LDI    R16, 0xFE                     ; Low byte of delay counter
-.d500_loop:                            
-  SUBI   R16, 1                        ; Subtract 1 from low byte
-  SBCI   R17, 0                        ; Subtract carry from mid byte
-  SBCI   R18, 0                        ; Subtract carry from high byte
-  BRNE   .d500_loop                    ; Branch if not zero
-  NOP                                  ; Pad out exact cycle count
-  RET                                  ; Return to caller
+delay_500ms:
+  LDI    R18, 0x18                     ; 延时计数器高字节
+  LDI    R17, 0x69                     ; 延时计数器中字节
+  LDI    R16, 0xFE                     ; 延时计数器低字节
+.d500_loop:
+  SUBI   R16, 1                        ; 低字节减 1
+  SBCI   R17, 0                        ; 中字节减去借位
+  SBCI   R18, 0                        ; 高字节减去借位
+  BRNE   .d500_loop                    ; 不为零就继续循环
+  NOP                                  ; 补齐精确的周期数
+  RET                                  ; 返回调用者
 ```
-The ATmega328P runs at 16 MHz (16 Million instructions per second!). To wait for half a second, we literally have to force the processor to count backwards from a massive number (like 1.6 million) to zero. 
-Because registers only hold numbers up to 255, we have to link three registers together (R16, R17, R18) to hold a massive 24-bit number. 
-`SUBI` subtracts 1. `SBCI` subtracts with carry (borrowing from the next register if the first one drops below zero). It repeats this loop until all three registers hit exactly zero!
+ATmega328P 跑在 16 MHz (每秒 1600 万条指令!). 要等半秒, 我们真的得逼着处理器从一个大数字 (比如 160 万) 倒数到零.
+因为寄存器最多只能装到 255, 所以我们把三个寄存器 (R16, R17, R18) 串起来, 一起装一个 24 位的巨大数字.
+`SUBI` 减 1. `SBCI` 是带借位减法 (如果低位寄存器减到零以下, 就向高位借一位). 它就这样反复循环, 直到三个寄存器同时归零!
 
-### 8. Our Sentence in Flash Memory
+### 8. 存放在 Flash 里的句子
 ```assembly
-msg_greeting:                          
+msg_greeting:
 .asciz "Lesson 001 - Serial Monitor Ready!\r\n"
 ```
-Finally, this is where we store our message! `.asciz` tells the assembler to convert our text into ASCII bytes and store it directly in the Flash memory of the chip. The `z` at the end of `.asciz` automatically adds that hidden `0` (null terminator) to the end of the sentence so our `print_string` loop knows when to stop! `\r\n` is just code for "hit the Enter key" so the next text appears on a new line.
+最后, 这里就是我们保存消息的地方! `.asciz` 告诉汇编器把这段文字转成 ASCII 字节, 直接存进芯片的 Flash 里. `.asciz` 结尾那个 `z` 会自动在句子末尾补上那个看不见的 `0` (结束符), 这样 `print_string` 循环就知道什么时候该停! `\r\n` 只是"按下回车键"的代码写法, 好让下一段文字出现在新的一行.

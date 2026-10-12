@@ -1,78 +1,78 @@
-# Lesson 007 - Passive Buzzer (Musical Tones)
+# Lesson 007 - 无源蜂鸣器 (演奏音阶)
 
-## What Are We Building Today?
+## 今天我们要做什么?
 
-In Lesson 6, we used an Active Buzzer that automatically generated sound whenever it received power. But what if we want to play a song? 
+第 6 课里我们用的有源蜂鸣器, 一通上电就自动出声. 可要是我们想演奏一首曲子呢?
 
-Today, we will use a **Passive Buzzer**. A passive buzzer does *not* have an internal oscillator. If you just send it 5 Volts, it will only make a tiny "click" and then stay silent. To make it beep, we have to turn the power ON and OFF hundreds of times a second manually! The speed at which we turn it on and off determines the musical pitch (frequency).
+今天我们用**无源蜂鸣器**. 无源蜂鸣器*没有*内部振荡器. 你如果只给它送 5 伏, 它只会轻轻"咔"一下, 然后就一声不吭了. 想让它叫, 我们得自己每秒开关电源几百次! 开关的快慢决定了音高 (频率).
 
-We will use our friend **Timer1** to automatically toggle a pin incredibly fast, playing a perfect C-Major musical scale!
+我们会请出老朋友 **Timer1**, 让它自动以极快的速度翻转一个引脚, 奏出一个完美的 C 大调音阶!
 
 [CODE](https://github.com/mytechnotalent/Assembler/blob/main/lessons/007/lesson.s)
 
 ---
 
-## Hardware Check: Generating Frequencies
+## 硬件检查: 产生频率
 
-To play a note, we need a square wave. For example, Middle C (C4) is 262 Hz. This means we need the speaker to vibrate 262 times every second.
+要奏出一个音符, 我们需要方波. 比如中央 C (C4) 是 262 Hz. 也就是说我们得让喇叭每秒钟振动 262 次.
 
-We can use **Timer1** in **CTC Mode (Clear Timer on Compare Match)**. 
-We tell the timer: "Count up to this exact number (`OCR1A`), and when you hit it, toggle the output pin (PB1/Arduino Pin 9) and start over at 0."
+我们可以让 **Timer1** 工作在 **CTC 模式 (Clear Timer on Compare Match, 比较匹配时清零定时器)**.
+我们告诉定时器: "一直数到这个确切的数字 (`OCR1A`), 数到的时候就翻转输出引脚 (PB1/Arduino Pin 9), 然后从 0 重新开始."
 
-By calculating the right number for `OCR1A`, we can precisely control the frequency!
-- High `OCR1A` value = Slower toggle = Lower pitch
-- Low `OCR1A` value = Faster toggle = Higher pitch
+只要给 `OCR1A` 算出合适的数值, 我们就能精确控制频率!
+- `OCR1A` 值大 = 翻转更慢 = 音调更低
+- `OCR1A` 值小 = 翻转更快 = 音调更高
 
-## The Code Walkthrough
+## 代码讲解
 
-### 1. Storing the Notes
-We want to play 8 notes (C4, D4, E4, F4, G4, A4, B4, C5). We calculated the `OCR1A` values for each note and stored them in an array in Flash memory (Program Memory). The array ends with a `0` so we know when to stop.
+### 1. 存放音符
+我们想演奏 8 个音 (C4, D4, E4, F4, G4, A4, B4, C5). 我们算好了每个音对应的 `OCR1A` 值, 把它们存进 Flash (程序存储器) 里的一个数组. 数组末尾放一个 `0`, 这样我们就知道什么时候该停.
 
 ```assembly
-scale_data:                            
+scale_data:
 .word 3816, 3401, 3030, 2865, 2551, 2272, 2024, 1912, 0
 ```
-Notice we use `.word` because these numbers are larger than 255 (they take up 16 bits or 2 bytes each).
+注意我们用的是 `.word`, 因为这些数字比 255 大 (每个要占 16 位, 也就是 2 个字节).
 
-### 2. Setting Up Timer1
+### 2. 设置 Timer1
 ```assembly
-  LDI    R16, (1<<WGM12) | (1<<CS11)   ; CTC mode, Prescaler 8
-  STS    TCCR1B, R16                   ; Write to TCCR1B
+  LDI    R16, (1<<WGM12) | (1<<CS11)   ; CTC 模式, 预分频 8
+  STS    TCCR1B, R16                   ; 写入 TCCR1B
 ```
-We configure Timer1 for CTC mode and set the clock prescaler to 8. This means the timer ticks 2,000,000 times a second!
+我们把 Timer1 配成 CTC 模式, 并把时钟预分频设为 8. 这意味着定时器每秒跳 2,000,000 次!
 
-### 3. Reading the Array
-We use the Z-pointer (`R30` and `R31`) to point to our array in memory.
+### 3. 读取数组
+我们用 Z 指针 (`R30` 和 `R31`) 指向内存里的数组.
 ```assembly
-  LPM    R16, Z+                       ; Load low byte of TOP from flash
-  LPM    R17, Z+                       ; Load high byte of TOP from flash
+  LPM    R16, Z+                       ; 从 flash 取 TOP 的低字节
+  LPM    R17, Z+                       ; 从 flash 取 TOP 的高字节
 ```
-Since the values are 16 bits long, we load them in two pieces: the low byte into `R16` and the high byte into `R17`. `Z+` automatically moves our pointer forward.
+因为这些值有 16 位长, 我们分两次取: 低字节进 `R16`, 高字节进 `R17`. `Z+` 会自动把我们的指针往前挪.
 
-### 4. Playing the Note!
+### 4. 演奏这个音!
 ```assembly
-  STS    OCR1AH, R17                   ; Write HIGH byte of TOP
-  STS    OCR1AL, R16                   ; Write LOW byte of TOP
-  LDI    R16, (1<<COM1A0)              ; Enable OC1A toggle on match
-  STS    TCCR1A, R16                   ; Write to TCCR1A
+  STS    OCR1AH, R17                   ; 写入 TOP 的高字节
+  STS    OCR1AL, R16                   ; 写入 TOP 的低字节
+  LDI    R16, (1<<COM1A0)              ; 使能匹配时翻转 OC1A
+  STS    TCCR1A, R16                   ; 写入 TCCR1A
 ```
-We write the value into the `OCR1A` register. **Important rule**: In AVR assembly, when writing to a 16-bit register, you MUST write the High byte first, then the Low byte!
+我们把这个值写进 `OCR1A` 寄存器. **重要规则**: 在 AVR 汇编里, 往 16 位寄存器写数据时, 必须先写高字节, 再写低字节!
 
-Next, we tell `TCCR1A` to toggle the pin on every match (`COM1A0`). The buzzer is now screaming!
+接着, 我们告诉 `TCCR1A` 每次匹配就翻转引脚 (`COM1A0`). 蜂鸣器现在开始尖叫了!
 
-We let it beep for 300ms by calling `delay_300ms`.
+我们调用 `delay_300ms`, 让它叫 300ms.
 
-### 5. Silencing Between Notes
-If we just played notes back-to-back, it would sound like a single blurry noise. We need to turn the buzzer off for a tiny fraction of a second to add space between the notes.
+### 5. 音符之间静一静
+如果我们让音符一个挨一个地连下去, 听起来就是一坨糊在一起的噪声. 我们得让蜂鸣器停一小会儿, 在音符之间留点空隙.
 
 ```assembly
-  LDI    R16, 0                        ; Disable OC1A toggle
-  STS    TCCR1A, R16                   ; Write to TCCR1A
-  CBI    PORTB, PB1                    ; Ensure buzzer pin is LOW
-  RCALL  delay_50ms                    ; Silence for 50ms
+  LDI    R16, 0                        ; 关闭 OC1A 翻转
+  STS    TCCR1A, R16                   ; 写入 TCCR1A
+  CBI    PORTB, PB1                    ; 确保蜂鸣器引脚为低电平
+  RCALL  delay_50ms                    ; 静音 50ms
 ```
-We disable the toggle, ensure the pin is pushed to 0 Volts (LOW) with `CBI`, and wait 50ms in silence before jumping back to play the next note!
+我们关掉翻转, 用 `CBI` 确保引脚被压到 0 伏 (低电平), 然后静默 50ms, 再跳回去演奏下一个音!
 
 ---
 
-Congratulations! You've just turned your microcontroller into a digital synthesizer!
+恭喜! 你刚刚把单片机变成了一台数字合成器!

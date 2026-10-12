@@ -1,75 +1,75 @@
-# Lesson 012 - Analog Joystick
+# Lesson 012 - 模拟摇杆
 
-## What Are We Building Today?
+## 今天我们要做什么?
 
-So far, we have only worked with **Digital** inputs (0 Volts or 5 Volts). But the real world is not just ON and OFF! What if we want to measure an exact voltage, like a steering wheel that can be turned a little bit, or a lot?
+到目前为止, 我们只跟**数字**输入打过交道 (0 伏或者 5 伏). 但真实世界不是只有开和关! 如果我们想测量一个确切的电压呢? 比如一个方向盘, 它可以转一点点, 也可以转很多?
 
-To do this, we use the microcontroller's **Analog to Digital Converter (ADC)**. 
-Today, we are going to connect a 2-axis Joystick. Moving the joystick alters the physical resistance of two built-in potentiometers, sending a variable voltage from 0V to 5V on the X and Y axis wires. We will use the ADC to measure these voltages precisely, and we will turn ON the built-in LED (Pin 13) if you push the joystick in *any* direction or press it down like a button!
+要这么做, 我们得用单片机的**模数转换器 (ADC)**.
+今天我们要接一个双轴摇杆. 摇动摇杆会改变两个内置电位器的阻值, 从而在 X 轴和 Y 轴的线上送出 0V 到 5V 之间变化的电压. 我们会用 ADC 精确测量这些电压, 而且只要你把摇杆往*任意*方向推, 或者像按按钮一样把它按下去, 我们就点亮板载 LED (Pin 13)!
 
 [CODE](https://github.com/mytechnotalent/Assembler/blob/main/lessons/012/lesson.s)
 
 ---
 
-## Hardware Check: The ADC
+## 硬件检查: ADC
 
-The ATmega328P has a 10-bit ADC. This means it can measure a voltage between 0V and 5V and convert it into a number between `0` and `1023`. 
-- **0 Volts** = `0`
-- **2.5 Volts (Dead center)** = `512`
-- **5 Volts** = `1023`
+ATmega328P 有一个 10 位 ADC. 这意味着它能量出 0V 到 5V 之间的电压, 并把它转换成一个 `0` 到 `1023` 之间的数字.
+- **0 伏** = `0`
+- **2.5 伏 (正中间)** = `512`
+- **5 伏** = `1023`
 
-The Joystick uses three pins we need to read:
-- **X-Axis**: Connected to `A0` (Analog Channel 0)
-- **Y-Axis**: Connected to `A1` (Analog Channel 1)
-- **Button (SW)**: Connected to `PD2` (Digital Pin 2)
+摇杆上有三个引脚需要我们读:
+- **X 轴**: 接在 `A0` 上 (模拟通道 0)
+- **Y 轴**: 接在 `A1` 上 (模拟通道 1)
+- **按钮 (SW)**: 接在 `PD2` 上 (数字引脚 2)
 
-## The Code Walkthrough
+## 代码讲解
 
-### 1. Setting Up the ADC
+### 1. 设置 ADC
 ```assembly
   LDI    R16, (1<<ADEN) | (1<<ADPS2) | (1<<ADPS1) | (1<<ADPS0)
-  STS    ADCSRA, R16                   ; Write to ADCSRA
+  STS    ADCSRA, R16                   ; 写入 ADCSRA
 ```
-Before we can measure analog voltage, we have to turn the ADC engine ON.
-We use the `ADCSRA` register to enable the ADC (`ADEN`) and set a "Prescaler" of 128 (`ADPS2/1/0`). The prescaler slows down the clock specifically for the ADC so it can take its time to get an extremely accurate reading.
+在测量模拟电压之前, 我们得先把 ADC 这台发动机打开.
+我们用 `ADCSRA` 寄存器使能 ADC (`ADEN`), 并把"预分频"设为 128 (`ADPS2/1/0`). 预分频专门给 ADC 把时钟放慢, 这样它就能不慌不忙地读出一个极其准确的结果.
 
-### 2. Reading a Voltage (Our adc_read Subroutine)
+### 2. 读取电压 (我们的 adc_read 子程序)
 ```assembly
 adc_read:
-  ANDI   R16, 0x07                     ; Ensure channel is only 0-7
-  ORI    R16, (1<<REFS0)               ; Add AVCC reference bit
-  STS    ADMUX, R16                    ; Set ADMUX
+  ANDI   R16, 0x07                     ; 确保通道只在 0-7 范围内
+  ORI    R16, (1<<REFS0)               ; 加上 AVCC 参考电压位
+  STS    ADMUX, R16                    ; 设置 ADMUX
 ```
-We created a subroutine `adc_read` that takes the requested channel (0 for X, 1 for Y) in `R16`. 
-It configures the `ADMUX` register to select the pin, and adds the `REFS0` bit to tell the ADC to use 5V as its maximum reference.
+我们写了一个子程序 `adc_read`, 它从 `R16` 里取出请求的通道号 (0 表示 X, 1 表示 Y).
+它配置 `ADMUX` 寄存器来选中那个引脚, 再加上 `REFS0` 位, 告诉 ADC 用 5V 作为它的最大参考电压.
 
 ```assembly
-  LDS    R17, ADCSRA                   ; Read current ADCSRA
-  ORI    R17, (1<<ADSC)                ; Set the Start Conversion bit
-  STS    ADCSRA, R17                   ; Write back to ADCSRA
-.wait_adc:                             
-  LDS    R17, ADCSRA                   ; Read ADCSRA
-  SBRC   R17, ADSC                     ; Skip next if ADSC is Cleared
-  RJMP   .wait_adc                     ; Keep waiting
+  LDS    R17, ADCSRA                   ; 读取当前的 ADCSRA
+  ORI    R17, (1<<ADSC)                ; 置位启动转换位
+  STS    ADCSRA, R17                   ; 写回 ADCSRA
+.wait_adc:
+  LDS    R17, ADCSRA                   ; 读取 ADCSRA
+  SBRC   R17, ADSC                     ; 若 ADSC 被清零则跳过下一条
+  RJMP   .wait_adc                     ; 继续等待
 ```
-We set the `ADSC` (Start Conversion) bit to `1`. The ADC engine will instantly start measuring the voltage. When it finishes, the hardware automatically flips the `ADSC` bit back to `0`. We simply use `SBRC` (Skip if Bit in Register is Cleared) to wait patiently!
+我们把 `ADSC` (启动转换) 位置成 `1`. ADC 发动机立刻开始测量电压. 测完之后, 硬件会自动把 `ADSC` 位翻回 `0`. 我们只要用 `SBRC` (寄存器中的这一位为 0 就跳过) 耐心等着就行!
 
 ```assembly
-  LDS    R24, ADCL                     ; IMPORTANT: Must read ADCL before ADCH
-  LDS    R25, ADCH                     ; Read ADCH
+  LDS    R24, ADCL                     ; 重要: 必须先读 ADCL 再读 ADCH
+  LDS    R25, ADCH                     ; 读取 ADCH
 ```
-Once the measurement is done, the 10-bit result is split across two registers: `ADCL` (Low) and `ADCH` (High). **Hardware Rule:** You MUST read `ADCL` first! When you read `ADCL`, the hardware freezes `ADCH` so it can't change while you are reading it. 
+测量做完之后, 这个 10 位结果被分在两个寄存器里: `ADCL` (低位) 和 `ADCH` (高位). **硬件规则:** 你必须先读 `ADCL`! 你读 `ADCL` 的时候, 硬件会把 `ADCH` 冻住, 这样它在读取过程中就不会变.
 
-### 3. Comparing 16-Bit Numbers
+### 3. 比较 16 位数字
 ```assembly
-  LDI    R16, 0x9C                     ; Low byte of 412 (0x019C)
-  CP     R24, R16                      ; Compare low bytes
-  LDI    R16, 0x01                     ; High byte of 412
-  CPC    R25, R16                      ; Compare high bytes
-  BRLO   .turn_on                      ; If < 412, turn ON
+  LDI    R16, 0x9C                     ; 412 的低字节 (0x019C)
+  CP     R24, R16                      ; 比较低字节
+  LDI    R16, 0x01                     ; 412 的高字节
+  CPC    R25, R16                      ; 带进位比较高字节
+  BRLO   .turn_on                      ; 若 < 412 就点亮
 ```
-If the joystick is sitting still in the center, it reads roughly `512`. If we push it left/down, it drops toward 0. We use `CP` and `CPC` to compare our 16-bit measurement to `412` (our "deadzone" threshold). If the value drops lower than 412 (`BRLO`), we know the user pushed the joystick, and we branch to turn on the LED!
+如果摇杆稳稳停在中间, 读数大约是 `512`. 我们把它往左或者往下推, 它就会朝 0 掉. 我们用 `CP` 和 `CPC` 把这个 16 位测量值和 `412` (我们的"死区"阈值) 比一比. 如果数值掉到 412 以下 (`BRLO`), 我们就知道用户推动摇杆了, 于是分支过去点亮 LED!
 
 ---
 
-Congratulations! You have successfully interfaced with the analog world by commanding the ADC hardware engine in pure assembly!
+恭喜! 你已经会用纯汇编指挥 ADC 这台硬件发动机, 跟模拟世界打交道了!
