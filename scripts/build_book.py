@@ -230,8 +230,27 @@ def build_pdf(src: Path, out: Path, font: str | None) -> None:
     log(f"  PDF -> {out.name} ({out.stat().st_size // 1024} KiB, xelatex)")
 
 
+# Calibre 的 ebook-convert 常见落点, 图形化安装时不一定在 PATH 里
+CALIBRE_HINTS = [
+    "/Applications/calibre.app/Contents/MacOS/ebook-convert",
+    "/opt/calibre/ebook-convert",
+    "/usr/bin/ebook-convert",
+    "/usr/local/bin/ebook-convert",
+]
+
+
+def find_ebook_convert() -> str | None:
+    """先查 PATH, 再查图形化安装的固定位置."""
+    if has("ebook-convert"):
+        return "ebook-convert"
+    for hint in CALIBRE_HINTS:
+        if Path(hint).is_file():
+            return hint
+    return None
+
+
 def build_mobi(epub: Path, out: Path) -> None:
-    converter = "ebook-convert" if has("ebook-convert") else None
+    converter = find_ebook_convert()
     if not converter:
         raise RuntimeError("找不到 ebook-convert (Calibre), 无法生成 MOBI")
     run([converter, str(epub), str(out)])

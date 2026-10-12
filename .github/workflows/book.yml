@@ -34,10 +34,10 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - name: 检出代码
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: 准备 uv
-        uses: astral-sh/setup-uv@v7
+        uses: astral-sh/setup-uv@v10.3.0
         with:
           enable-cache: false
 
@@ -79,10 +79,13 @@ jobs:
           uv run --no-project python scripts/build_book.py --no-mobi $args
 
       - name: 上传产物
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: book-pdf-epub
-          path: dist/*.pdf dist/*.epub
+          # path 只认换行分隔, 写成一行空格分隔会被当成单个 glob
+          path: |
+            dist/*.pdf
+            dist/*.epub
           if-no-files-found: error
           retention-days: 7
 
@@ -94,10 +97,10 @@ jobs:
     if: ${{ !github.event.inputs.formats || contains(github.event.inputs.formats, 'mobi') }}
     steps:
       - name: 检出代码
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: 准备 uv
-        uses: astral-sh/setup-uv@v7
+        uses: astral-sh/setup-uv@v10.3.0
         with:
           enable-cache: false
 
@@ -110,7 +113,7 @@ jobs:
           /opt/calibre/ebook-convert --version
 
       - name: 取回 EPUB
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v5
         with:
           name: book-pdf-epub
           path: dist
@@ -123,7 +126,7 @@ jobs:
           uv run --no-project python scripts/build_book.py --no-pdf --no-epub
 
       - name: 上传产物
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: book-mobi
           path: dist/*.mobi
@@ -138,10 +141,10 @@ jobs:
     if: ${{ always() && needs.pdf-epub.result == 'success' }}
     steps:
       - name: 检出代码
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: 取回全部产物
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v5
         with:
           path: artifacts
 
