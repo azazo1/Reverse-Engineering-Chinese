@@ -75,6 +75,32 @@ def has(cmd: str) -> bool:
     return shutil.which(cmd) is not None
 
 
+# pandoc 的相对图片地址按工作目录解析 (默认资源搜索路径是 "."), 而合订本写在
+# .tmp/ 下, 正文里记的是相对合订本的 ../docs/book/imgs/. 从仓库根跑构建时这个
+# 前缀会指到仓库外面, 结果是 pandoc 取不到图, 只发一条警告就继续, 产出的 PDF
+# 与 EPUB 静默少掉全部插图. 所以资源目录要显式指定, 并且把警告升级成失败.
+_IMG_MISS = re.compile(r"Could not fetch resource (.+): \S")
+
+
+def pandoc_args(src: Path) -> list[str]:
+    """让 pandoc 以合订本所在目录为基准去找配图."""
+    return ["--resource-path", str(src.parent)]
+
+
+def ensure_images(proc: subprocess.CompletedProcess) -> None:
+    """把"配图没取到"从警告提升为构建失败.
+
+    正文里还有少量指向外站的外链图, 取不到属于网络问题, 不算本地缺图.
+    """
+    missing = [
+        m for m in _IMG_MISS.findall(proc.stderr or "")
+        if not m.startswith(("http://", "https://", "//"))
+    ]
+    if missing:
+        head = "\n".join(f"  {m.strip()}" for m in missing[:5])
+        raise RuntimeError(f"有 {len(missing)} 张配图没能取到:\n{head}")
+
+
 def pick_cjk_font() -> str | None:
     """挑一个系统里可用的中文字体名."""
     if not has("typst"):
@@ -158,8 +184,9 @@ def build_version() -> str:
 
 
 def build_epub(src: Path, out: Path) -> None:
-    run([
+    proc = run([
         "pandoc", "-f", "markdown-citations", str(src), "-o", str(out),
+        *pandoc_args(src),
         "--toc", "--toc-depth=2",
         "--metadata", f"title={TITLE}",
         "--metadata", f"subtitle={SUBTITLE}",
@@ -167,28 +194,36 @@ def build_epub(src: Path, out: Path) -> None:
         "--split-level=1",
         "--standalone",
     ])
+    ensure_images(proc)
     log(f"  EPUB -> {out.name} ({out.stat().st_size // 1024} KiB)")
 
 
 def build_pdf(src: Path, out: Path, font: str | None) -> None:
     """优先 typst (快), 不可用时回退 xelatex."""
     if has("typst"):
-        cmd = ["pandoc", "-f", "markdown-citations", str(src), "-o", str(out), "--pdf-engine=typst", "--toc", "--toc-depth=2"]
+        cmd = [
+            "pandoc", "-f", "markdown-citations", str(src), "-o", str(out),
+            *pandoc_args(src),
+            "--pdf-engine=typst", "--toc", "--toc-depth=2",
+        ]
         if font:
             cmd += ["-V", f"mainfont={font}"]
         try:
-            run(cmd)
+            proc = run(cmd)
+            ensure_images(proc)
             log(f"  PDF -> {out.name} ({out.stat().st_size // 1024} KiB, typst)")
             return
         except RuntimeError as e:
             log(f"  typst 失败, 回退 xelatex: {str(e).splitlines()[0]}")
     cmd = [
-        "pandoc", "-f", "markdown-citations", str(src), "-o", str(out), "--pdf-engine=xelatex",
-        "--toc", "--toc-depth=2", "-V", "geometry:margin=2.2cm",
+        "pandoc", "-f", "markdown-citations", str(src), "-o", str(out),
+        *pandoc_args(src),
+        "--pdf-engine=xelatex", "--toc", "--toc-depth=2", "-V", "geometry:margin=2.2cm",
     ]
     if font:
         cmd += ["-V", f"CJKmainfont={font}"]
-    run(cmd)
+    proc = run(cmd)
+    ensure_images(proc)
     log(f"  PDF -> {out.name} ({out.stat().st_size // 1024} KiB, xelatex)")
 
 
